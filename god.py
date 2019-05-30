@@ -450,6 +450,7 @@ def main():
 			return
 
 	# check first
+	sys.path.append(cwd)
 	if not os.path.exists("god_my.py") or not os.path.exists("god.yml"):
 		print("There is no god relevent files. you can initialize by 'god init' command")
 		return

@@ -22,8 +22,8 @@ if [[ ! -f ~/bin/god ]]; then
 
     cat > ~/bin/god << END
 #!/bin/bash
-cd ~/.god/repo
-./env/bin/python3 god.py $@
+P=~/.god/repo
+$P/env/bin/python3 $P/god.py $@
 END
     chmod 755 ~/bin/god
 
