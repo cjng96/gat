@@ -7,14 +7,12 @@ cd $TARGET
 REPO=$TARGET/repo
 
 if [[ ! -d $REPO ]]; then
-    git clone -b stable https://github.com/cjng96/god.git
+    git clone -b stable https://github.com/cjng96/god.git repo
 else
-    echo "There is already god repo in $REPO"
+    echo "There is already god(ev) repo in $REPO"
 fi
 
-COMMENT="## god(ev) script ##"
-cnt=$(sh -c "grep '$COMMENT' ~/.bashrc | wc -l")
-if [[ $cnt -eq  0 ]]; then
+if [[ ! -f ~/bin/god ]]; then
     cd repo
     [ $? -ne 0 ] && echo "#### no repo folder" && exit
     virtualenv -p python3 env
@@ -22,12 +20,14 @@ if [[ $cnt -eq  0 ]]; then
     ./env/bin/pip3 install -r requirements.txt
     [ $? -ne 0 ] && echo "#### failed to install python components" && exit
 
-    cat << EOF > ~/bin/god
-    cd ~/.god/repo
-    ./env/bin/python3 god.py $@
-    EOF
+    cat > ~/bin/god << END
+#!/bin/bash
+cd ~/.god/repo
+./env/bin/python3 god.py $@
+END
+    chmod 755 ~/bin/god
 
-    echo "Please type 'god'"
+    echo "Please type 'god' command to use it"
 else
     echo "Setting is done already. Type 'god' for starting"
 fi
