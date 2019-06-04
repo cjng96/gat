@@ -63,10 +63,63 @@ def mergeDict(dic, dic2):
 
 	return newDic
 
+class Args():
+	def __init__(self):
+		self.executableName = ""
+		self.targetPath = ""	# only for deployment
+
+args = Args()
 
 class Tasks():
 	def __init__(self):
-		pass
+		self.proc = None
+		self.outStream = None
+		self.isRestart = True	# First start or modified source files
+
+	def doBuild(self, args, mygod):
+			isSuccess = False
+			if not mygod.servePreTask():
+				print("run: failed to servePreTask")
+			else:
+				cmd = ["go", "build", "-o", args.executableName]
+				ret = subprocess.run(cmd)
+
+				if ret.returncode != 0:
+					print("run: failed to build go program")
+				else:
+					if not mygod.servePostTask():
+						print("run: failed to servePostTask")
+					else:
+						isSuccess = True
+
+			return isSuccess
+
+	def doServe(self, args, mygod):
+		if self.isRestart:
+			print("\n\n\n")
+
+			self.isRestart = False
+			isSuccess = self.doBuild(args, mygod)
+
+			if self.proc is not None:
+				print("run: stop the daemon...")
+				self.proc.kill()
+				proc = None
+				outStream = None				
+				return
+
+			if isSuccess:
+				print("run: run %s..." % args.executableName)
+				cmd = ["./"+args.executableName]
+				self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+				self.outStream = NonBlockingStreamReader(self.proc.stdout)
+
+
+		if self.outStream is not None:
+			line = self.outStream.readline(0.1)
+			if line is not None:
+				ss = line.decode("utf8")
+				print(ss[:-1])
 
 	def dbGqlGen(self):
 		print("task: gql gen...")
@@ -205,6 +258,10 @@ def confLoad():
 		try:
 			config = yaml.safe_load(fp)
 			print(config)
+
+			global args
+			args.executableName = config["config"]["name"]
+
 		except yaml.YAMLError as e:
 			print("config: error - %s" % e)
 			raise e
@@ -405,7 +462,7 @@ def deploy(serverName):
 
 	# post process
 	global args
-	args = dict(targetPath=targetPath)
+	args.targetPath = targetPath
 	mygod.deployPostTask(ssh, args)
 
 	ssh.close()
@@ -517,50 +574,11 @@ def main():
 
 	isRestart = True
 
+	global args
 	try:
-		proc = None
-		outStream = None
 		while True:
 			time.sleep(0.01)
-			if isRestart:
-				print("\n\n\n")
-
-				isRestart = False
-				isSuccess = False
-				if not mygod.servePreTask():
-					print("run: failed to servePreTask")
-				else:
-					cmd = ["go", "build", "-o", name]
-					ret = subprocess.run(cmd)
-
-					if ret.returncode != 0:
-						print("run: failed to build go program")
-					else:
-						if not mygod.servePostTask():
-							print("run: failed to servePostTask")
-						else:
-							isSuccess = True
-
-				if proc is not None:
-					print("run: stop the daemon...")
-					proc.kill()
-					proc = None
-					outStream = None				
-					continue
-
-				if not isSuccess:
-					continue
-
-				print("run: run %s..." % name)
-				cmd = ["./"+name]
-				proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-				outStream = NonBlockingStreamReader(proc.stdout)
-
-			if outStream is not None:
-				line = outStream.readline(0.1)
-				if line is not None:
-					ss = line.decode("utf8")
-					print(ss[:-1])
+			tasks.doServe(args, mygod)
 
 	except KeyboardInterrupt:
 		observer.stop()
