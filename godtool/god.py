@@ -9,6 +9,7 @@ import json
 import paramiko
 import platform
 import yaml
+import socket
 import subprocess
 from threading import Thread
 from queue import Queue, Empty
@@ -116,10 +117,14 @@ class Tasks():
 		subprocess.run(cmd)
 		return True
 
-	def pm2Register(self):
+	def pm2Register(self, useNvm=True):
 		global ssh
 		global args
-		ssh.run("cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (args["targetPath"]))
+		cmd = ""
+		if useNvm:
+			cmd += ". ~/.nvm/nvm.sh && "
+		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (args["targetPath"])
+		ssh.run(cmd)
 		return True
 
 class NonBlockingStreamReader:
@@ -231,12 +236,24 @@ class Ssh:
 	def run(self, cmd):
 		chan = self.ssh.get_transport().open_session()
 		chan.exec_command(cmd)
+		chan.setblocking(0)
 		out = ""
 		while True:
-			line = chan.recv(99999)
-			if len(line) == 0:
-				break
-			out += line.decode("utf-8")
+			try:
+				line = chan.recv(99999)
+				if len(line) == 0:
+					break
+				out += line.decode("utf-8")
+			except socket.timeout as e:
+				pass
+
+			try:
+				line = chan.recv_stderr(99999)
+				if len(line) == 0:
+					break
+				out += line.decode("utf-8")
+			except socket.timeout as e:
+				pass
 
 		ret = chan.recv_exit_status()
 		print("execute[%s] - ret:%d\n%s" % (cmd, ret, out))
@@ -321,9 +338,9 @@ def deploy(serverName):
 	server = None
 	
 	for it in config["servers"]:
-		print("deploy: selected server - ", it)
 		if it["name"] == serverName:
 			server = it
+			print("deploy: selected server - ", it)
 			break
 
 	if server is None:
@@ -508,25 +525,30 @@ def main():
 			if isRestart:
 				print("\n\n\n")
 
-				if not mygod.servePreTask():
-					isRestart = False
-					continue
-
-				cmd = ["go", "build", "-o", name]
-				ret = subprocess.run(cmd)
 				isRestart = False
+				isSuccess = False
+				if not mygod.servePreTask():
+					print("run: failed to servePreTask")
+				else:
+					cmd = ["go", "build", "-o", name]
+					ret = subprocess.run(cmd)
+
+					if ret.returncode != 0:
+						print("run: failed to build go program")
+					else:
+						if not mygod.servePostTask():
+							print("run: failed to servePostTask")
+						else:
+							isSuccess = True
 
 				if proc is not None:
 					print("run: stop the daemon...")
 					proc.kill()
 					proc = None
 					outStream = None				
-
-				if ret.returncode != 0:
-					print("run: failed to build go program")
 					continue
 
-				if not mygod.servePostTask():
+				if not isSuccess:
 					continue
 
 				print("run: run %s..." % name)
