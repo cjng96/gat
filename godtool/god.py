@@ -19,6 +19,8 @@ import re
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 
+import __init__
+
 isRestart = False
 cwd = ""
 scriptPath = ""
@@ -28,6 +30,7 @@ mygod = None
 ssh = None
 args = None	# for deploy task
 
+ver = __init__.__version__
 
 def path2folderList(pp):
 	dirs = []
@@ -438,6 +441,14 @@ servers:
 """)
 	print("init: god_my.py and god.yml files generated. You should modify those files for your environment before service or deployment.")
 
+def printTasks():
+	print(
+'''god-tool V%s
+dbGqlGen(): running "go run github.com/99designs/gqlgen" job for gqlgen(https://github.com/99designs/gqlgen)
+pm2Register(): pm2 start pm2.json. You should define pm2.json file first.
+''' % ver)
+
+
 def main():
 	global cwd, scriptPath, mymod, mygod
 	cwd = os.getcwd()
@@ -445,14 +456,18 @@ def main():
 
 	cnt = len(sys.argv)
 	if cnt > 1:
-		if sys.argv[1] == "init":
+		cmd = sys.argv[1]
+		if cmd == "init":
 			initSamples()
+			return
+		elif cmd == "tasks":
+			printTasks()
 			return
 
 	# check first
 	sys.path.append(cwd)
 	if not os.path.exists("god_my.py") or not os.path.exists("god.yml"):
-		print("There is no god relevent files. you can initialize by 'god init' command")
+		print("god-tool V%s\nThere is no god relevent files. you can initialize by 'god init' command" % ver)
 		return
 
 	mymod = __import__("god_my", fromlist=[''])
