@@ -73,25 +73,31 @@ class Tasks():
 		self.isRestart = True	# First start or modified source files
 
 	def doBuild(self, args, mygod):
-			isSuccess = False
-			if not mygod.servePreTask():
-				print("run: failed to servePreTask")
+		if hasattr(mygod, "doBuild"):
+			return mygod.doBuild(args)
+
+		isSuccess = False
+		if not mygod.servePreTask():
+			print("run: failed to run servePreTask")
+		else:
+			print("run: building the app")
+			cmd = ["go", "build", "-o", args.executableName]
+			ret = subprocess.run(cmd)
+
+			if ret.returncode != 0:
+				print("run: failed to build go program")
 			else:
-				print("run: building the app")
-				cmd = ["go", "build", "-o", args.executableName]
-				ret = subprocess.run(cmd)
-
-				if ret.returncode != 0:
-					print("run: failed to build go program")
+				if not mygod.servePostTask():
+					print("run: failed to run servePostTask")
 				else:
-					if not mygod.servePostTask():
-						print("run: failed to servePostTask")
-					else:
-						isSuccess = True
+					isSuccess = True
 
-			return isSuccess
+		return isSuccess
 
 	def doServeStep(self, args, mygod):
+		if hasattr(mygod, "doServeStep"):
+			return mygod.doServeStep(args)
+
 		if self.isRestart:
 			print("\n\n\n")
 
