@@ -19,7 +19,7 @@ import re
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 
-import __init__
+from .__init__ import __version__
 
 isRestart = False
 cwd = ""
@@ -30,7 +30,7 @@ mygod = None
 ssh = None
 args = None	# for deploy task
 
-ver = __init__.__version__
+ver = __version__
 
 def path2folderList(pp):
 	dirs = []
@@ -474,11 +474,12 @@ def main():
 	tasks = Tasks()
 	mygod = mymod.myGod(tasks)
 
+	print("god-tool V%s" % ver)
 	confLoad()
 	global config
 	name = config["config"]["name"]
 
-	print("daemon is %s" % name)
+	print("** daemon is %s" % name)
 
 	if cnt > 1:
 		cmd = sys.argv[1]

@@ -18,7 +18,7 @@ setup(
 	python_requires  = '>=3',
 	platforms        = "Posix; MacOS X; Windows",
 	zip_safe         = False,
-	entry_points     = {"console_scripts": ["god=god:godtool.main"]},
+	entry_points     = {"console_scripts": ["god=godtool:god.main"]},
 	classifiers      = [
 		"Operating System :: OS Independent",		
 		'Programming Language :: Python',
