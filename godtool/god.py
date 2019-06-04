@@ -26,10 +26,7 @@ isRestart = False
 cwd = ""
 scriptPath = ""
 mymod = None
-mygod = None
 
-ssh = None
-args = None	# for deploy task
 
 ver = __version__
 
@@ -68,7 +65,6 @@ class Args():
 		self.executableName = ""
 		self.targetPath = ""	# only for deployment
 
-args = Args()
 
 class Tasks():
 	def __init__(self):
@@ -81,6 +77,7 @@ class Tasks():
 			if not mygod.servePreTask():
 				print("run: failed to servePreTask")
 			else:
+				print("run: building the app")
 				cmd = ["go", "build", "-o", args.executableName]
 				ret = subprocess.run(cmd)
 
@@ -94,7 +91,7 @@ class Tasks():
 
 			return isSuccess
 
-	def doServe(self, args, mygod):
+	def doServeStep(self, args, mygod):
 		if self.isRestart:
 			print("\n\n\n")
 
@@ -113,7 +110,6 @@ class Tasks():
 				cmd = ["./"+args.executableName]
 				self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
 				self.outStream = NonBlockingStreamReader(self.proc.stdout)
-
 
 		if self.outStream is not None:
 			line = self.outStream.readline(0.1)
@@ -176,9 +172,10 @@ class Tasks():
 		cmd = ""
 		if useNvm:
 			cmd += ". ~/.nvm/nvm.sh && "
-		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (args["targetPath"])
+		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (args.targetPath)
 		ssh.run(cmd)
 		return True
+
 
 class NonBlockingStreamReader:
 	def __init__(self, stream):
@@ -251,7 +248,13 @@ class MyHandler(PatternMatchingEventHandler):
 	def on_created(self, event):
 		self.process(event)
 
+ssh = None
+mygod = None
+args = Args()
+tasks = Tasks()
+
 config = {}
+
 def confLoad():
 	global config
 	with open("god.yml", 'r') as fp:
@@ -404,6 +407,8 @@ def deploy(serverName):
 		print("Not found server[%s]" % serverName)
 		return
 
+	tasks.doBuild(args, mygod)
+
 	global ssh
 	ssh = Ssh()
 	print("deploy: connecting to the server[%s] with ID:%s" % (server["host"], server["id"]))
@@ -461,7 +466,6 @@ def deploy(serverName):
 	ssh.run("ln -sf %s/releases/%s %s/current" % (targetPath, todayName, targetPath))
 
 	# post process
-	global args
 	args.targetPath = targetPath
 	mygod.deployPostTask(ssh, args)
 
@@ -545,7 +549,6 @@ def main():
 		return
 
 	mymod = __import__("god_my", fromlist=[''])
-	tasks = Tasks()
 	mygod = mymod.myGod(tasks)
 
 	print("god-tool V%s" % ver)
@@ -578,7 +581,7 @@ def main():
 	try:
 		while True:
 			time.sleep(0.01)
-			tasks.doServe(args, mygod)
+			tasks.doServeStep(args, mygod)
 
 	except KeyboardInterrupt:
 		observer.stop()
