@@ -449,6 +449,7 @@ def deploy(serverName):
 
 	include = config["config"]["include"]
 	exclude = config["config"]["exclude"]
+	sharedLinks = config["config"]["sharedLinks"]
 
 	def _filterFunc(pp):
 		if pp in exclude:
@@ -468,8 +469,14 @@ def deploy(serverName):
 		else: 
 			ssh.uploadFileTo(pp, realTargetFull)
 
+	# shared links
+	for pp in sharedLinks:
+		print("deploy: sharedLinks - %s" % pp)
+		folder = os.path.dirname(pp)
+		ssh.run("cd %s && mkdir -p shared/%s && ln -sf %s/shared/%s releases/%s/%s" % (targetPath, folder, targetPath, pp, todayName, pp))
+
 	# update link
-	ssh.run("ln -sf %s/releases/%s %s/current" % (targetPath, todayName, targetPath))
+	ssh.run("cd %s && rm current && ln -sf releases/%s current" % (targetPath, todayName))
 
 	# post process
 	args.targetPath = targetPath
