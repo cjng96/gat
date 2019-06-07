@@ -22,7 +22,6 @@ from watchdog.events import PatternMatchingEventHandler
 
 from .__init__ import __version__
 
-isRestart = False
 cwd = ""
 scriptPath = ""
 mymod = None
@@ -101,21 +100,22 @@ class Tasks():
 		if self.isRestart:
 			print("\n\n\n")
 
-			self.isRestart = False
 			isSuccess = self.doBuild(args, mygod)
 
 			if self.proc is not None:
 				print("run: stop the daemon...")
 				self.proc.kill()
 				proc = None
-				outStream = None				
-				return
+				outStream = None
+
 
 			if isSuccess:
 				print("run: run %s..." % args.executableName)
 				cmd = ["./"+args.executableName]
 				self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
 				self.outStream = NonBlockingStreamReader(self.proc.stdout)
+
+			self.isRestart = False	# it's used in NonBlockingStreamReader
 
 		if self.outStream is not None:
 			line = self.outStream.readline(0.1)
@@ -201,7 +201,7 @@ class NonBlockingStreamReader:
 				if line:
 					queue.put(line)
 				else:
-					if isRestart:
+					if tasks.isRestart:
 						return
 
 					print("non-block-stream: error")
@@ -232,8 +232,6 @@ class MyHandler(PatternMatchingEventHandler):
 		print("watching pattern - ", patterns)
 
 	def process(self, event):
-		global isRestart
-
 		"""
 		event.event_type - 'modified' | 'created' | 'moved' | 'deleted'
 		event.is_directory - True | False
@@ -242,11 +240,11 @@ class MyHandler(PatternMatchingEventHandler):
 		if event.is_directory:
 			return
 
-		if isRestart:
+		if tasks.isRestart:
 			return
 
 		print("run: file - %s is %s" % (event.src_path, event.event_type))
-		isRestart = True
+		tasks.isRestart = True
 
 	def on_modified(self, event):
 		self.process(event)
@@ -377,7 +375,7 @@ class Ssh:
 			raise e
 		#print("sftp: success to upload " + srcPath + " ==> " + destPath)
 
-	# src: test/aa, dest: target면 target/aa가 만들어진다.
+	# srcPath, destPath둘다 full path여야한다.
 	def uploadFolder(self, srcPath, destPath):
 		print("sftp: upload folder %s -> %s" % (srcPath, destPath))
 		if self.uploadFilterFunc is not None:
@@ -386,13 +384,15 @@ class Ssh:
 				return
 
 		self.mkdir_p(destPath, True)
-		folder = os.path.split(srcPath)[1]
+		if srcPath[-1] != "/":
+			srcPath += "/"
+
 		for walker in os.walk(srcPath):
 			try:
 				# (path, dir, files)
 				for pp in walker[2]:
-					target=os.path.join(destPath, walker[0], pp)
 					src = os.path.join(walker[0], pp)
+					target = os.path.join(destPath, walker[0][len(srcPath):], pp)
 					self.uploadFile(src, target)
 			except Exception as e:
 				print(e)
@@ -459,15 +459,22 @@ def deploy(serverName):
 	ssh.uploadFilterFunc = _filterFunc
 
 	for pp in include:
-		p = pathlib.Path(pp)
-		if not p.exists():
-			print("deploy: not exists - %s" % pp)
-			continue
-		
-		if p.is_dir():
-			ssh.uploadFolder(pp, realTargetFull)
-		else: 
-			ssh.uploadFileTo(pp, realTargetFull)
+		if type(pp) == str:
+			p = pathlib.Path(pp)
+			if not p.exists():
+				print("deploy: not exists - %s" % pp)
+				continue
+			
+			if p.is_dir():
+				tt = os.path.join(realTargetFull, pp)
+				ssh.uploadFolder(pp, tt)
+			else: 
+				ssh.uploadFileTo(pp, realTargetFull)
+		else:
+			src = pp["src"]
+			target = pp["target"]
+			tt = os.path.join(realTargetFull, target)
+			ssh.uploadFolder(src, tt)
 
 	# shared links
 	for pp in sharedLinks:
@@ -495,7 +502,6 @@ class myGod:
 	def servePreTask(self):
 		#if not self.tasks.dbGqlGen():
 		#	return False
-
 		return True
 
 	def servePostTask(self):
@@ -504,7 +510,6 @@ class myGod:
 	def deployPostTask(self, ssh, args):
 		#if not self.tasks.pm2Register():
 		#	return False
-
 		return True
 """)
 		
@@ -516,6 +521,8 @@ config:
   include:
     - config
     - pm2.json
+		- src: ../build
+		  target: build
   exclude:
     - config/my.json
   watch:
@@ -583,12 +590,11 @@ def main():
 			print("unknown command - %s" % cmd)
 			return
 
-	global isRestart
 	observer = Observer()
 	observer.schedule(MyHandler(config["config"]["watch"]["patterns"]), path=".", recursive=True)
 	observer.start()
 
-	isRestart = True
+	tasks.isRestart = True
 
 	global args
 	try:
