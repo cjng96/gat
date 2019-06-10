@@ -17,6 +17,9 @@ import datetime
 import pathlib
 import re
 
+import zipfile
+import tempfile
+
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 
@@ -80,10 +83,9 @@ class Tasks():
 			print("run: failed to run servePreTask")
 		else:
 			print("run: building the app")
-			cmd = ["go", "build", "-o", args.executableName]
-			ret = subprocess.run(cmd)
+			ret = self.buildTask(args)
 
-			if ret.returncode != 0:
+			if not ret:
 				print("run: failed to build go program")
 			else:
 				if not mygod.servePostTask():
@@ -92,6 +94,9 @@ class Tasks():
 					isSuccess = True
 
 		return isSuccess
+
+	def buildTask(self, args):
+		return self.goBuild(args)
 
 	def doServeStep(self, args, mygod):
 		if hasattr(mygod, "doServeStep"):
@@ -108,7 +113,6 @@ class Tasks():
 				proc = None
 				outStream = None
 
-
 			if isSuccess:
 				print("run: run %s..." % args.executableName)
 				cmd = ["./"+args.executableName]
@@ -122,6 +126,11 @@ class Tasks():
 			if line is not None:
 				ss = line.decode("utf8")
 				print(ss[:-1])
+
+	def goBuild(self, args):
+			cmd = ["go", "build", "-o", args.executableName]
+			ret = subprocess.run(cmd)
+			return ret.returncode == 0
 
 	def dbGqlGen(self):
 		print("task: gql gen...")
@@ -277,6 +286,12 @@ class SshAllowAllKeys(paramiko.MissingHostKeyPolicy):
     def missing_host_key(self, client, hostname, key):
    	    return
 
+def cutpath(parent, pp):
+	if parent[-1] != "/":
+		parent += "/"		 
+
+	return pp[len(parent):]
+
 #https://gist.github.com/kdheepak/c18f030494fea16ffd92d95c93a6d40d
 #https://stackoverflow.com/questions/760978/long-running-ssh-commands-in-python-paramiko-module-and-how-to-end-them
 class Ssh:
@@ -384,20 +399,16 @@ class Ssh:
 				return
 
 		self.mkdir_p(destPath, True)
-		if srcPath[-1] != "/":
-			srcPath += "/"
 
-		for walker in os.walk(srcPath):
+		for folder, dirs, files in os.walk(srcPath):
 			try:
-				# (path, dir, files)
-				for pp in walker[2]:
-					src = os.path.join(walker[0], pp)
-					target = os.path.join(destPath, walker[0][len(srcPath):], pp)
+				for pp in files:
+					src = os.path.join(folder, pp)
+					target = os.path.join(destPath, cutpath(srcPath, folder), pp)
 					self.uploadFile(src, target)
 			except Exception as e:
 				print(e)
 				raise e
-
 
 def deploy(serverName):
 	global config
@@ -430,7 +441,7 @@ def deploy(serverName):
 	releases = list(filter(lambda x: re.match('\d{6}_\d{6}', x) is not None, res.split()))
 	releases.sort()
 
-	max = config["config"]["maxRelease"]-1
+	max = config["deploy"]["maxRelease"]-1
 	cnt = len(releases)
 	print("deploy: releases folders count is %d" % cnt)
 	if cnt > max:
@@ -443,38 +454,79 @@ def deploy(serverName):
 
 	# upload files
 	realTargetFull = os.path.join(realTarget, "releases", todayName)
-	ssh.uploadFile(name, os.path.join(realTargetFull, name))
-
-	ssh.run("chmod 755 %s/%s" % (realTargetFull, name))
-
-	include = config["config"]["include"]
-	exclude = config["config"]["exclude"]
-	sharedLinks = config["config"]["sharedLinks"]
+	include = config["deploy"]["include"]
+	exclude = config["deploy"]["exclude"]
+	sharedLinks = config["deploy"]["sharedLinks"]
 
 	def _filterFunc(pp):
 		if pp in exclude:
 			return True
 		return False
 
-	ssh.uploadFilterFunc = _filterFunc
+	strategy = config["deploy"]["strategy"]
+	if strategy == "zip":
+		zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
+		with zipfile.ZipFile(zipPath, "w") as zipWork:
 
-	for pp in include:
-		if type(pp) == str:
-			p = pathlib.Path(pp)
-			if not p.exists():
-				print("deploy: not exists - %s" % pp)
-				continue
-			
-			if p.is_dir():
-				tt = os.path.join(realTargetFull, pp)
-				ssh.uploadFolder(pp, tt)
-			else: 
-				ssh.uploadFileTo(pp, realTargetFull)
-		else:
-			src = pp["src"]
-			target = pp["target"]
-			tt = os.path.join(realTargetFull, target)
-			ssh.uploadFolder(src, tt)
+			def _zipAdd(srcP, targetP):
+				if _filterFunc(srcP):
+					print("skip - %s" % srcP)
+					return
+
+				print("zipping %s -> %s" % (srcP, targetP))
+				zipWork.write(srcP, targetP, compress_type=zipfile.ZIP_DEFLATED)
+
+			zipWork.write(name, name, compress_type=zipfile.ZIP_DEFLATED)
+
+			for pp in include:
+				if type(pp) == str:
+					p = pathlib.Path(pp)
+					if not p.exists():
+						print("deploy: not exists - %s" % pp)
+						continue
+					
+					if p.is_dir():
+						for folder, dirs, files in os.walk(pp):
+							for ff in files:
+								_zipAdd(os.path.join(folder, ff), os.path.join(folder, ff))
+					else:
+						_zipAdd(pp, pp)
+
+				else:
+					src = pp["src"]
+					target = pp["target"]
+
+					for folder, dirs, files in os.walk(src):
+						for ff in files:
+							_zipAdd(os.path.join(folder, ff), os.path.join(target, ff))
+
+		ssh.uploadFile(zipPath, os.path.join(realTargetFull, "data.zip"))	# we don't include it by default
+		ssh.run("cd %s/releases/%s && unzip data.zip && rm data.zip" % (targetPath, todayName))
+		os.remove(zipPath)
+
+	elif strategy == "copy":
+		ssh.uploadFile(name, os.path.join(realTargetFull, name))	# we don't include it by default
+		ssh.run("chmod 755 %s/%s" % (realTargetFull, name))
+
+		ssh.uploadFilterFunc = _filterFunc
+
+		for pp in include:
+			if type(pp) == str:
+				p = pathlib.Path(pp)
+				if not p.exists():
+					print("deploy: not exists - %s" % pp)
+					continue
+				
+				if p.is_dir():
+					tt = os.path.join(realTargetFull, pp)
+					ssh.uploadFolder(pp, tt)
+				else: 
+					ssh.uploadFileTo(pp, realTargetFull)
+			else:
+				src = pp["src"]
+				target = pp["target"]
+				tt = os.path.join(realTargetFull, target)
+				ssh.uploadFolder(src, tt)
 
 	# shared links
 	for pp in sharedLinks:
@@ -498,6 +550,9 @@ class myGod:
 	def __init__(self, tasks):
 		self.tasks = tasks
 
+	def buildTask(self, args):
+		return self.tasks.goBuild(args)
+
 	# return: False(stop post processes)
 	def servePreTask(self):
 		#if not self.tasks.dbGqlGen():
@@ -517,19 +572,24 @@ class myGod:
 		fp.write("""
 config:
   name: test
+
+serve:
+  patterns:
+    - "*.go"
+    - "*.json"
+    - "*.graphql"
+
+deploy:
+  strategy: zip
   maxRelease: 3
   include:
+	  # - *
     - config
     - pm2.json
 		- src: ../build
 		  target: build
   exclude:
     - config/my.json
-  watch:
-    patterns:
-      - "*.go"
-      - "*.json"
-      - "*.graphql"
 
 servers:
   - name: test
@@ -542,10 +602,13 @@ servers:
 def printTasks():
 	print(
 '''god-tool V%s
-dbGqlGen(): running "go run github.com/99designs/gqlgen" job for gqlgen(https://github.com/99designs/gqlgen)
-pm2Register(): pm2 start pm2.json. You should define pm2.json file first.
+buildTask - 
+  goBuild(args): go build -o config.name
+servePreTask - 
+  dbGqlGen(): running "go run github.com/99designs/gqlgen" job for gqlgen(https://github.com/99designs/gqlgen)
+deployPostTask - 
+  pm2Register(): pm2 start pm2.json - You should define pm2.json file first.
 ''' % ver)
-
 
 def main():
 	global cwd, scriptPath, mymod, mygod
@@ -582,6 +645,7 @@ def main():
 		cmd = sys.argv[1]
 		if cmd == "deploy":
 			if cnt < 3:
+				# todo: print server list
 				print("Please specify server name.")
 				return
 			deploy(sys.argv[2])
@@ -591,7 +655,7 @@ def main():
 			return
 
 	observer = Observer()
-	observer.schedule(MyHandler(config["config"]["watch"]["patterns"]), path=".", recursive=True)
+	observer.schedule(MyHandler(config["serve"]["patterns"]), path=".", recursive=True)
 	observer.start()
 
 	tasks.isRestart = True
