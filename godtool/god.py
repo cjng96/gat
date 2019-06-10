@@ -603,11 +603,11 @@ def printTasks():
 	print(
 '''god-tool V%s
 buildTask - 
-  goBuild(args): go build -o config.name
+  goBuild(args): "go build -o config.name"
 servePreTask - 
   dbGqlGen(): running "go run github.com/99designs/gqlgen" job for gqlgen(https://github.com/99designs/gqlgen)
 deployPostTask - 
-  pm2Register(): pm2 start pm2.json - You should define pm2.json file first.
+  pm2Register(): "pm2 start pm2.json" - You should define pm2.json file first.
 ''' % ver)
 
 def main():
