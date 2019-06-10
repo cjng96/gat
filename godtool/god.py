@@ -77,7 +77,7 @@ class Tasks():
 			return mygod.doBuild(args)
 
 		isSuccess = False
-		if not mygod.servePreTask():
+		if not mygod.servePreTask(args):
 			print("run: failed to run servePreTask")
 		else:
 			print("run: building the app")
@@ -86,7 +86,7 @@ class Tasks():
 			if not ret:
 				print("run: failed to build go program")
 			else:
-				if not mygod.servePostTask():
+				if not mygod.servePostTask(args):
 					print("run: failed to run servePostTask")
 				else:
 					isSuccess = True
@@ -94,6 +94,9 @@ class Tasks():
 		return isSuccess
 
 	def buildTask(self, args):
+		if hasattr(mygod, "buildTask"):
+			return mygod.buildTask(args)
+
 		return self.goBuild(args)
 
 	def doServeStep(self, args, mygod):
@@ -290,21 +293,24 @@ def cutpath(parent, pp):
 
 	return pp[len(parent):]
 
+def falseFunc():
+	return False
+
 #https://gist.github.com/kdheepak/c18f030494fea16ffd92d95c93a6d40d
 #https://stackoverflow.com/questions/760978/long-running-ssh-commands-in-python-paramiko-module-and-how-to-end-them
 class Ssh:
 	def __init__(self):
 		pass
 
-	def init(self, host, id):
+	def init(self, host, port, id):
 		self.ssh = paramiko.SSHClient()
 		#ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 		self.ssh.set_missing_host_key_policy(SshAllowAllKeys())
-		self.ssh.connect(host, username=id)	#, password='lol')
+		self.ssh.connect(host, port=port, username=id)	#, password='lol')
 
 		self.sftp = paramiko.SFTPClient.from_transport(self.ssh.get_transport())
 
-		self.uploadFilterFunc = None
+		self.uploadFilterFunc = falseFunc
 
 	def close(self):
 		self.ssh.close()
@@ -377,10 +383,9 @@ class Ssh:
 	# src_path에 dest_path로 업로드한다. 두개 모두 file full path여야 한다.
 	def uploadFile(self, srcPath, destPath):
 		print("sftp: upload file %s -> %s" % (srcPath, destPath))
-		if self.uploadFilterFunc is not None:
-			if self.uploadFilterFunc(srcPath):
-				print(" ** exclude file - %s" % srcPath)
-				return
+		if self.uploadFilterFunc(srcPath):
+			print(" ** exclude file - %s" % srcPath)
+			return
 
 		self.mkdir_p(destPath)
 		try:
@@ -393,10 +398,9 @@ class Ssh:
 	# srcPath, destPath둘다 full path여야한다.
 	def uploadFolder(self, srcPath, destPath):
 		print("sftp: upload folder %s -> %s" % (srcPath, destPath))
-		if self.uploadFilterFunc is not None:
-			if self.uploadFilterFunc(srcPath):
-				print(" ** exclude folder - %s" % srcPath)
-				return
+		if self.uploadFilterFunc(srcPath):
+			print(" ** exclude folder - %s" % srcPath)
+			return
 
 		self.mkdir_p(destPath, True)
 
@@ -428,8 +432,8 @@ def deploy(serverName):
 
 	global ssh
 	ssh = Ssh()
-	print("deploy: connecting to the server[%s] with ID:%s" % (server["host"], server["id"]))
-	ssh.init(server["host"], server["id"])
+	print("deploy: connecting to the server[%s:%d] with ID:%s" % (server["host"], server["port"], server["id"]))
+	ssh.init(server["host"], server["port"], server["id"])
 
 	targetPath = server["targetPath"]
 	name = config["config"]["name"]
@@ -454,11 +458,17 @@ def deploy(serverName):
 
 	# upload files
 	realTargetFull = os.path.join(realTarget, "releases", todayName)
+	include = []
+	exclude = []
+	sharedLinks = []
 	include = config["deploy"]["include"]
-	exclude = config["deploy"]["exclude"]
-	sharedLinks = config["deploy"]["sharedLinks"]
+	if "exclude" in config["deploy"]:
+		exclude = config["deploy"]["exclude"]
+	if "sharedLinks" in config["deploy"]:
+		sharedLinks = config["deploy"]["sharedLinks"]
 
 	def _filterFunc(pp):
+		pp = os.path.normpath(pp)
 		if pp in exclude:
 			return True
 		return False
@@ -470,23 +480,44 @@ def deploy(serverName):
 
 			def _zipAdd(srcP, targetP):
 				if _filterFunc(srcP):
-					print("skip - %s" % srcP)
+					print("deploy: skip - %s" % srcP)
 					return
+
+				# make "./aaa" -> "aaa"
+				targetP = os.path.normpath(targetP)
 
 				print("zipping %s -> %s" % (srcP, targetP))
 				zipWork.write(srcP, targetP, compress_type=zipfile.ZIP_DEFLATED)
 
-			zipWork.write(name, name, compress_type=zipfile.ZIP_DEFLATED)
-
+			#zipWork.write(name, name, compress_type=zipfile.ZIP_DEFLATED)
 			for pp in include:
 				if type(pp) == str:
+					if pp == "*":
+						pp = "."
+					
+					# daemon
+					pp = pp.replace("${name}", name)
+						
 					p = pathlib.Path(pp)
 					if not p.exists():
 						print("deploy: not exists - %s" % pp)
 						continue
 					
 					if p.is_dir():
+						if _filterFunc(pp):
+							print("deploy: skip - %s" % pp)
+							continue
+
 						for folder, dirs, files in os.walk(pp):
+							# filtering dirs too
+							dirs2 = []
+							for d in dirs:
+								if _filterFunc(d):
+									print("deploy: skip - %s" % d)
+								else:
+									dirs2.append(d)
+							dirs[:] = dirs2
+
 							for ff in files:
 								_zipAdd(os.path.join(folder, ff), os.path.join(folder, ff))
 					else:
@@ -503,30 +534,39 @@ def deploy(serverName):
 		ssh.uploadFile(zipPath, os.path.join(realTargetFull, "data.zip"))	# we don't include it by default
 		ssh.run("cd %s/releases/%s && unzip data.zip && rm data.zip" % (targetPath, todayName))
 		os.remove(zipPath)
+		"""	no use copy strategy anymore
+		elif strategy == "copy":
+			ssh.uploadFile(name, os.path.join(realTargetFull, name))	# we don't include it by default
+			ssh.run("chmod 755 %s/%s" % (realTargetFull, name))
 
-	elif strategy == "copy":
-		ssh.uploadFile(name, os.path.join(realTargetFull, name))	# we don't include it by default
-		ssh.run("chmod 755 %s/%s" % (realTargetFull, name))
+			ssh.uploadFilterFunc = _filterFunc
 
-		ssh.uploadFilterFunc = _filterFunc
-
-		for pp in include:
-			if type(pp) == str:
-				p = pathlib.Path(pp)
-				if not p.exists():
-					print("deploy: not exists - %s" % pp)
-					continue
-				
-				if p.is_dir():
-					tt = os.path.join(realTargetFull, pp)
-					ssh.uploadFolder(pp, tt)
-				else: 
-					ssh.uploadFileTo(pp, realTargetFull)
-			else:
-				src = pp["src"]
-				target = pp["target"]
-				tt = os.path.join(realTargetFull, target)
-				ssh.uploadFolder(src, tt)
+			for pp in include:
+				if type(pp) == str:
+					if pp == "*":
+						pp = "."
+					
+					# daemon
+					pp = pp.replace("${name}", name)
+											
+					p = pathlib.Path(pp)
+					if not p.exists():
+						print("deploy: not exists - %s" % pp)
+						continue
+					
+					if p.is_dir():
+						tt = os.path.join(realTargetFull, pp)
+						ssh.uploadFolder(pp, tt)
+					else: 
+						ssh.uploadFileTo(pp, realTargetFull)
+				else:
+					src = pp["src"]
+					target = pp["target"]
+					tt = os.path.join(realTargetFull, target)
+					ssh.uploadFolder(src, tt)
+		"""
+	else:
+		raise Exception("unknown strategy[%s]" % strategy)
 
 	# shared links
 	for pp in sharedLinks:
@@ -583,17 +623,22 @@ deploy:
   strategy: zip
   maxRelease: 3
   include:
-	  # - *
+	#- "*"
+	- ${name}
     - config
     - pm2.json
 		- src: ../build
 		  target: build
   exclude:
     - config/my.json
+  sharedLinks:
+    - config/my.json
+  
 
 servers:
   - name: test
     host: test.com
+	port: 22
     id: test
     targetPath: ~/test
 """)
