@@ -335,6 +335,8 @@ class Ssh:
 		ret = chan.recv_exit_status()
 		print("execute[%s] - ret:%d\n%s" % (cmd, ret, out))
 		chan.close()
+		if ret != 0:
+			raise Exception("ssh command failed with ret:%d" % ret)
 		return out
 
 
@@ -496,7 +498,7 @@ def deploy(serverName):
 
 					for folder, dirs, files in os.walk(src):
 						for ff in files:
-							_zipAdd(os.path.join(folder, ff), os.path.join(target, ff))
+							_zipAdd(os.path.join(folder, ff), os.path.join(target, cutpath(src, folder), ff))
 
 		ssh.uploadFile(zipPath, os.path.join(realTargetFull, "data.zip"))	# we don't include it by default
 		ssh.run("cd %s/releases/%s && unzip data.zip && rm data.zip" % (targetPath, todayName))
