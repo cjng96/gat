@@ -30,8 +30,6 @@ scriptPath = ""
 mymod = None
 
 
-ver = __version__
-
 def path2folderList(pp):
 	dirs = []
 	while len(pp) >= 1:
@@ -608,7 +606,7 @@ servePreTask -
   dbGqlGen(): running "go run github.com/99designs/gqlgen" job for gqlgen(https://github.com/99designs/gqlgen)
 deployPostTask - 
   pm2Register(): "pm2 start pm2.json" - You should define pm2.json file first.
-''' % ver)
+''' % __version__)
 
 def main():
 	global cwd, scriptPath, mymod, mygod
@@ -628,13 +626,13 @@ def main():
 	# check first
 	sys.path.append(cwd)
 	if not os.path.exists("god_my.py") or not os.path.exists("god.yml"):
-		print("god-tool V%s\nThere is no god relevent files. you can initialize by 'god init' command" % ver)
+		print("god-tool V%s\nThere is no god relevent files. you can initialize by 'god init' command" % __version__)
 		return
 
 	mymod = __import__("god_my", fromlist=[''])
 	mygod = mymod.myGod(tasks)
 
-	print("god-tool V%s" % ver)
+	print("god-tool V%s" % __version__)
 	confLoad()
 	global config
 	name = config["config"]["name"]
