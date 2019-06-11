@@ -76,22 +76,12 @@ class Tasks():
 		if hasattr(mygod, "doBuild"):
 			return mygod.doBuild(args)
 
-		isSuccess = False
-		if not mygod.servePreTask(args):
-			print("run: failed to run servePreTask")
-		else:
-			print("run: building the app")
-			ret = self.buildTask(args)
+		print("run: building the app")
+		ret = self.buildTask(args)
+		if not ret:
+			print("run: failed to build the program")
 
-			if not ret:
-				print("run: failed to build go program")
-			else:
-				if not mygod.servePostTask(args):
-					print("run: failed to run servePostTask")
-				else:
-					isSuccess = True
-
-		return isSuccess
+		return ret
 
 	def buildTask(self, args):
 		if hasattr(mygod, "buildTask"):
@@ -293,7 +283,7 @@ def cutpath(parent, pp):
 
 	return pp[len(parent):]
 
-def falseFunc():
+def falseFunc(pp):
 	return False
 
 #https://gist.github.com/kdheepak/c18f030494fea16ffd92d95c93a6d40d
@@ -432,13 +422,17 @@ def deploy(serverName):
 
 	global ssh
 	ssh = Ssh()
-	print("deploy: connecting to the server[%s:%d] with ID:%s" % (server["host"], server["port"], server["id"]))
-	ssh.init(server["host"], server["port"], server["id"])
+	port = 22
+	if "port" in server:
+		port = server["port"]
+	print("deploy: connecting to the server[%s:%d] with ID:%s" % (server["host"], port, server["id"]))
+	ssh.init(server["host"], port, server["id"])
 
 	targetPath = server["targetPath"]
 	name = config["config"]["name"]
 	realTarget = ssh.run("mkdir -p %s/shared && cd %s && mkdir -p releases && pwd" % (targetPath, targetPath))
 	realTarget = realTarget.strip("\r\n")	# for sftp
+
 
 	todayName = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")[2:]
 	res = ssh.run("cd %s/releases && ls -d */" % targetPath)
@@ -455,6 +449,11 @@ def deploy(serverName):
 			ssh.run("rm -rf %s/releases/%s" % (targetPath, ff))
 
 	res = ssh.run("cd %s/releases && mkdir %s" % (targetPath, todayName))
+
+	# pre task
+	args.targetPath = targetPath
+	if hasattr(mygod, "deployPreTask"):
+		mygod.deployPreTask(ssh, args)
 
 	# upload files
 	realTargetFull = os.path.join(realTarget, "releases", todayName)
@@ -578,8 +577,8 @@ def deploy(serverName):
 	ssh.run("cd %s && rm current && ln -sf releases/%s current" % (targetPath, todayName))
 
 	# post process
-	args.targetPath = targetPath
-	mygod.deployPostTask(ssh, args)
+	if hasattr(mygod, "deployPostTask"):
+		mygod.deployPostTask(ssh, args)
 
 	ssh.close()
 
@@ -591,20 +590,18 @@ class myGod:
 		self.tasks = tasks
 
 	def buildTask(self, args):
-		return self.tasks.goBuild(args)
-
-	# return: False(stop post processes)
-	def servePreTask(self):
 		#if not self.tasks.dbGqlGen():
 		#	return False
-		return True
+		return self.tasks.goBuild(args)
 
-	def servePostTask(self):
+	def deployPreTask(self, ssh, args):
+		#subprocess.check_output("npm run build", shell=True)
 		return True
 
 	def deployPostTask(self, ssh, args):
 		#if not self.tasks.pm2Register():
 		#	return False
+		#ssh.run("cd %s/current && echo 'finish'" % args.targetPath)
 		return True
 """)
 		
