@@ -700,7 +700,8 @@ def main():
 	print("** daemon is %s" % name)
 
 	global args
-	args.deployOwner = config["deploy"]["owner"]
+	if "owner" in config["deploy"]:
+		args.deployOwner = config["deploy"]["owner"]
 
 	if cnt > 1:
 		cmd = sys.argv[1]
