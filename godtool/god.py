@@ -63,7 +63,8 @@ def mergeDict(dic, dic2):
 class Args():
 	def __init__(self):
 		self.executableName = ""
-		self.targetPath = ""	# only for deployment
+		self.deployRoot = ""	# only for deployment
+		self.deployOwner = ""	
 
 
 class Tasks():
@@ -178,7 +179,7 @@ class Tasks():
 		cmd = ""
 		if useNvm:
 			cmd += ". ~/.nvm/nvm.sh && "
-		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (args.targetPath)
+		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (args.deployRoot)
 		ssh.run(cmd)
 		return True
 
@@ -446,12 +447,20 @@ def deploy(serverName):
 		print("deploy: remove old %d folders" % (cnt - max))
 		removeList = releases[:cnt-max]
 		for ff in removeList:
-			ssh.run("rm -rf %s/releases/%s" % (targetPath, ff))
+			if args.deployOwner != "":
+				ssh.run("sudo rm -rf %s/releases/%s" % (targetPath, ff))
+			else:
+				ssh.run("rm -rf %s/releases/%s" % (targetPath, ff))
 
-	res = ssh.run("cd %s/releases && mkdir %s" % (targetPath, todayName))
+	# if deploy / owner is defined,
+	# create release folder as ssh user, upload, extract then change release folder to deploy / owner
+	if args.deployOwner != "":
+		res = ssh.run("cd %s/releases && sudo mkdir %s && sudo chown %s: %s" % (targetPath, todayName, server["id"], todayName))
+	else:
+		res = ssh.run("cd %s/releases && mkdir %s" % (targetPath, todayName))
 
 	# pre task
-	args.targetPath = targetPath
+	args.deployRoot = targetPath
 	if hasattr(mygod, "deployPreTask"):
 		mygod.deployPreTask(ssh, args)
 
@@ -574,11 +583,17 @@ def deploy(serverName):
 		ssh.run("cd %s && mkdir -p shared/%s && ln -sf %s/shared/%s releases/%s/%s" % (targetPath, folder, targetPath, pp, todayName, pp))
 
 	# update link
-	ssh.run("cd %s && rm current && ln -sf releases/%s current" % (targetPath, todayName))
+	if args.deployOwner != "":
+		ssh.run("cd %s && sudo rm current && sudo ln -sf releases/%s current && sudo chown %s: current" % (targetPath, todayName, server["id"]))
+	else:
+		ssh.run("cd %s && rm current && ln -sf releases/%s current" % (targetPath, todayName))
 
 	# post process
 	if hasattr(mygod, "deployPostTask"):
 		mygod.deployPostTask(ssh, args)
+
+	if args.deployOwner != "":
+		ssh.run("cd %s && sudo chown %s: releases/%s current" % (targetPath, args.deployOwner, todayName))
 
 	ssh.close()
 
@@ -601,7 +616,7 @@ class myGod:
 	def deployPostTask(self, ssh, args):
 		#if not self.tasks.pm2Register():
 		#	return False
-		#ssh.run("cd %s/current && echo 'finish'" % args.targetPath)
+		#ssh.run("cd %s/current && echo 'finish'" % args.deployRoot)
 		return True
 """)
 		
@@ -618,6 +633,7 @@ serve:
 
 deploy:
   strategy: zip
+  #owner: test	# all generated files's owner is set it. if owner is specified, servers/id should be the user who can use sudo command due to sudo cmd
   maxRelease: 3
   include:
 	#- "*"
@@ -683,6 +699,9 @@ def main():
 
 	print("** daemon is %s" % name)
 
+	global args
+	args.deployOwner = config["deploy"]["owner"]
+
 	if cnt > 1:
 		cmd = sys.argv[1]
 		if cmd == "deploy":
@@ -702,7 +721,6 @@ def main():
 
 	tasks.isRestart = True
 
-	global args
 	try:
 		while True:
 			time.sleep(0.01)
