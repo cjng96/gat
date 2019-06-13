@@ -651,7 +651,7 @@ deploy:
 servers:
   - name: test
     host: test.com
-	port: 22
+    port: 22
     id: test
     targetPath: ~/test
 """)
