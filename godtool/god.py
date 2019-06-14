@@ -24,25 +24,13 @@ from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 
 from .__init__ import __version__
+from .coSsh import CoSsh
+from .coPath import cutpath
+from .sampleFiles import sampleApp, sampleEnv
 
 g_cwd = ""
 g_scriptPath = ""
 
-
-def path2folderList(pp):
-	dirs = []
-	while len(pp) >= 1:
-		dirs.append(pp)
-		pp, _  = os.path.split(pp)
-		if pp == "/":
-			break
-
-	return dirs
-
-def path2FolderListTest():
-	print(path2folderList("/haha/a/test.txt"))
-	print(path2folderList("haha/b/test.txt"))
-	print(path2folderList("h/c/test.txt"))
 
 # https://gist.github.com/angstwad/bf22d1822c38a92ec0a9
 def mergeDict(dic, dic2):
@@ -173,14 +161,13 @@ class Tasks():
 		return True
 
 	def pm2Register(self, useNvm=True):
-		global ssh
+		global g_ssh
 		cmd = ""
 		if useNvm:
 			cmd += ". ~/.nvm/nvm.sh && "
 		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (g_args.deployRoot)
 		g_ssh.run(cmd)
 		return True
-
 
 class NonBlockingStreamReader:
 	def __init__(self, stream):
@@ -200,7 +187,7 @@ class NonBlockingStreamReader:
 				if line:
 					queue.put(line)
 				else:
-					if tasks.isRestart:
+					if g_tasks.isRestart:
 						return
 
 					print("non-block-stream: error")
@@ -239,11 +226,11 @@ class MyHandler(PatternMatchingEventHandler):
 		if event.is_directory:
 			return
 
-		if tasks.isRestart:
+		if g_tasks.isRestart:
 			return
 
 		print("run: file - %s is %s" % (event.src_path, event.event_type))
-		tasks.isRestart = True
+		g_tasks.isRestart = True
 
 	def on_modified(self, event):
 		self.process(event)
@@ -254,171 +241,45 @@ class MyHandler(PatternMatchingEventHandler):
 g_ssh = None
 g_mygod = None
 g_args = Args()
-tasks = Tasks()
+g_tasks = Tasks()
 
 g_config = {}
 
 
-class SshAllowAllKeys(paramiko.MissingHostKeyPolicy):
-    def missing_host_key(self, client, hostname, key):
-   	    return
 
-def cutpath(parent, pp):
-	if parent[-1] != "/":
-		parent += "/"		 
-
-	return pp[len(parent):]
-
-def falseFunc(pp):
-	return False
-
-#https://gist.github.com/kdheepak/c18f030494fea16ffd92d95c93a6d40d
-#https://stackoverflow.com/questions/760978/long-running-ssh-commands-in-python-paramiko-module-and-how-to-end-them
-class Ssh:
-	def __init__(self):
-		pass
-
-	def init(self, host, port, id):
-		self.ssh = paramiko.SSHClient()
-		#ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-		self.ssh.set_missing_host_key_policy(SshAllowAllKeys())
-		self.ssh.connect(host, port=port, username=id)	#, password='lol')
-
-		self.sftp = paramiko.SFTPClient.from_transport(self.ssh.get_transport())
-
-		self.uploadFilterFunc = falseFunc
-
-	def close(self):
-		self.ssh.close()
-
-	# return: result
-	def run(self, cmd):
-		chan = self.ssh.get_transport().open_session()
-		chan.exec_command(cmd)
-		chan.setblocking(0)
-		out = ""
-		while True:
-			try:
-				line = chan.recv(99999)
-				if len(line) == 0:
-					break
-				out += line.decode("utf-8")
-			except socket.timeout as e:
-				pass
-
-			try:
-				line = chan.recv_stderr(99999)
-				if len(line) == 0:
-					break
-				out += line.decode("utf-8")
-			except socket.timeout as e:
-				pass
-
-		ret = chan.recv_exit_status()
-		print("execute[%s] - ret:%d\n%s" % (cmd, ret, out))
-		chan.close()
-		if ret != 0:
-			raise Exception("ssh command failed with ret:%d" % ret)
-		return out
-
-
-	# sftp 상에 경로를 생성한다.
-	# remote 경로가 directory이면, is_dir에 True를 전달한다.
-	def mkdir_p(self, remote, isFolder=False):
-		dirs = []
-		if isFolder:
-			pp = remote
-		else:
-			pp, basename = os.path.split(remote)
-
-		dirs = path2folderList(pp)
-
-		# check last folder first
-		if len(dirs) > 0:
-			try:
-				self.sftp.stat(dirs[0])
-				return
-			except:
-				pass
-
-		while len(dirs):
-			pp = dirs.pop()
-			try:
-				self.sftp.stat(pp)
-			except:
-				print("sftp: making dir ->",  pp)
-				self.sftp.mkdir(pp)
-
-	def uploadFileTo(self, srcPath, destFolder):
-		#print("sftp: uploadFilesTo - %s %s" % (srcPath, destFolder))
-		name = os.path.split(srcPath)[1]
-		self.uploadFile(srcPath, os.path.join(destFolder, name))
-
-
-	# sftp 상에 파일을 업로드한다.
-	# src_path에 dest_path로 업로드한다. 두개 모두 file full path여야 한다.
-	def uploadFile(self, srcPath, destPath):
-		print("sftp: upload file %s -> %s" % (srcPath, destPath))
-		if self.uploadFilterFunc(srcPath):
-			print(" ** exclude file - %s" % srcPath)
-			return
-
-		self.mkdir_p(destPath)
-		try:
-			self.sftp.put(srcPath, destPath)
-		except Exception as e:
-			#print("sftp: fail to upload " + srcPath + " ==> " + destPath)
-			raise e
-		#print("sftp: success to upload " + srcPath + " ==> " + destPath)
-
-	# srcPath, destPath둘다 full path여야한다.
-	def uploadFolder(self, srcPath, destPath):
-		print("sftp: upload folder %s -> %s" % (srcPath, destPath))
-		if self.uploadFilterFunc(srcPath):
-			print(" ** exclude folder - %s" % srcPath)
-			return
-
-		self.mkdir_p(destPath, True)
-
-		for folder, dirs, files in os.walk(srcPath):
-			try:
-				for pp in files:
-					src = os.path.join(folder, pp)
-					target = os.path.join(destPath, cutpath(srcPath, folder), pp)
-					self.uploadFile(src, target)
-			except Exception as e:
-				print(e)
-				raise e
-
-def deploy(serverName):
-	global g_config
+def configServerGet(name):
 	server = None
-	
 	for it in g_config["servers"]:
-		if it["name"] == serverName:
+		if it["name"] == name:
 			server = it
 			print("deploy: selected server - ", it)
 			break
 
 	if server is None:
-		print("Not found server[%s]" % serverName)
+		print("Not found server[%s]" % name)
+		return None
+
+	return server
+
+
+def deploy(serverName):
+	global g_config
+	server = configServerGet(serverName)
+	if server is None:
 		return
 
-	tasks.doBuild(g_mygod, g_args)
+	g_tasks.doBuild(g_mygod, g_args)
 
 	global g_ssh
-	g_ssh = Ssh()
-	port = 22
-	if "port" in server:
-		port = server["port"]
+	g_ssh = CoSsh()
+	port = server["port"] if "port" in server else 22
 	print("deploy: connecting to the server[%s:%d] with ID:%s" % (server["host"], port, server["id"]))
 	g_ssh.init(server["host"], port, server["id"])
 
-	targetPath = server["targetPath"]
 	name = g_config["config"]["name"]
+	targetPath = server["targetPath"]
 	realTarget = g_ssh.run("mkdir -p %s/shared && cd %s && mkdir -p releases && pwd" % (targetPath, targetPath))
 	realTarget = realTarget.strip("\r\n")	# for sftp
-
 
 	todayName = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")[2:]
 	res = g_ssh.run("cd %s/releases && ls -d */" % targetPath)
@@ -582,66 +443,15 @@ def deploy(serverName):
 
 	g_ssh.close()
 
-def initSamples():
-	with open("god_my.py", "w") as fp:
-		fp.write("""
-config='''
-config:
-  name: test
 
-serve:
-  patterns:
-    - "*.go"
-    - "*.json"
-    - "*.graphql"
-
-deploy:
-  strategy: zip
-  #owner: test	# all generated files's owner is set it. if owner is specified, servers/id should be the user who can use sudo command due to sudo cmd
-  maxRelease: 3
-  include:
-	#- "*"
-	- ${name}
-    - config
-    - pm2.json
-		- src: ../build
-		  target: build
-  exclude:
-    - config/my.json
-  sharedLinks:
-    - config/my.json
-
-servers:
-  - name: test
-    host: test.com
-    port: 22
-    id: test
-    targetPath: ~/test
-'''
-
-class myGod:
-	def __init__(self, tasks, helper, **kwargs):
-		self.tasks = tasks
-		self.helper = helper
-		helper.configStr("yaml", config)	# helper.configFile("yaml", "god.yaml")
-
-	def buildTask(self, args, **kwargs):
-		#if not self.tasks.dbGqlGen():
-		#	return False
-		return self.tasks.goBuild(args)
-
-	def deployPreTask(self, ssh, args, **kwargs):
-		#subprocess.check_output("npm run build", shell=True)
-		return True
-
-	def deployPostTask(self, ssh, args, **kwargs):
-		#if not self.tasks.pm2Register():
-		#	return False
-		#ssh.run("cd %s/current && echo 'finish'" % args.deployRoot)
-		return True
-""")
+def initSamples(type, fn):
+	with open(fn, "w") as fp:
+		if type == "app":
+			fp.write(sampleApp)
+		else:
+			fp.write(sampleEnv)
 		
-	print("init: god_my.py file generated. You should modify that file for your environment before service or deployment.")
+	print("init: %s file generated. You should modify that file for your environment before service or deployment." % (fn))
 
 def printTasks():
 	print(
@@ -689,58 +499,112 @@ def main():
 	g_scriptPath = os.path.dirname(os.path.realpath(__file__))
 
 	cnt = len(sys.argv)
+	cmd = None
 	if cnt > 1:
 		cmd = sys.argv[1]
+
 		if cmd == "init":
-			initSamples()
+			if cnt < 3:
+				print("god init app OR god init env NAME.")
+				return
+
+			type = sys.argv[2]
+			if type != "app" and type != "env":
+				print("app or env can be used for god init command.")
+				return
+
+			target = sys.argv[2] if cnt > 3 else "god_my.py"
+			initSamples(type, target)
 			return
 		elif cmd == "tasks":
 			printTasks()
 			return
-
-	# check first0
-	sys.path.append(g_cwd)
-	if not os.path.exists("god_my.py"):	# or not os.path.exists("god.yml"):
-		print("god-tool V%s\nThere is no god relevent file. you can run god YOUR_GOD_FILE.py or initialize by 'god init'" % __version__)
-		return
-
-	mymod = __import__("god_my", fromlist=[''])
-	g_mygod = mymod.myGod(tasks=tasks, helper=g_helper)
-
-	print("god-tool V%s" % __version__)
-	#confLoad()
-	global g_config
-	name = g_config["config"]["name"]
-
-	print("** daemon is %s" % name)
-
-	global g_args
-	if "owner" in g_config["deploy"]:
-		g_args.deployOwner = g_config["deploy"]["owner"]
-
-	if cnt > 1:
-		cmd = sys.argv[1]
-		if cmd == "deploy":
+		elif cmd == "deploy":
+			target = "god_my.py"
+			pass
+		elif cmd == "setup":
+			# server env
 			if cnt < 3:
-				# todo: print server list
-				print("Please specify server name.")
+				print("god setup FILE.py")
 				return
-			deploy(sys.argv[2])
-			return
+			target = sys.argv[2]
 		else:
 			print("unknown command - %s" % cmd)
 			return
 
+	else:
+		# default operation for app
+		target = "god_my.py"
+
+	# check first
+	if not os.path.exists(target):	# or not os.path.exists("god.yml"):
+		print("god-tool V%s\nThere is no god relevent file. you can run god YOUR_GOD_FILE.py or initialize by 'god init'" % __version__)
+		return
+
+	sys.path.append(g_cwd)
+	mymod = __import__(target[:-3], fromlist=[''])
+	g_mygod = mymod.myGod(tasks=g_tasks, helper=g_helper)
+
+	print("god-tool V%s" % __version__)
+	global g_config
+	name = g_config["config"]["name"]
+	type = g_config["config"]["type"] if "type" in g_config["config"] else "app"
+
+	print("** config[type:%s, name:%s]" % (type, name))
+
+	global g_args
+
+	if cmd == "deploy":
+		if "owner" in g_config["deploy"]:
+			g_args.deployOwner = g_config["deploy"]["owner"]
+
+		target = sys.argv[2] if cnt > 2 else None
+		if target is None:
+			# todo: print server list
+			print("Please specify server name.")
+			return
+		deploy(target)
+		return
+	elif cmd == "setup":
+		serverName = "" if cnt <= 3 else sys.argv[3]
+		setup(target, serverName)
+		return
+
+	# serve
+	serve()
+
+def setup(target, serverName):
+	if not os.path.exists(target):
+		print("There is no target file[%s]" % target)
+		return
+	
+	server = configServerGet(serverName)
+	if server is None:
+		return
+
+	global g_ssh
+	g_ssh = Ssh()
+	port = server["port"] if "port" in server else 22
+	print("setup: connecting to the server[%s:%d] with ID:%s" % (server["host"], port, server["id"]))
+	g_ssh.init(server["host"], port, server["id"])
+
+	if hasattr(g_mygod, "setupTask"):
+		g_mygod.setupTask(ssh=g_ssh, args=g_args)
+	else:
+		print("setup: You should override setupTask function in your myGod class")
+		return
+
+
+def serve():
 	observer = Observer()
 	observer.schedule(MyHandler(g_config["serve"]["patterns"]), path=".", recursive=True)
 	observer.start()
 
-	tasks.isRestart = True
-
+	g_tasks.isRestart = True
 	try:
 		while True:
 			time.sleep(0.01)
-			tasks.doServeStep(g_mygod, g_args)
+			g_tasks.doServeStep(g_mygod, g_args)
 
 	except KeyboardInterrupt:
 		observer.stop()
