@@ -25,9 +25,8 @@ from watchdog.events import PatternMatchingEventHandler
 
 from .__init__ import __version__
 
-cwd = ""
-scriptPath = ""
-mymod = None
+g_cwd = ""
+g_scriptPath = ""
 
 
 def path2folderList(pp):
@@ -73,31 +72,31 @@ class Tasks():
 		self.outStream = None
 		self.isRestart = True	# First start or modified source files
 
-	def doBuild(self, args, mygod):
+	def doBuild(self, mygod, args):
 		if hasattr(mygod, "doBuild"):
-			return mygod.doBuild(args)
+			return mygod.doBuild(args=args)
 
 		print("run: building the app")
-		ret = self.buildTask(args)
+		ret = self.buildTask(mygod, args)
 		if not ret:
 			print("run: failed to build the program")
 
 		return ret
 
-	def buildTask(self, args):
+	def buildTask(self, mygod, args):
 		if hasattr(mygod, "buildTask"):
-			return mygod.buildTask(args)
+			return mygod.buildTask(args=args)
 
 		return self.goBuild(args)
 
-	def doServeStep(self, args, mygod):
-		if hasattr(mygod, "doServeStep"):
-			return mygod.doServeStep(args)
+	def doServeStep(self, mygod, args):
+		if hasattr(g_mygod, "doServeStep"):
+			return g_mygod.doServeStep(args=args)
 
 		if self.isRestart:
 			print("\n\n\n")
 
-			isSuccess = self.doBuild(args, mygod)
+			isSuccess = self.doBuild(mygod, args)
 
 			if self.proc is not None:
 				print("run: stop the daemon...")
@@ -120,11 +119,11 @@ class Tasks():
 				print(ss[:-1])
 
 	def goBuild(self, args):
-			cmd = ["go", "build", "-o", args.executableName]
-			ret = subprocess.run(cmd)
-			return ret.returncode == 0
+		cmd = ["go", "build", "-o", args.executableName]
+		ret = subprocess.run(cmd)
+		return ret.returncode == 0
 
-	def dbGqlGen(self):
+	def gqlGen(self):
 		print("task: gql gen...")
 
 		# run only it's changed
@@ -175,12 +174,11 @@ class Tasks():
 
 	def pm2Register(self, useNvm=True):
 		global ssh
-		global args
 		cmd = ""
 		if useNvm:
 			cmd += ". ~/.nvm/nvm.sh && "
-		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (args.deployRoot)
-		ssh.run(cmd)
+		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (g_args.deployRoot)
+		g_ssh.run(cmd)
 		return True
 
 
@@ -253,26 +251,13 @@ class MyHandler(PatternMatchingEventHandler):
 	def on_created(self, event):
 		self.process(event)
 
-ssh = None
-mygod = None
-args = Args()
+g_ssh = None
+g_mygod = None
+g_args = Args()
 tasks = Tasks()
 
-config = {}
+g_config = {}
 
-def confLoad():
-	global config
-	with open("god.yml", 'r') as fp:
-		try:
-			config = yaml.safe_load(fp)
-			print(config)
-
-			global args
-			args.executableName = config["config"]["name"]
-
-		except yaml.YAMLError as e:
-			print("config: error - %s" % e)
-			raise e
 
 class SshAllowAllKeys(paramiko.MissingHostKeyPolicy):
     def missing_host_key(self, client, hostname, key):
@@ -406,10 +391,10 @@ class Ssh:
 				raise e
 
 def deploy(serverName):
-	global config
+	global g_config
 	server = None
 	
-	for it in config["servers"]:
+	for it in g_config["servers"]:
 		if it["name"] == serverName:
 			server = it
 			print("deploy: selected server - ", it)
@@ -419,61 +404,61 @@ def deploy(serverName):
 		print("Not found server[%s]" % serverName)
 		return
 
-	tasks.doBuild(args, mygod)
+	tasks.doBuild(g_mygod, g_args)
 
-	global ssh
-	ssh = Ssh()
+	global g_ssh
+	g_ssh = Ssh()
 	port = 22
 	if "port" in server:
 		port = server["port"]
 	print("deploy: connecting to the server[%s:%d] with ID:%s" % (server["host"], port, server["id"]))
-	ssh.init(server["host"], port, server["id"])
+	g_ssh.init(server["host"], port, server["id"])
 
 	targetPath = server["targetPath"]
-	name = config["config"]["name"]
-	realTarget = ssh.run("mkdir -p %s/shared && cd %s && mkdir -p releases && pwd" % (targetPath, targetPath))
+	name = g_config["config"]["name"]
+	realTarget = g_ssh.run("mkdir -p %s/shared && cd %s && mkdir -p releases && pwd" % (targetPath, targetPath))
 	realTarget = realTarget.strip("\r\n")	# for sftp
 
 
 	todayName = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")[2:]
-	res = ssh.run("cd %s/releases && ls -d */" % targetPath)
+	res = g_ssh.run("cd %s/releases && ls -d */" % targetPath)
 	releases = list(filter(lambda x: re.match('\d{6}_\d{6}', x) is not None, res.split()))
 	releases.sort()
 
-	max = config["deploy"]["maxRelease"]-1
+	max = g_config["deploy"]["maxRelease"]-1
 	cnt = len(releases)
 	print("deploy: releases folders count is %d" % cnt)
 	if cnt > max:
 		print("deploy: remove old %d folders" % (cnt - max))
 		removeList = releases[:cnt-max]
 		for ff in removeList:
-			if args.deployOwner != "":
-				ssh.run("sudo rm -rf %s/releases/%s" % (targetPath, ff))
+			if g_args.deployOwner != "":
+				g_ssh.run("sudo rm -rf %s/releases/%s" % (targetPath, ff))
 			else:
-				ssh.run("rm -rf %s/releases/%s" % (targetPath, ff))
+				g_ssh.run("rm -rf %s/releases/%s" % (targetPath, ff))
 
 	# if deploy / owner is defined,
 	# create release folder as ssh user, upload, extract then change release folder to deploy / owner
-	if args.deployOwner != "":
-		res = ssh.run("cd %s/releases && sudo mkdir %s && sudo chown %s: %s" % (targetPath, todayName, server["id"], todayName))
+	if g_args.deployOwner != "":
+		res = g_ssh.run("cd %s/releases && sudo mkdir %s && sudo chown %s: %s" % (targetPath, todayName, server["id"], todayName))
 	else:
-		res = ssh.run("cd %s/releases && mkdir %s" % (targetPath, todayName))
+		res = g_ssh.run("cd %s/releases && mkdir %s" % (targetPath, todayName))
 
 	# pre task
-	args.deployRoot = targetPath
-	if hasattr(mygod, "deployPreTask"):
-		mygod.deployPreTask(ssh, args)
+	g_args.deployRoot = targetPath
+	if hasattr(g_mygod, "deployPreTask"):
+		g_mygod.deployPreTask(ssh=g_ssh, args=g_args)
 
 	# upload files
 	realTargetFull = os.path.join(realTarget, "releases", todayName)
 	include = []
 	exclude = []
 	sharedLinks = []
-	include = config["deploy"]["include"]
-	if "exclude" in config["deploy"]:
-		exclude = config["deploy"]["exclude"]
-	if "sharedLinks" in config["deploy"]:
-		sharedLinks = config["deploy"]["sharedLinks"]
+	include = g_config["deploy"]["include"]
+	if "exclude" in g_config["deploy"]:
+		exclude = g_config["deploy"]["exclude"]
+	if "sharedLinks" in g_config["deploy"]:
+		sharedLinks = g_config["deploy"]["sharedLinks"]
 
 	def _filterFunc(pp):
 		pp = os.path.normpath(pp)
@@ -481,7 +466,7 @@ def deploy(serverName):
 			return True
 		return False
 
-	strategy = config["deploy"]["strategy"]
+	strategy = g_config["deploy"]["strategy"]
 	if strategy == "zip":
 		zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
 		with zipfile.ZipFile(zipPath, "w") as zipWork:
@@ -539,8 +524,8 @@ def deploy(serverName):
 						for ff in files:
 							_zipAdd(os.path.join(folder, ff), os.path.join(target, cutpath(src, folder), ff))
 
-		ssh.uploadFile(zipPath, os.path.join(realTargetFull, "data.zip"))	# we don't include it by default
-		ssh.run("cd %s/releases/%s && unzip data.zip && rm data.zip" % (targetPath, todayName))
+		g_ssh.uploadFile(zipPath, os.path.join(realTargetFull, "data.zip"))	# we don't include it by default
+		g_ssh.run("cd %s/releases/%s && unzip data.zip && rm data.zip" % (targetPath, todayName))
 		os.remove(zipPath)
 		"""	no use copy strategy anymore
 		elif strategy == "copy":
@@ -580,48 +565,27 @@ def deploy(serverName):
 	for pp in sharedLinks:
 		print("deploy: sharedLinks - %s" % pp)
 		folder = os.path.dirname(pp)
-		ssh.run("cd %s && mkdir -p shared/%s && ln -sf %s/shared/%s releases/%s/%s" % (targetPath, folder, targetPath, pp, todayName, pp))
+		g_ssh.run("cd %s && mkdir -p shared/%s && ln -sf %s/shared/%s releases/%s/%s" % (targetPath, folder, targetPath, pp, todayName, pp))
 
 	# update link
-	if args.deployOwner != "":
-		ssh.run("cd %s && sudo rm current && sudo ln -sf releases/%s current && sudo chown %s: current" % (targetPath, todayName, server["id"]))
+	if g_args.deployOwner != "":
+		g_ssh.run("cd %s && sudo rm current && sudo ln -sf releases/%s current && sudo chown %s: current" % (targetPath, todayName, server["id"]))
 	else:
-		ssh.run("cd %s && rm current && ln -sf releases/%s current" % (targetPath, todayName))
+		g_ssh.run("cd %s && rm current && ln -sf releases/%s current" % (targetPath, todayName))
 
 	# post process
-	if hasattr(mygod, "deployPostTask"):
-		mygod.deployPostTask(ssh, args)
+	if hasattr(g_mygod, "deployPostTask"):
+		g_mygod.deployPostTask(ssh=g_ssh, args=g_args)
 
-	if args.deployOwner != "":
-		ssh.run("cd %s && sudo chown %s: releases/%s current" % (targetPath, args.deployOwner, todayName))
+	if g_args.deployOwner != "":
+		g_ssh.run("cd %s && sudo chown %s: releases/%s current" % (targetPath, g_args.deployOwner, todayName))
 
-	ssh.close()
+	g_ssh.close()
 
 def initSamples():
 	with open("god_my.py", "w") as fp:
 		fp.write("""
-class myGod:
-	def __init__(self, tasks):
-		self.tasks = tasks
-
-	def buildTask(self, args):
-		#if not self.tasks.dbGqlGen():
-		#	return False
-		return self.tasks.goBuild(args)
-
-	def deployPreTask(self, ssh, args):
-		#subprocess.check_output("npm run build", shell=True)
-		return True
-
-	def deployPostTask(self, ssh, args):
-		#if not self.tasks.pm2Register():
-		#	return False
-		#ssh.run("cd %s/current && echo 'finish'" % args.deployRoot)
-		return True
-""")
-		
-	with open("god.yml", "w") as fp:
-		fp.write("""
+config='''
 config:
   name: test
 
@@ -646,7 +610,6 @@ deploy:
     - config/my.json
   sharedLinks:
     - config/my.json
-  
 
 servers:
   - name: test
@@ -654,8 +617,31 @@ servers:
     port: 22
     id: test
     targetPath: ~/test
+'''
+
+class myGod:
+	def __init__(self, tasks, helper, **kwargs):
+		self.tasks = tasks
+		self.helper = helper
+		helper.configStr("yaml", config)	# helper.configFile("yaml", "god.yaml")
+
+	def buildTask(self, args, **kwargs):
+		#if not self.tasks.dbGqlGen():
+		#	return False
+		return self.tasks.goBuild(args)
+
+	def deployPreTask(self, ssh, args, **kwargs):
+		#subprocess.check_output("npm run build", shell=True)
+		return True
+
+	def deployPostTask(self, ssh, args, **kwargs):
+		#if not self.tasks.pm2Register():
+		#	return False
+		#ssh.run("cd %s/current && echo 'finish'" % args.deployRoot)
+		return True
 """)
-	print("init: god_my.py and god.yml files generated. You should modify those files for your environment before service or deployment.")
+		
+	print("init: god_my.py file generated. You should modify that file for your environment before service or deployment.")
 
 def printTasks():
 	print(
@@ -663,15 +649,44 @@ def printTasks():
 buildTask - 
   goBuild(args): "go build -o config.name"
 servePreTask - 
-  dbGqlGen(): running "go run github.com/99designs/gqlgen" job for gqlgen(https://github.com/99designs/gqlgen)
+  gqlGen(): running "go run github.com/99designs/gqlgen" job for gqlgen(https://github.com/99designs/gqlgen)
 deployPostTask - 
   pm2Register(): "pm2 start pm2.json" - You should define pm2.json file first.
 ''' % __version__)
 
+class Helper:
+	def __init__(self):
+		pass
+
+	def configStr(self, type, ss):
+		'''
+		type: yaml
+
+		'''
+		global g_config, g_args
+		if type == "yaml":
+			try:
+				g_config = yaml.safe_load(ss)
+				g_args.executableName = g_config["config"]["name"]
+			except yaml.YAMLError as e:
+				raise e
+
+		else:
+			raise Exception("unknown config type[%s]" % type)
+
+	def configFile(self, type, pp):
+		'''
+		type: yaml
+		'''
+		with open(pp, "r") as fp:
+			self.configStr(type, fp.read())
+
+g_helper = Helper()
+
 def main():
-	global cwd, scriptPath, mymod, mygod
-	cwd = os.getcwd()
-	scriptPath = os.path.dirname(os.path.realpath(__file__))
+	global g_cwd, g_scriptPath, g_mygod
+	g_cwd = os.getcwd()
+	g_scriptPath = os.path.dirname(os.path.realpath(__file__))
 
 	cnt = len(sys.argv)
 	if cnt > 1:
@@ -683,25 +698,25 @@ def main():
 			printTasks()
 			return
 
-	# check first
-	sys.path.append(cwd)
-	if not os.path.exists("god_my.py") or not os.path.exists("god.yml"):
-		print("god-tool V%s\nThere is no god relevent files. you can initialize by 'god init' command" % __version__)
+	# check first0
+	sys.path.append(g_cwd)
+	if not os.path.exists("god_my.py"):	# or not os.path.exists("god.yml"):
+		print("god-tool V%s\nThere is no god relevent file. you can run god YOUR_GOD_FILE.py or initialize by 'god init'" % __version__)
 		return
 
 	mymod = __import__("god_my", fromlist=[''])
-	mygod = mymod.myGod(tasks)
+	g_mygod = mymod.myGod(tasks=tasks, helper=g_helper)
 
 	print("god-tool V%s" % __version__)
-	confLoad()
-	global config
-	name = config["config"]["name"]
+	#confLoad()
+	global g_config
+	name = g_config["config"]["name"]
 
 	print("** daemon is %s" % name)
 
-	global args
-	if "owner" in config["deploy"]:
-		args.deployOwner = config["deploy"]["owner"]
+	global g_args
+	if "owner" in g_config["deploy"]:
+		g_args.deployOwner = g_config["deploy"]["owner"]
 
 	if cnt > 1:
 		cmd = sys.argv[1]
@@ -717,7 +732,7 @@ def main():
 			return
 
 	observer = Observer()
-	observer.schedule(MyHandler(config["serve"]["patterns"]), path=".", recursive=True)
+	observer.schedule(MyHandler(g_config["serve"]["patterns"]), path=".", recursive=True)
 	observer.start()
 
 	tasks.isRestart = True
@@ -725,7 +740,7 @@ def main():
 	try:
 		while True:
 			time.sleep(0.01)
-			tasks.doServeStep(args, mygod)
+			tasks.doServeStep(g_mygod, g_args)
 
 	except KeyboardInterrupt:
 		observer.stop()
