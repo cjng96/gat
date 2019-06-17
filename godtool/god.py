@@ -26,7 +26,7 @@ from watchdog.events import PatternMatchingEventHandler
 from .__init__ import __version__
 from .coSsh import CoSsh
 from .coPath import cutpath
-from .sampleFiles import sampleApp, sampleEnv
+from .sampleFiles import sampleApp, sampleSys
 
 g_cwd = ""
 g_scriptPath = ""
@@ -168,6 +168,21 @@ class Tasks():
 		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (g_args.deployRoot)
 		g_ssh.run(cmd)
 		return True
+
+	def configAssure(self, path, marker, block, insertAfter=None):
+		cfg = dict(cmd="configAssure", path=path, marker=marker, block=block, insertAfter=insertAfter)
+		#pp = "/tmp/god_cfg.json"
+		#json.dump(cfg, "/tmp/god_cfg.json")
+		#g_ssh.uploadFile(pp, pp)
+		ss = json.dumps(cfg)
+
+		pp2 = "/tmp/godHelper.py"
+		g_ssh.uploadFile("./godHelper.py", pp2)
+		#g_ssh.run("python3 /tmp/godHelper.py runFile %s" % pp2)
+		g_ssh.run("python3 %s runStr \"%s\"" % (pp2, str2arg(ss)))
+
+def str2arg(ss):
+	return ss.replace("\"", "\\\"")
 
 class NonBlockingStreamReader:
 	def __init__(self, stream):
@@ -350,7 +365,7 @@ def deploy(serverName):
 						pp = "."
 					
 					# daemon
-					pp = pp.replace("${name}", name)
+					pp = pp.replace("{{name}}", name)
 						
 					p = pathlib.Path(pp)
 					if not p.exists():
@@ -449,7 +464,7 @@ def initSamples(type, fn):
 		if type == "app":
 			fp.write(sampleApp)
 		else:
-			fp.write(sampleEnv)
+			fp.write(sampleSys)
 		
 	print("init: %s file generated. You should modify that file for your environment before service or deployment." % (fn))
 
@@ -505,12 +520,12 @@ def main():
 
 		if cmd == "init":
 			if cnt < 3:
-				print("god init app OR god init env NAME.")
+				print("god init app OR god init sys NAME.")
 				return
 
 			type = sys.argv[2]
-			if type != "app" and type != "env":
-				print("app or env can be used for god init command.")
+			if type != "app" and type != "sys":
+				print("app or sys can be used for god init command.")
 				return
 
 			target = sys.argv[2] if cnt > 3 else "god_my.py"
@@ -523,7 +538,7 @@ def main():
 			target = "god_my.py"
 			pass
 		elif cmd == "setup":
-			# server env
+			# server sys
 			if cnt < 3:
 				print("god setup FILE.py")
 				return
@@ -583,7 +598,7 @@ def setup(target, serverName):
 		return
 
 	global g_ssh
-	g_ssh = Ssh()
+	g_ssh = CoSsh()
 	port = server["port"] if "port" in server else 22
 	print("setup: connecting to the server[%s:%d] with ID:%s" % (server["host"], port, server["id"]))
 	g_ssh.init(server["host"], port, server["id"])

@@ -16,7 +16,7 @@ deploy:
   maxRelease: 3
   include:
 	#- "*"
-	- ${name}
+	- {{name}}
     - config
     - pm2.json
 		- src: ../build
@@ -57,10 +57,10 @@ class myGod:
 		return True
 """
 
-sampleEnv = """
+sampleSys = """
 config='''
 config:
-  type: env
+  type: sys
 
 servers:
   - name: test
