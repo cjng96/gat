@@ -27,6 +27,8 @@ from .__init__ import __version__
 from .coSsh import CoSsh
 from .coPath import cutpath
 from .sampleFiles import sampleApp, sampleSys
+from .godHelper import strExpand
+from .coS3 import CoS3
 
 g_cwd = ""
 g_scriptPath = ""
@@ -148,13 +150,8 @@ class Tasks():
 
 		print("run: ", cfg)
 
-		dbCfg = cfg["db"]
-		host = dbCfg["host"]
-		port = dbCfg["port"]
-		id = dbCfg["id"]
-		pw = dbCfg["pw"]
-		db = dbCfg["name"]
-		uri = "%s:%s@tcp(%s:%d)/%s?charset=utf8" % (id, pw, host, port, db)
+		db = cfg["db"]
+		uri = "%s:%s@tcp(%s:%d)/%s?charset=utf8" % (db["id"], db["pw"], db["host"], db["port"], db["name"])
 		cmd = ["xorm", "reverse", "mysql", uri,
 				"/home/cjng96/go/src/github.com/go-xorm/cmd/xorm/templates/goxorm"]
 		subprocess.run(cmd)
@@ -169,17 +166,46 @@ class Tasks():
 		g_ssh.run(cmd)
 		return True
 
-	def configAssure(self, path, marker, block, insertAfter=None):
-		cfg = dict(cmd="configAssure", path=path, marker=marker, block=block, insertAfter=insertAfter)
+	def configBlock(self, path, marker, block, insertAfter=None):
+		dic = dict(name=g_config["config"]["name"])
+
+		cfg = dict(cmd="configBlock", dic=dic,
+			path=path, marker=marker, block=block, insertAfter=insertAfter)
 		#pp = "/tmp/god_cfg.json"
 		#json.dump(cfg, "/tmp/god_cfg.json")
 		#g_ssh.uploadFile(pp, pp)
-		ss = json.dumps(cfg)
 
 		pp2 = "/tmp/godHelper.py"
 		g_ssh.uploadFile("./godHelper.py", pp2)
-		#g_ssh.run("python3 /tmp/godHelper.py runFile %s" % pp2)
-		g_ssh.run("python3 %s runStr \"%s\"" % (pp2, str2arg(ss)))
+		g_ssh.run("python3 %s runStr \"%s\"" % (pp2, str2arg(json.dumps(cfg))))
+
+	def configLine(self, path, regexp, line, items=None):
+		dic = dict(name=g_config["config"]["name"])
+
+		cfg = dict(cmd="configLine", dic=dic,
+			path=path, regexp=regexp, line=line, items=items)
+
+		pp2 = "/tmp/godHelper.py"
+		g_ssh.uploadFile("./godHelper.py", pp2)
+		g_ssh.run("python3 %s runStr \"%s\"" % (pp2, str2arg(json.dumps(cfg))))
+
+
+	def s3List(self, bucket, prefix):
+		s3 = CoS3()
+		bb = s3.bucketGet(bucket)
+		lst = bb.fileList(prefix)
+		return lst
+
+	def s3DownloadFiles(self, bucket, prefix, nameList, targetFolder):
+		if not targetFolder.endswith("/"):
+			targetFolder += "/"
+		if not prefix.endswith("/"):
+			prefix += "/"
+		s3 = CoS3()
+		bb = s3.bucketGet(bucket)
+		for name in nameList:
+			bb.downloadFile(prefix+name, targetFolder+name)
+					
 
 def str2arg(ss):
 	return ss.replace("\"", "\\\"")
@@ -365,7 +391,8 @@ def deploy(serverName):
 						pp = "."
 					
 					# daemon
-					pp = pp.replace("{{name}}", name)
+					dic = dict(name=name)
+					pp = strExpand(pp, dic)
 						
 					p = pathlib.Path(pp)
 					if not p.exists():
@@ -505,6 +532,7 @@ class Helper:
 		'''
 		with open(pp, "r") as fp:
 			self.configStr(type, fp.read())
+
 
 g_helper = Helper()
 
