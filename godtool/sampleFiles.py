@@ -35,26 +35,21 @@ servers:
 '''
 
 class myGod:
-	def __init__(self, tasks, helper, **kwargs):
-		self.tasks = tasks
-		self.helper = helper
+	def __init__(self, helper, **kwargs):
 		helper.configStr("yaml", config)	# helper.configFile("yaml", "god.yaml")
 
-	def buildTask(self, args, **kwargs):
-		#if not self.tasks.dbGqlGen():
-		#	return False
-		#return self.tasks.goBuild(args)
-		return True
+	def buildTask(self, util, local, **kwargs):
+		#local.dbGqlGen():
+		#local.goBuild(args)
 
-	def deployPreTask(self, ssh, args, **kwargs):
-		#subprocess.check_output("npm run build", shell=True)
-		return True
 
-	def deployPostTask(self, ssh, args, **kwargs):
-		#if not self.tasks.pm2Register():
-		#	return False
-		#ssh.run("cd %s/current && echo 'finish'" % args.deployRoot)
-		return True
+	def deployPreTask(self, util, local, remote, **kwargs):
+		#local.run("npm run build")
+
+	def deployPostTask(self, util, local, remote, **kwargs):
+		#remote.pm2Register():
+		#local.run("cd %s/current && echo 'finish'" % args.deployRoot)
+
 """
 
 sampleSys = """
@@ -71,14 +66,11 @@ servers:
 '''
 
 class myGod:
-	def __init__(self, tasks, helper, **kwargs):
-		self.tasks = tasks
-		self.helper = helper
+	def __init__(self, helper, **kwargs):
 		helper.configStr("yaml", config)	# helper.configFile("yaml", "god.yaml")
 
-	def setupTask(self, ssh, args, **kwargs):
-		#if not self.tasks.pm2Register():
-		#	return False
-		#ssh.run("cd %s/current && echo 'finish'" % args.deployRoot)
-		return True
+	def setupTask(self, util, local, remote, **kwargs):
+		#remote.pm2Register():
+		#remote.run("cd %s/current && echo 'finish'" % args.deployRoot)
+		
 """
