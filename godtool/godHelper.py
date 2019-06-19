@@ -152,11 +152,18 @@ def strExpand(ss, dic):
 		if m is None:
 			return ss
 
-		replace = ""
-		if m.group(1) in dic:
-			replace = dic[m.group(1)]
+		name = m.group(1)
+		lst = name.split("[.]")
 
-		ss = ss[:m.start()] + replace + ss[m.end():]
+		for item in lst:
+			if item in dic:
+				dic = dic[item]
+			else:
+				print("strExpand: no variable[%s]" % name)
+				dic = ""
+				break
+
+		ss = ss[:m.start()] + dic + ss[m.end():]
 
 
 def main():

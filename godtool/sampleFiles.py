@@ -1,4 +1,5 @@
 sampleApp = """
+# https://
 config='''
 config:
   name: test
@@ -35,24 +36,25 @@ servers:
 '''
 
 class myGod:
-	def __init__(self, helper, **kwargs):
+	def __init__(self, helper, **_):
 		helper.configStr("yaml", config)	# helper.configFile("yaml", "god.yaml")
 
-	def buildTask(self, util, local, **kwargs):
+	def buildTask(self, util, local, **_):
 		#local.dbGqlGen():
 		#local.goBuild(args)
 
 
-	def deployPreTask(self, util, local, remote, **kwargs):
+	def deployPreTask(self, util, local, remote, **_):
 		#local.run("npm run build")
 
-	def deployPostTask(self, util, local, remote, **kwargs):
+	def deployPostTask(self, util, local, remote, **_):
 		#remote.pm2Register():
 		#local.run("cd %s/current && echo 'finish'" % args.deployRoot)
 
 """
 
 sampleSys = """
+# https://
 config='''
 config:
   type: sys
@@ -63,14 +65,16 @@ servers:
     port: 22
     id: test
     targetPath: ~/test
+	vars:
+	  hello: test
 '''
 
 class myGod:
-	def __init__(self, helper, **kwargs):
+	def __init__(self, helper, **_):
 		helper.configStr("yaml", config)	# helper.configFile("yaml", "god.yaml")
 
-	def setupTask(self, util, local, remote, **kwargs):
+	def setupTask(self, util, local, remote, **_):
 		#remote.pm2Register():
 		#remote.run("cd %s/current && echo 'finish'" % args.deployRoot)
-		
+
 """

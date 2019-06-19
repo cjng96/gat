@@ -30,7 +30,8 @@ class CoSsh:
 		self.uploadFilterFunc = falseFunc
 
 	def close(self):
-		self.ssh.close()
+		if hasattr(self, "ssh"):
+			self.ssh.close()
 
 	# return: result
 	def run(self, cmd):

@@ -12,6 +12,7 @@ import subprocess
 import datetime
 import pathlib
 import re
+from copy import deepcopy
 
 import zipfile
 import tempfile
@@ -37,21 +38,82 @@ class MyUtil():
 		self.deployOwner = ""	
 		self.isRestart = True	# First start or modified source files
 
+class Dict2():
+	def __init__(self, dic=None):
+		if dic is None:
+			dic = dict()
+		self.dic = dic
+
+	def __getattr__(self, name):
+		if name in self.dic:
+			return self.dic[name]
+		return super().__getattribute__(name)
+
+	def __setattr__(self, name, value):
+		if name != "dic":
+			if name in self.dic:
+				self.dic[name] = value
+		return super().__setattr__(name, value)
+
+	@staticmethod
+	def make(dic):
+		dic2 = Dict2()
+		for key, value in dic.items():
+			if type(value) == dict:
+				dic2.dic[key] = Dict2.make(value)
+			else:
+				dic2.dic[key] = value
+		return dic2
+		
+	def get(self, name, default):
+		if name in self.dic:
+			return self.dic[name]
+		return default
+
+	def add(self, name, value):
+		if name in self.dic:
+			print("%s is already defined. it will be overwritten." % name)
+		self.dic[name] = value
+
+	def integrateDict(self, dic):
+		for key, value in dic.items():
+			if type(value) == dict:
+				self.dic.dic[key] = Dict2.make(value)
+			else:
+				self.dic.dic[key] = value
+
+
 class Tasks():
 	def __init__(self, server):
 		self.proc = None
 		self.outStream = None
-		self.server = server	# None: local
 
-		self.ssh = None
-		if server is not None:
+		self.dic = Dict2()
+		self.dic.add("name", g_config["config"]["name"])
+
+		if server is None:
+			self.server = None
+		else:
+			self.server = Dict2.make(server)	# None: local
+
 			self.ssh = CoSsh()
-			port = server["port"] if "port" in server else 22
-			print("deploy: connecting to the server[%s:%d] with ID:%s" % (server["host"], port, server["id"]))
-			self.ssh.init(server["host"], port, server["id"])
+			port = server.get("port", 22)
+			print("deploy: connecting to the server[%s:%d] with ID:%s" % (self.server.host, port, self.server.id))
+			self.ssh.init(self.server.host, port, self.server.id)
+
+			# server, vars
+			server2 = deepcopy(server)
+			if hasattr(server2, "vars"):
+				del server2["vars"]
+			self.dic.add("server", server2)
+
+			# 이거 좀 고민이다..
+			#self.dic.add("vars", server.vars)
+			if hasattr(server, "vars"):
+				self.dic.integrateDict(server.vars)
 
 	def __del__(self):
-		if self.ssh is not None:
+		if hasattr(self, "server") and self.server is not None:
 			self.ssh.close()
 			self.ssh = None
 
@@ -119,8 +181,16 @@ class Tasks():
 
 	def uploadFile(self, src, dest):
 		self.onlyRemote()
-
 		self.ssh.uploadFile(src, dest)
+
+	def uploadFolder(self, src, dest):
+		self.onlyRemote()
+		self.ssh.uploadFolder(src, dest)
+
+	def uploadFolderTo(self, src, dest):
+		self.onlyRemote()
+		self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
+
 
 	def goBuild(self):
 		print("task: goBuild...")
@@ -188,9 +258,7 @@ class Tasks():
 		print("task: config block...")
 		self.onlyRemote()
 
-		dic = dict(name=g_config["config"]["name"])
-
-		cfg = dict(cmd="configBlock", dic=dic,
+		cfg = dict(cmd="configBlock", dic=self.dic.dic,
 			path=path, marker=marker, block=block, insertAfter=insertAfter)
 		#pp = "/tmp/god_cfg.json"
 		#json.dump(cfg, "/tmp/god_cfg.json")
@@ -204,9 +272,7 @@ class Tasks():
 		print("task: config line...")
 		self.onlyRemote()
 
-		dic = dict(name=g_config["config"]["name"])
-
-		cfg = dict(cmd="configLine", dic=dic,
+		cfg = dict(cmd="configLine", dic=self.dic.dic,
 			path=path, regexp=regexp, line=line, items=items)
 
 		pp2 = "/tmp/godHelper.py"
@@ -268,13 +334,13 @@ class MyHandler(PatternMatchingEventHandler):
 	def on_created(self, event):
 		self.process(event)
 
+g_config = {}
 g_mygod = None
 
 g_util = MyUtil()
-g_local = Tasks(None)
+g_local = None
 g_remote = None
 
-g_config = {}
 
 def configServerGet(name):
 	server = None
@@ -536,7 +602,9 @@ def main():
 				print("app or sys can be used for god init command.")
 				return
 
-			target = sys.argv[2] if cnt > 3 else "god_my.py"
+			target = sys.argv[3] if cnt > 3 else "god_my.py"
+			if not target.endswith(".py"):
+				target += ".py"
 			initSamples(type, target)
 			return
 		elif cmd == "tasks":
@@ -576,6 +644,8 @@ def main():
 	type = g_config["config"]["type"] if "type" in g_config["config"] else "app"
 
 	print("** config[type:%s, name:%s]" % (type, name))
+	global g_local
+	g_local = Tasks(None)	
 
 	if cmd == "deploy":
 		if "owner" in g_config["deploy"]:
