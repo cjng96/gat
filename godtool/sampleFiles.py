@@ -6,10 +6,7 @@ config:
   type: app
 
 serve:
-  patterns:
-    - "*.go"
-    - "*.json"
-    - "*.graphql"
+  patterns: [ "*.go", "*.json", "*.graphql" ]
 
 deploy:
   strategy: zip
@@ -43,7 +40,6 @@ class myGod:
 		#local.dbGqlGen():
 		#local.goBuild(args)
 
-
 	def deployPreTask(self, util, local, remote, **_):
 		#local.run("npm run build")
 
@@ -58,13 +54,13 @@ sampleSys = """
 config='''
 config:
   type: sys
+  name: test	# hostname
 
 servers:
   - name: test
     host: test.com
     port: 22
     id: test
-    targetPath: ~/test
 	vars:
 	  hello: test
 '''

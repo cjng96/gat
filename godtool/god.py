@@ -55,6 +55,22 @@ class Dict2():
 				self.dic[name] = value
 		return super().__setattr__(name, value)
 
+	# dict compatiable
+	def __getitem__(self, key):
+		return self.dic[self.__keytransform__(key)]
+	def __setitem__(self, key, value):
+		self.dic[self.__keytransform__(key)] = value
+	def __delitem__(self, key):
+		del self.dic[self.__keytransform__(key)]
+	def __iter__(self):
+		return iter(self.dic)
+	def __len__(self):
+		return len(self.dic)
+	def __keytransform__(self, key):
+		return key
+	def __contains__(self, key):
+		return key in self.dic
+
 	@staticmethod
 	def make(dic):
 		dic2 = Dict2()
@@ -72,16 +88,9 @@ class Dict2():
 		lst = name.split("[.]")
 		dic = self.dic
 		for item in lst:
-			if type(dic) == dict:
-				if name in dic:
-					dic = dic[item]
-				else:
-					return default
-			else:
-				if name in dic.dic:
-					dic = dic.dic[item]
-				else:
-					return default
+			if name not in dic:
+				return default
+			dic = dic[item]
 
 		return default
 
@@ -89,14 +98,6 @@ class Dict2():
 		if name in self.dic:
 			print("%s is already defined. it will be overwritten." % name)
 		self.dic[name] = value
-
-	def integrateDict(self, dic):
-		for key, value in dic.items():
-			if type(value) == dict:
-				self.dic.dic[key] = Dict2.make(value)
-			else:
-				self.dic.dic[key] = value
-
 
 class Tasks():
 	def __init__(self, server):
@@ -113,19 +114,20 @@ class Tasks():
 
 			self.ssh = CoSsh()
 			port = server.get("port", 22)
-			print("deploy: connecting to the server[%s:%d] with ID:%s" % (self.server.host, port, self.server.id))
+			print("ssh: connecting to the server[%s:%d] with ID:%s" % (self.server.host, port, self.server.id))
 			self.ssh.init(self.server.host, port, self.server.id)
 
-			# server, vars
+			# server without vars
 			server2 = deepcopy(server)
-			if hasattr(server2, "vars"):
+			if "vars" in server2:
 				del server2["vars"]
 			self.dic.add("server", server2)
 
+			# vars
 			# 이거 좀 고민이다..
 			#self.dic.add("vars", server.vars)
-			if hasattr(server, "vars"):
-				self.dic.integrateDict(server.vars)
+			if "vars" in server:
+				self.dic.fill(server["vars"])
 
 	def __del__(self):
 		if hasattr(self, "server") and self.server is not None:
@@ -188,11 +190,23 @@ class Tasks():
 	def run(self, cmd):
 		"""
 		cmd: string or array
+		return: stdout string
+		exception: subprocess.CalledProcessError(returncode, output)
 		"""
+		cmd = strExpand(cmd, self.dic)
+
 		if self.server is not None:
 			return self.ssh.run(cmd)
 		else:
 			return subprocess.check_output(cmd, shell=True)
+
+	def runRet(self, cmd):
+		try:
+			self.run(cmd)
+			return True
+		except subprocess.CalledProcessError as e:
+			print("run: failed %d\n -- %s\n" % (e.returncode, e.output))
+			return False
 
 	def uploadFile(self, src, dest):
 		self.onlyRemote()
@@ -280,7 +294,7 @@ class Tasks():
 		#g_ssh.uploadFile(pp, pp)
 
 		pp2 = "/tmp/godHelper.py"
-		self.uploadFile("./godHelper.py", pp2)
+		self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
 		self.run("python3 %s runStr \"%s\"" % (pp2, str2arg(json.dumps(cfg))))
 
 	def configLine(self, path, regexp, line, items=None):
@@ -291,7 +305,7 @@ class Tasks():
 			path=path, regexp=regexp, line=line, items=items)
 
 		pp2 = "/tmp/godHelper.py"
-		self.uploadFile("./godHelper.py", pp2)
+		self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
 		self.run("python3 %s runStr \"%s\"" % (pp2, str2arg(json.dumps(cfg))))
 
 	def s3List(self, bucket, prefix):

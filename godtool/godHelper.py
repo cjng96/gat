@@ -131,7 +131,7 @@ def configLineStr(ss, regexp, line):
 
 def configLine(path, regexp, line, items=None):
 	with open(path, "r") as fp:
-		ss = fp.read(path)
+		ss = fp.read()
 
 		if items is not None:
 			lst = items.split()
@@ -155,15 +155,17 @@ def strExpand(ss, dic):
 		name = m.group(1)
 		lst = name.split("[.]")
 
+		dic2 = dic
 		for item in lst:
-			if item in dic:
-				dic = dic[item]
+			if item in dic2:
+				dic2 = dic2[item]
 			else:
 				print("strExpand: no variable[%s]" % name)
-				dic = ""
+				dic2 = ""
 				break
 
-		ss = ss[:m.start()] + dic + ss[m.end():]
+		# dic can be int
+		ss = ss[:m.start()] + str(dic2) + ss[m.end():]
 
 
 def main():
@@ -184,9 +186,14 @@ def main():
 	global g_dic
 	g_dic = cfg["dic"]
 	g_dic["hostname"] = platform.node()
+	del cfg["dic"]
 
-	if cfg.cmd == "configBlock":
+	func = cfg["cmd"]
+	del cfg["cmd"]
+	if func == "configBlock":
 		configBlock(**cfg)
+	elif func == "configLine":
+		configLine(**cfg)
 
 
 if __name__ == "__main__":
@@ -194,4 +201,5 @@ if __name__ == "__main__":
 		main()
 	except Exception:
 		traceback.print_exc()
+		sys.exit(1)
 		

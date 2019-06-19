@@ -2,6 +2,8 @@
 import os
 import paramiko
 import socket
+import subprocess
+
 from .coPath import cutpath, path2folderList
 
 
@@ -60,7 +62,8 @@ class CoSsh:
 		print("execute[%s] - ret:%d\n%s" % (cmd, ret, out))
 		chan.close()
 		if ret != 0:
-			raise Exception("ssh command failed with ret:%d" % ret)
+			#raise CalledProcessError("ssh command failed with ret:%d" % ret)
+			raise subprocess.CalledProcessError(ret, cmd, out)
 		return out
 
 
@@ -101,6 +104,9 @@ class CoSsh:
 	# src_path에 dest_path로 업로드한다. 두개 모두 file full path여야 한다.
 	def uploadFile(self, srcPath, destPath):
 		print("sftp: upload file %s -> %s" % (srcPath, destPath))
+		if not os.path.isfile(srcPath):
+			raise Exception("uploadFile: there is no file[%s]" % srcPath)
+
 		if self.uploadFilterFunc(srcPath):
 			print(" ** exclude file - %s" % srcPath)
 			return
@@ -116,6 +122,9 @@ class CoSsh:
 	# srcPath, destPath둘다 full path여야한다.
 	def uploadFolder(self, srcPath, destPath):
 		print("sftp: upload folder %s -> %s" % (srcPath, destPath))
+		if not os.path.isdir(srcPath):
+			raise Exception("uploadFolder: there is no folder[%s]" % srcPath)
+
 		if self.uploadFilterFunc(srcPath):
 			print(" ** exclude folder - %s" % srcPath)
 			return
