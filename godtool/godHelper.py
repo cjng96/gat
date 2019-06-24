@@ -2,6 +2,7 @@
 import sys
 import json
 import traceback
+import os
 import re
 import platform
 import os.path as pypath
@@ -40,7 +41,7 @@ def configBlockStr(ss, start, end, block, insertAfter):
 		pt2 = pt
 
 	# insert
-	ss = ss[:pt] + start + "\n" + block + "\n" + end + "\n" + ss[pt2:]
+	ss = ss[:pt] + "\n" + start + "\n" + block + "\n" + end + "\n" + ss[pt2:]
 	return ss
 
 def configBlock(path, marker, block, insertAfter):
@@ -52,8 +53,9 @@ def configBlock(path, marker, block, insertAfter):
 	if insertAfter is not None:
 		insertAfter = strExpand(insertAfter, g_dic)
 
+	path = os.path.expanduser(path)
 	with open(path, "r") as fp:
-		ss = fp.read(path)
+		ss = fp.read()
 		start = marker.replace("{mark}", "BEGIN")
 		end = marker.replace("{mark}", "END")
 
@@ -130,15 +132,20 @@ def configLineStr(ss, regexp, line):
 	return ss
 
 def configLine(path, regexp, line, items=None):
+	path = os.path.expanduser(path)
 	with open(path, "r") as fp:
 		ss = fp.read()
 
 		if items is not None:
-			lst = items.split()
+			lst = items.splitlines()
 			for item in lst:
 				regexp2 = regexp.replace("{{item}}", item)
 				line2 = line.replace("{{item}}", item)
-				ss = configLineStr(ss, regexp, line)
+				s2 = configLineStr(ss, regexp2, line2)
+				if s2 is None:
+					print("can't find regexp[%s]" % (regexp2))
+				else:
+					ss = s2
 		else:
 			ss = configLineStr(ss, regexp, line)
 

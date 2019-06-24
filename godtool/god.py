@@ -187,13 +187,15 @@ class Tasks():
 				ss = line.decode("utf8")
 				print(ss[:-1])
 
-	def run(self, cmd):
+	def run(self, cmd, expandVars=True):
 		"""
 		cmd: string or array
+		expandVars:
 		return: stdout string
 		exception: subprocess.CalledProcessError(returncode, output)
 		"""
-		cmd = strExpand(cmd, self.dic)
+		if expandVars:
+			cmd = strExpand(cmd, self.dic)
 
 		if self.server is not None:
 			return self.ssh.run(cmd)
@@ -210,7 +212,13 @@ class Tasks():
 
 	def uploadFile(self, src, dest):
 		self.onlyRemote()
+		src = os.path.expanduser(src)
 		self.ssh.uploadFile(src, dest)
+
+	def uploadFileTo(self, src, dest):
+		self.onlyRemote()
+		src = os.path.expanduser(src)
+		self.ssh.uploadFile(src, os.path.join(dest, os.path.basename(src)))
 
 	def uploadFolder(self, src, dest):
 		self.onlyRemote()
@@ -295,7 +303,7 @@ class Tasks():
 
 		pp2 = "/tmp/godHelper.py"
 		self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
-		self.run("python3 %s runStr \"%s\"" % (pp2, str2arg(json.dumps(cfg))))
+		self.run("python3 %s runStr \"%s\"" % (pp2, str2arg(json.dumps(cfg))), expandVars=False)
 
 	def configLine(self, path, regexp, line, items=None):
 		print("task: config line...")
@@ -306,7 +314,7 @@ class Tasks():
 
 		pp2 = "/tmp/godHelper.py"
 		self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
-		self.run("python3 %s runStr \"%s\"" % (pp2, str2arg(json.dumps(cfg))))
+		self.run("python3 %s runStr \"%s\"" % (pp2, str2arg(json.dumps(cfg))), expandVars=False)
 
 	def s3List(self, bucket, prefix):
 		print("task: s3 list...")
