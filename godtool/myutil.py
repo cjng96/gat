@@ -21,7 +21,7 @@ def mergeDict(dic, dic2):
 	return newDic
 
 def str2arg(ss):
-	return ss.replace("\\", "\\\\").replace("\"", "\\\"")
+	return ss.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$")
 
 class NonBlockingStreamReader:
 	def __init__(self, stream):
