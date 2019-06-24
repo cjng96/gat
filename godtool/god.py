@@ -85,14 +85,14 @@ class Dict2():
 				self.dic[key] = value
 		
 	def get(self, name, default):
-		lst = name.split("[.]")
+		lst = name.split(".")
 		dic = self.dic
 		for item in lst:
-			if name not in dic:
+			if item not in dic:
 				return default
 			dic = dic[item]
 
-		return default
+		return dic
 
 	def add(self, name, value):
 		if name in self.dic:
