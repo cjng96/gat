@@ -155,12 +155,12 @@ def configLine(path, regexp, line, items=None):
 
 def strExpand(ss, dic):
 	while True:
-		m = re.search(r"\{\{(\w+)\}\}", ss)
+		m = re.search(r"\{\{([\w.]+)\}\}", ss)
 		if m is None:
 			return ss
 
 		name = m.group(1)
-		lst = name.split("[.]")
+		lst = name.split(".")
 
 		dic2 = dic
 		for item in lst:
