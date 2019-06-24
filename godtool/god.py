@@ -640,8 +640,8 @@ def main():
 			pass
 		elif cmd == "setup":
 			# server sys
-			if cnt < 3:
-				print("god setup FILE.py")
+			if cnt < 4:
+				print("god setup FILE.py SERVER_NAME")
 				return
 			target = sys.argv[2]
 			if not target.endswith(".py"):
