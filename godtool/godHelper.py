@@ -55,16 +55,16 @@ def configBlock(path, marker, block, insertAfter):
 
 	path = os.path.expanduser(path)
 	with open(path, "r") as fp:
-		ss = fp.read()
+		orig = fp.read()
 		start = marker.replace("{mark}", "BEGIN")
 		end = marker.replace("{mark}", "END")
 
 		start = strExpand(start, g_dic)
 		end = strExpand(end, g_dic)
 
-		ss = configBlockStr(ss, start, end, block, insertAfter)
+		ss = configBlockStr(orig, start, end, block, insertAfter)
 
-	if ss is not None:
+	if ss is not None and ss != orig:
 		with open(path, "w") as fp:
 			fp.write(ss)
 
