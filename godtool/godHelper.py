@@ -41,7 +41,7 @@ def configBlockStr(ss, start, end, block, insertAfter):
 		pt2 = pt
 
 	# insert
-	ss = ss[:pt] + "\n" + start + "\n" + block + "\n" + end + "\n" + ss[pt2:]
+	ss = ss[:pt] + start + "\n" + block + "\n" + end + "\n" + ss[pt2:]
 	return ss
 
 def configBlock(path, marker, block, insertAfter):
