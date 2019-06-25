@@ -4,6 +4,9 @@ from threading import Thread
 from copy import deepcopy
 import collections
 
+import re
+import os
+
 
 # https://gist.github.com/angstwad/bf22d1822c38a92ec0a9
 def mergeDict(dic, dic2):
@@ -22,6 +25,17 @@ def mergeDict(dic, dic2):
 
 def str2arg(ss):
 	return ss.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$")
+
+def envExpand(ss):
+	while True:
+		m = re.search(r"\$\{([\w_]+)\}", ss)
+		if m is None:
+			return ss
+
+		name = m.group(1)
+		v = os.getenv(name, "")
+		ss = ss[:m.start()] + str(v) + ss[m.end():]
+
 
 class NonBlockingStreamReader:
 	def __init__(self, stream):
@@ -55,3 +69,4 @@ class NonBlockingStreamReader:
 
 class UnexpectedEndOfStream(Exception):
 	pass
+

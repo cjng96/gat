@@ -155,7 +155,7 @@ def configLine(path, regexp, line, items=None):
 
 def strExpand(ss, dic):
 	while True:
-		m = re.search(r"\{\{([\w.]+)\}\}", ss)
+		m = re.search(r"\{\{([\w_.]+)\}\}", ss)
 		if m is None:
 			return ss
 

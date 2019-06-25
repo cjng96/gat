@@ -1,9 +1,10 @@
-
+import os
 import unittest
 import sys
 sys.path.append("..")
 
 from godtool import godHelper as h
+from godtool import myutil
 
 class HelperTest(unittest.TestCase):
 	def test_skipEnter(self):
@@ -12,6 +13,13 @@ class HelperTest(unittest.TestCase):
 		self.assertEqual(h.skipEnter("0123\n\n6", 4), 6)
 		self.assertEqual(h.skipEnter("0123\n\n6", 0), 0)
 		self.assertEqual(h.skipEnter("0123\n\n", 4), 6)
+
+	def test_envExpand(self):
+		os.environ["TEST1"] = "1234"
+		os.environ["TEST_2"] = "555"
+		ss = "this is my ${TEST1}. ${TEST_2}."
+		s1 = myutil.envExpand(ss)
+		self.assertEqual(s1, "this is my 1234. 555.")
 
 	def test_configAddStr(self):
 		ss = '''\ntest=1\n'''

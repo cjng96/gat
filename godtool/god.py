@@ -12,6 +12,7 @@ import subprocess
 import datetime
 import pathlib
 import re
+import inspect
 from copy import deepcopy
 
 import zipfile
@@ -26,7 +27,7 @@ from .coPath import cutpath
 from .sampleFiles import sampleApp, sampleSys
 from .godHelper import strExpand
 from .coS3 import CoS3
-from .myutil import NonBlockingStreamReader, str2arg, mergeDict
+from .myutil import NonBlockingStreamReader, str2arg, mergeDict, envExpand
 
 g_cwd = ""
 g_scriptPath = ""
@@ -38,14 +39,38 @@ class MyUtil():
 		self.deployOwner = None
 		self.isRestart = True	# First start or modified source files
 
+class ObjectEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if hasattr(obj, "toJson"):
+            return self.default(obj.toJson())
+        elif hasattr(obj, "__dict__"):
+            d = dict(
+                (key, value)
+                for key, value in inspect.getmembers(obj)
+                if not key.startswith("__")
+                and not inspect.isabstract(value)
+                and not inspect.isbuiltin(value)
+                and not inspect.isfunction(value)
+                and not inspect.isgenerator(value)
+                and not inspect.isgeneratorfunction(value)
+                and not inspect.ismethod(value)
+                and not inspect.ismethoddescriptor(value)
+                and not inspect.isroutine(value)
+            )
+            return self.default(d)
+        return obj
+
 class Dict2():
 	def __init__(self, dic=None):
 		self.dic = dict()
 		if dic is not None:
 			self.fill(dic)
 
+	def toJson(self):
+		return self.dic
+
 	def __getattr__(self, name):
-		if name in self.dic:
+		if "dic" in self.__dict__ and name in self.dic:
 			return self.dic[name]
 		return super().__getattribute__(name)
 
@@ -54,6 +79,9 @@ class Dict2():
 			if name in self.dic:
 				self.dic[name] = value
 		return super().__setattr__(name, value)
+
+	def __repr__(self):
+		return str(self.dic)#__dict__)
 
 	# dict compatiable
 	def __getitem__(self, key):
@@ -71,16 +99,22 @@ class Dict2():
 	def __contains__(self, key):
 		return key in self.dic
 
-	@staticmethod
-	def make(dic):
-		dic2 = Dict2()
-		dic2.fill(dic)
-		return dic2
+	#@staticmethod
+	#def make(dic):
+	#	dic2 = Dict2()
+	#	dic2.fill(dic)
+	#	return dic2
 
 	def fill(self, dic):
 		for key, value in dic.items():
-			if type(value) == dict:
-				self.dic[key] = Dict2.make(value)
+			tt = type(value)
+			if tt == dict:
+				self.dic[key] = Dict2(value)
+			elif tt == list:
+				for idx, vv in enumerate(value):
+					if type(vv) == dict:
+						value[idx] = Dict2(vv)
+				self.dic[key] = value
 			else:
 				self.dic[key] = value
 		
@@ -104,13 +138,16 @@ class Tasks():
 		self.proc = None
 		self.outStream = None
 
-		self.dic = Dict2()
+		#self.dic = Dict2()
+		self.dic = deepcopy(g_config)
+		# 이건 일단은 남겨두자. 나중에 없앨꺼다.
 		self.dic.add("name", g_config.config.name)
 
 		if server is None:
 			self.server = None
 		else:
-			self.server = Dict2.make(server)	# None: local
+			#self.server = Dict2(server)	# None: local
+			self.server = server
 
 			self.ssh = CoSsh()
 			port = server.get("port", 22)
@@ -303,7 +340,8 @@ class Tasks():
 
 		pp2 = "/tmp/godHelper.py"
 		self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
-		self.run("python3 %s runStr \"%s\"" % (pp2, str2arg(json.dumps(cfg))), expandVars=False)
+		ss = str2arg(json.dumps(cfg, cls=ObjectEncoder))
+		self.run("python3 %s runStr \"%s\"" % (pp2, ss), expandVars=False)
 
 	def configLine(self, path, regexp, line, items=None):
 		print("task: config line...")
@@ -393,7 +431,6 @@ def configServerGet(name):
 
 	return server
 
-
 def taskDeploy(serverName):
 	global g_config
 	server = configServerGet(serverName)
@@ -404,6 +441,9 @@ def taskDeploy(serverName):
 
 	global g_remote
 	g_remote = Tasks(server)
+
+	# expand env and variables
+	expandVar(g_config)
 
 	name = g_config.config.name
 	targetPath = server["targetPath"]
@@ -587,16 +627,45 @@ deployPostTask -
   pm2Register(): "pm2 start pm2.json" - You should define pm2.json file first.
 ''' % __version__)
 
+def expandVar(dic):
+	dicType = type(dic)
+	if dicType == list:
+		for idx, value in enumerate(dic):
+			tt = type(value)
+			if tt == Dict2 or tt == dict:
+				expandVar(value)
+			elif tt == str:
+				value = envExpand(value)
+				value = strExpand(value, g_remote.dic)
+				dic[idx] = value
+			elif tt == list:
+				expandVar(value)
+	else:
+		for key in dic:
+			value = dic[key]
+
+			tt = type(value)
+			if tt == Dict2:
+				expandVar(value)
+			elif tt == str:
+				value = envExpand(value)
+				value = strExpand(value, g_remote.dic)
+				dic[key] = value
+			elif tt == list:
+				expandVar(value)
+
+			
+
 class Helper:
 	def __init__(self):
 		pass
 
-	def configStr(self, type, ss):
+	def configStr(self, cfgType, ss):
 		'''
 		type: yaml
 		'''
 		global g_config
-		if type == "yaml":
+		if cfgType == "yaml":
 			try:
 				g_config = Dict2(yaml.safe_load(ss))
 				g_util.executableName = g_config.config.name
@@ -604,15 +673,17 @@ class Helper:
 				raise e
 
 		else:
-			raise Exception("unknown config type[%s]" % type)
+			raise Exception("unknown config type[%s]" % cfgType)
 
-	def configFile(self, type, pp):
+	def configFile(self, cfgType, pp):
 		'''
 		type: yaml
 		'''
 		with open(pp, "r") as fp:
-			self.configStr(type, fp.read())
+			self.configStr(cfgType, fp.read())
 
+	def configGet(self):
+		return g_config
 
 
 def main():
@@ -720,6 +791,9 @@ def taskSetup(target, serverName):
 
 	global g_remote
 	g_remote = Tasks(server)		
+
+	# expand env and variables
+	expandVar(g_config)
 
 	if not hasattr(g_mygod, "setupTask"):
 		print("setup: You should override setupTask function in your myGod class")
