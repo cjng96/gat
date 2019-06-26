@@ -249,7 +249,7 @@ class Tasks():
 		ss = str2arg(json.dumps(cfg, cls=ObjectEncoder))
 		self.run("python3 %s runStr \"%s\"" % (pp2, ss), expandVars=False)
 
-	def configLine(self, path, regexp, line, items=None):
+	def configLine(self, path, regexp, line, items=None, sudo=False):
 		print("task: config line...")
 		self.onlyRemote()
 
@@ -258,10 +258,14 @@ class Tasks():
 
 		pp2 = "/tmp/godHelper.py"
 		self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
-		self.run("python3 %s runStr \"%s\"" % (pp2, str2arg(json.dumps(cfg))), expandVars=False)
+		ss = str2arg(json.dumps(cfg, cls=ObjectEncoder))
+		if sudo:
+			self.run("sudo python3 %s runStr \"%s\"" % (pp2, ss), expandVars=False)
+		else:
+			self.run("python3 %s runStr \"%s\"" % (pp2, ss), expandVars=False)
 
 	def s3List(self, bucket, prefix):
-		print("task: s3 list...")
+		print("task: s3 list[%s/%s]..." % (bucket, prefix))
 
 		self.onlyLocal()
 
@@ -274,7 +278,7 @@ class Tasks():
 		return lst
 
 	def s3DownloadFiles(self, bucket, prefix, nameList, targetFolder):
-		print("task: s3 download files...")
+		print("task: s3 download files[%s/%s]..." % (bucket, prefix))
 
 		self.onlyLocal()
 
@@ -287,6 +291,14 @@ class Tasks():
 		bb = s3.bucketGet(bucket)
 		for name in nameList:
 			bb.downloadFile(prefix+name, targetFolder+name)
+
+	def s3DownloadFile(self, bucket, key, dest):
+		print("task: s3 download file[%s -> %s]..." % (key, dest))
+		self.onlyLocal()
+
+		s3 = CoS3(g_config.get("s3.key", None), g_config.get("s3.secret", None))
+		bb = s3.bucketGet(bucket)
+		bb.downloadFile(key, dest)
 
 
 # https://pythonhosted.org/watchdog/
