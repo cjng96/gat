@@ -4,9 +4,17 @@ import boto3
 #from myutil import glog
 
 class CoS3:
-	def __init__(self):
-		self.client = boto3.client('s3')
-		self.res = boto3.resource('s3')
+	def __init__(self, key=None, secret=None):
+		if key is None:
+			self.client = boto3.client('s3')
+			self.res = boto3.resource('s3')
+		else:
+			self.client = boto3.client("s3", aws_access_key_id=key, aws_secret_access_key=secret)
+			session = boto3.Session(
+				aws_access_key_id=key,
+				aws_secret_access_key=secret,
+			)
+			self.res = session.resource("s3")
 
 	def bucketAllName(self):
 		lst = []
@@ -64,6 +72,8 @@ class CoBucket:
 				for ff in result.get('Contents'):
 					key = ff.get('Key')
 					key = key[len(pp):]	# 20170401/
+					if key == "":
+						continue
 					#key = key.rstrip("/")
 					lst.append(key)
 

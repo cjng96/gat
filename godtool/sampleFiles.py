@@ -55,7 +55,9 @@ config='''
 config:
   type: sys
   name: test	# hostname
-
+s3:
+  key: ${aws_key}
+  secret: ${aws_secret}
 servers:
   - name: test
     host: test.com

@@ -3,6 +3,7 @@ from queue import Queue, Empty
 from threading import Thread
 from copy import deepcopy
 import collections
+import json, inspect
 
 import re
 import os
@@ -70,3 +71,97 @@ class NonBlockingStreamReader:
 class UnexpectedEndOfStream(Exception):
 	pass
 
+
+class ObjectEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if hasattr(obj, "toJson"):
+            return self.default(obj.toJson())
+        elif hasattr(obj, "__dict__"):
+            d = dict(
+                (key, value)
+                for key, value in inspect.getmembers(obj)
+                if not key.startswith("__")
+                and not inspect.isabstract(value)
+                and not inspect.isbuiltin(value)
+                and not inspect.isfunction(value)
+                and not inspect.isgenerator(value)
+                and not inspect.isgeneratorfunction(value)
+                and not inspect.ismethod(value)
+                and not inspect.ismethoddescriptor(value)
+                and not inspect.isroutine(value)
+            )
+            return self.default(d)
+        return obj
+
+class Dict2():
+	def __init__(self, dic=None):
+		self.dic = dict()
+		if dic is not None:
+			self.fill(dic)
+
+	def toJson(self):
+		return self.dic
+
+	def __getattr__(self, name):
+		if "dic" in self.__dict__ and name in self.dic:
+			return self.dic[name]
+		return super().__getattribute__(name)
+
+	def __setattr__(self, name, value):
+		if name != "dic":
+			if name in self.dic:
+				self.dic[name] = value
+		return super().__setattr__(name, value)
+
+	def __repr__(self):
+		return str(self.dic)#__dict__)
+
+	# dict compatiable
+	def __getitem__(self, key):
+		return self.dic[self.__keytransform__(key)]
+	def __setitem__(self, key, value):
+		self.dic[self.__keytransform__(key)] = value
+	def __delitem__(self, key):
+		del self.dic[self.__keytransform__(key)]
+	def __iter__(self):
+		return iter(self.dic)
+	def __len__(self):
+		return len(self.dic)
+	def __keytransform__(self, key):
+		return key
+	def __contains__(self, key):
+		return key in self.dic
+
+	#@staticmethod
+	#def make(dic):
+	#	dic2 = Dict2()
+	#	dic2.fill(dic)
+	#	return dic2
+
+	def fill(self, dic):
+		for key, value in dic.items():
+			tt = type(value)
+			if tt == dict:
+				self.dic[key] = Dict2(value)
+			elif tt == list:
+				for idx, vv in enumerate(value):
+					if type(vv) == dict:
+						value[idx] = Dict2(vv)
+				self.dic[key] = value
+			else:
+				self.dic[key] = value
+		
+	def get(self, name, default):
+		lst = name.split(".")
+		dic = self.dic
+		for item in lst:
+			if item not in dic:
+				return default
+			dic = dic[item]
+
+		return dic
+
+	def add(self, name, value):
+		if name in self.dic:
+			print("%s is already defined. it will be overwritten." % name)
+		self.dic[name] = value
