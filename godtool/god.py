@@ -118,7 +118,11 @@ class Tasks():
 				print("run: exception in buildTask...\n%s" % buildExc)
 			else:
 				print("run: run %s..." % g_util.executableName)
-				cmd = ["./"+g_util.executableName]
+				if subprocess.call("type unbuffer", shell=True) == 0:
+					cmd = ["unbuffer", "./"+g_util.executableName]
+				else:
+					cmd = ["./"+g_util.executableName]
+
 				self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
 				self.outStream = NonBlockingStreamReader(self.proc.stdout)
 
@@ -130,8 +134,9 @@ class Tasks():
 				if not g_util.isRestart:
 					raise Exception("run: the application has been terminated.")
 			else:
-				ss = line.decode("utf8")
-				print(ss[:-1])
+				if line is not "":
+					ss = line.decode("utf8")
+					print(ss[:-1])
 
 	def run(self, cmd, expandVars=True):
 		"""

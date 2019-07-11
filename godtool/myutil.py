@@ -1,5 +1,5 @@
 
-from queue import Queue, Empty
+import queue
 from threading import Thread
 from copy import deepcopy
 import collections
@@ -45,7 +45,7 @@ class NonBlockingStreamReader:
 	    Usually a process' stdout or stderr.
 		'''
 		self.stream = stream
-		self.queue = Queue()
+		self.queue = queue.Queue()
 
 		def _populateQueue(stream, queue):
 			'''
@@ -62,10 +62,13 @@ class NonBlockingStreamReader:
 		self.thread.start()
 
 	def readline(self, timeout=None):
+		'''
+		return: None(exit the app), ""(nothing)
+		'''
 		try:
 			return self.queue.get(block=timeout is not None, timeout=timeout)
-		except Empty:
-			return None
+		except queue.Empty:
+			return ""
 
 
 class UnexpectedEndOfStream(Exception):
