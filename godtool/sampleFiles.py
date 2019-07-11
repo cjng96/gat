@@ -37,7 +37,7 @@ class myGod:
 		helper.configStr("yaml", config)	# helper.configFile("yaml", "god.yaml")
 
 	def buildTask(self, util, local, **_):
-		#local.dbGqlGen()
+		#local.gqlGen()
 		#local.goBuild()
 		pass
 

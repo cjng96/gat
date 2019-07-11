@@ -13,6 +13,7 @@ import datetime
 import pathlib
 import re
 import inspect
+import traceback
 from copy import deepcopy
 
 import zipfile
@@ -91,8 +92,8 @@ class Tasks():
 		print("run: building the app")
 		if hasattr(mygod, "buildTask"):
 			return mygod.buildTask(util=g_util, local=g_local, remote=g_remote)
-
-		self.goBuild()
+		else:
+			print("You should override buildTask method.")
 
 	def doServeStep(self, mygod):
 		#if hasattr(g_mygod, "doServeStep"):
@@ -105,7 +106,7 @@ class Tasks():
 			try:
 				self.buildTask(mygod)
 			except Exception as e:
-				buildExc = e
+				buildExc = traceback.format_exc()
 
 			if self.proc is not None:
 				print("run: stop the daemon...")
@@ -113,7 +114,9 @@ class Tasks():
 				self.proc = None
 				self.outStream = None
 
-			if buildExc is None:
+			if buildExc is not None:
+				print("run: exception in buildTask...\n%s" % buildExc)
+			else:
 				print("run: run %s..." % g_util.executableName)
 				cmd = ["./"+g_util.executableName]
 				self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
@@ -125,7 +128,7 @@ class Tasks():
 			line = self.outStream.readline(0.1)
 			if line is None:
 				if not g_util.isRestart:
-					raise Exception("non-block-stream: error")
+					raise Exception("run: the application has been terminated.")
 			else:
 				ss = line.decode("utf8")
 				print(ss[:-1])
