@@ -13,12 +13,12 @@ deploy:
   #owner: test	# all generated files's owner is set it. if owner is specified, servers/id should be the user who can use sudo command due to sudo cmd
   maxRelease: 3
   include:
-	#- "*"
-	- {{name}}
+    #- "*"
+    - "{{name}}"
     - config
     - pm2.json
-		- src: ../build
-		  target: build
+    - src: ../build
+      target: build
   exclude:
     - config/my.json
   sharedLinks:
@@ -37,15 +37,18 @@ class myGod:
 		helper.configStr("yaml", config)	# helper.configFile("yaml", "god.yaml")
 
 	def buildTask(self, util, local, **_):
-		#local.dbGqlGen():
-		#local.goBuild(args)
+		#local.dbGqlGen()
+		#local.goBuild()
+		pass
 
 	def deployPreTask(self, util, local, remote, **_):
 		#local.run("npm run build")
+		pass
 
 	def deployPostTask(self, util, local, remote, **_):
 		#remote.pm2Register():
-		#local.run("cd %s/current && echo 'finish'" % args.deployRoot)
+		#local.run("cd %s/current && echo 'finish'" % util.deployRoot)
+		pass
 
 """
 
