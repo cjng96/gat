@@ -131,12 +131,14 @@ class Tasks():
 		if self.outStream is not None:
 			line = self.outStream.readline(0.1)
 			if line is None:
+				return
+
+			if line is "":
 				if not g_util.isRestart:
 					raise Exception("run: the application has been terminated.")
 			else:
-				if line is not "":
-					ss = line.decode("utf8")
-					print(ss[:-1])
+				ss = line.decode("utf8")
+				print(ss[:-1])
 
 	def run(self, cmd, expandVars=True):
 		"""

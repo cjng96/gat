@@ -53,8 +53,8 @@ class NonBlockingStreamReader:
 			'''
 			while True:
 				line = stream.readline()
-				queue.put(line)	# line can be None for broken stream
-				if line is None:
+				queue.put(line)	# line can be "" for broken stream
+				if line is b"":
 					return
 
 		self.thread = Thread(target=_populateQueue, args=(self.stream, self.queue))
@@ -63,12 +63,12 @@ class NonBlockingStreamReader:
 
 	def readline(self, timeout=None):
 		'''
-		return: None(exit the app), ""(nothing)
+		return: None(empty), ""(exit the app)
 		'''
 		try:
 			return self.queue.get(block=timeout is not None, timeout=timeout)
 		except queue.Empty:
-			return ""
+			return None
 
 
 class UnexpectedEndOfStream(Exception):
