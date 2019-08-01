@@ -1,6 +1,6 @@
 import os
 import boto3
-
+import botocore
 #from myutil import glog
 
 class CoS3:
@@ -49,6 +49,25 @@ class CoBucket:
 		result = self.s3.res.meta.client.list_objects(Bucket='test', Delimiter='/')
 		for o in result.get('CommonPrefixes'):
 			print(o.get('Prefix'))
+
+	# 
+	def existFile(self, key):
+		try:
+			self.s3.res.Object(self.name, key).load()
+			return True
+		except botocore.exceptions.ClientError as e:
+			if e.response['Error']['Code'] == '404':
+				return False
+			else:
+				raise
+
+	# can be slow
+	def existFolder(self, key):
+		result = self.s3.client.list_objects(Bucket=self.name, Prefix=key)
+		if "Contents" in result:
+			return True
+
+		return False			
 
 	# 이건 하위 폴더 이름 목록만 얻기
 	def folderList(self, pp):
