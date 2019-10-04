@@ -2,15 +2,14 @@ sampleApp = """
 # https://
 config='''
 config:
-  name: test
-  type: app
+  name: sample
+  type: app	# it's default
 
 serve:
   patterns: [ "*.go", "*.json", "*.graphql" ]
 
 deploy:
   strategy: zip
-  #owner: test	# all generated files's owner is set it. if owner is specified, servers/id should be the user who can use sudo command due to sudo cmd
   maxRelease: 3
   include:
     #- "*"
@@ -28,8 +27,12 @@ servers:
   - name: test
     host: test.com
     port: 22
-    id: test
+    id: test			# ssh worker user id
+    owner: engt   # opt, generated files owner
+      # if it's not specified, you don't need sudo right
+      # if you need the operation needed sudo right, should specify it.
     targetPath: ~/test
+
 '''
 
 class myGod:
@@ -41,13 +44,13 @@ class myGod:
 		#local.goBuild()
 		pass
 
-	def deployPreTask(self, util, local, remote, **_):
+	def deployPreTask(self, util, remote, local, **_):
 		#local.run("npm run build")
 		pass
 
-	def deployPostTask(self, util, local, remote, **_):
+	def deployPostTask(self, util, remote, local, **_):
 		#remote.pm2Register():
-		#local.run("cd %s/current && echo 'finish'" % util.deployRoot)
+		#local.run("cd %%s/current && echo 'finish'" %% util.deployRoot)
 		pass
 
 """
@@ -76,6 +79,6 @@ class myGod:
 
 	def setupTask(self, util, local, remote, **_):
 		#remote.pm2Register():
-		#remote.run("cd %s/current && echo 'finish'" % args.deployRoot)
+		#remote.run("cd %%s/current && echo 'finish'" %% args.deployRoot)
 
 """

@@ -397,9 +397,16 @@ def taskDeploy(serverName):
 	# expand env and variables
 	expandVar(g_config)
 
+	sudoCmd = ""
+	if server.owner:
+		sudoCmd = "sudo"
+
 	name = g_config.config.name
 	targetPath = server.targetPath
-	realTarget = g_remote.run("mkdir -p %s/shared && cd %s && mkdir -p releases && sudo chown %s: %s %s/shared %s/releases && pwd" % (targetPath, targetPath, server.owner, targetPath, targetPath, targetPath))
+	realTarget = g_remote.run("mkdir -p %s/shared && cd %s" % (targetPath, targetPath) +
+		"&& mkdir -p releases" +
+		"&& sudo chown %s: %s %s/shared %s/releases" % (server.owner, targetPath, targetPath, targetPath) if server.owner else "" +
+		"&& pwd ")
 	realTarget = realTarget.strip("\r\n")	# for sftp
 
 	todayName = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")[2:]
@@ -414,11 +421,14 @@ def taskDeploy(serverName):
 		print("deploy: remove old %d folders" % (cnt - max))
 		removeList = releases[:cnt-max]
 		for ff in removeList:
-			g_remote.run("sudo rm -rf %s/releases/%s" % (targetPath, ff))
+			g_remote.run("%s rm -rf %s/releases/%s" % (sudoCmd, targetPath, ff))
 
 	# if deploy / owner is defined,
 	# create release folder as ssh user, upload, extract then change release folder to deploy / owner
-	res = g_remote.run("cd %s/releases && sudo mkdir %s && sudo chown %s: %s" % (targetPath, todayName, server.owner, todayName))
+	res = g_remote.run("cd %s/releases" % targetPath +
+		"&& %s mkdir %s" % (sudoCmd, todayName) +
+		"&& sudo chown %s: %s" % (server.owner, todayName) if server.owner else ""
+		)
 
 	# pre task
 	g_util.deployRoot = targetPath
@@ -497,7 +507,9 @@ def taskDeploy(serverName):
 							_zipAdd(os.path.join(folder, ff), os.path.join(target, cutpath(src, folder), ff))
 
 		g_remote.uploadFile(zipPath, "/tmp/godUploadPkg.zip")	# we don't include it by default
-		g_remote.run("cd %s/releases/%s && sudo unzip /tmp/godUploadPkg.zip && rm /tmp/godUploadPkg.zip" % (targetPath, todayName))
+		g_remote.run("cd %s/releases/%s" % (targetPath, todayName) +
+			"&& %s unzip /tmp/godUploadPkg.zip && rm /tmp/godUploadPkg.zip" % sudoCmd
+			)
 		os.remove(zipPath)
 		"""	no use copy strategy anymore
 		elif strategy == "copy":
@@ -537,16 +549,21 @@ def taskDeploy(serverName):
 	for pp in sharedLinks:
 		print("deploy: sharedLinks - %s" % pp)
 		folder = os.path.dirname(pp)
-		g_remote.run("cd %s && mkdir -p shared/%s && sudo ln -sf %s/shared/%s releases/%s/%s" % (targetPath, folder, targetPath, pp, todayName, pp))
+		g_remote.run("cd %s && mkdir -p shared/%s" % (targetPath, folder) +
+		"&& %s ln -sf %s/shared/%s releases/%s/%s" % (sudoCmd, targetPath, pp, todayName, pp))
 
 	# update link
-	g_remote.run("cd %s && sudo rm current && sudo ln -sf releases/%s current && sudo chown %s: current %s/releases/%s -R" % (targetPath, todayName, server.owner, targetPath, todayName))
+	g_remote.run("cd %s && %s rm current" % (targetPath, sudoCmd) +
+		"&& %s ln -sf releases/%s current" % (sudoCmd, todayName) +
+		"&& sudo chown %s: current %s/releases/%s -R" % (server.owner, targetPath, todayName) if server.owner else ""
+	)
 
 	# post process
 	if hasattr(g_mygod, "deployPostTask"):
 		g_mygod.deployPostTask(util=g_util, remote=g_remote, local=g_local)
 
-	g_remote.run("cd %s && sudo chown %s: releases/%s current" % (targetPath, server.owner, todayName))
+	if server.owner:
+		g_remote.run("cd %s && sudo chown %s: releases/%s current" % (targetPath, server.owner, todayName))
 
 def initSamples(type, fn):
 	with open(fn, "w") as fp:
@@ -676,8 +693,8 @@ def main():
 	if not os.path.exists(target):	# or not os.path.exists("god.yml"):
 		print("""god-tool V%s\n
 There is no %s script file.
-god init (sys|app) [GOD_FILE] - Generate god file.
-god [GOD_FILE] - Serve application service. use god_my.py file if GOD_FILE is skipped.
+god init (sys|app) [GOD_FILE] - Generates god file.
+god [GOD_FILE] - Serves application service. use god_my.py file if GOD_FILE is skipped.
 god deploy SERVER_NAME - Deploy the application to the server.
 god setup [GOD_FILE] SERVER_NAME - Setup server defined in GOD_FILE.
 """ % (__version__, target))
