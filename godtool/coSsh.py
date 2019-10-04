@@ -14,6 +14,10 @@ class SshAllowAllKeys(paramiko.MissingHostKeyPolicy):
 def falseFunc(pp):
 	return False
 
+# sudo with ssh
+#https://gist.github.com/vladwa/bc49621782736a825844ee4c2a7dacae
+
+# TODO: use invoke_shell 
 
 #https://gist.github.com/kdheepak/c18f030494fea16ffd92d95c93a6d40d
 #https://stackoverflow.com/questions/760978/long-running-ssh-commands-in-python-paramiko-module-and-how-to-end-them
@@ -35,9 +39,11 @@ class CoSsh:
 		if hasattr(self, "ssh"):
 			self.ssh.close()
 
+
 	# return: result
 	def run(self, cmd):
 		chan = self.ssh.get_transport().open_session()
+		#chan.get_pty()
 		chan.exec_command(cmd)
 		chan.setblocking(0)
 		out = ""

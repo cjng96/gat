@@ -5,9 +5,20 @@ import traceback
 import os
 import re
 import platform
+import subprocess
 import os.path as pypath
 
 g_dic = {}
+
+
+def run(cmd):
+	return subprocess.check_output(cmd, shell=True)
+def runRet(cmd):
+	try:
+		run(cmd)
+		return 0
+	except subprocess.CalledProcessError as e:
+		return e.returncode
 
 def skipEnter(ss, pt):
 	sz = len(ss)
@@ -68,8 +79,6 @@ def configBlock(path, marker, block, insertAfter):
 		with open(path, "w") as fp:
 			fp.write(ss)
 
-# 이건 marker가 없으면 block을 추가하는 역할
-# configBlock이 완전 대체할수 있다.
 def configAddStr(ss, marker, str, insertAfter):
 	# regexp
 	m = re.search(marker, ss)
@@ -88,6 +97,8 @@ def configAddStr(ss, marker, str, insertAfter):
 	ss = ss[:pt] + marker + str + ss[pt:]
 	return ss
 
+# 이건 marker가 없으면 block을 추가하는 역할
+# configBlock이 완전 대체할수 있다. 이건 추가된 내용을 수정 할수가 없다
 def configAdd(path, marker, str, insertAfter):
 	'''
 	marker: ### TEST\n
@@ -106,6 +117,26 @@ def configAdd(path, marker, str, insertAfter):
 		with open(path, "w") as fp:
 			fp.write(ss)
 
+def strEnsure(path, str):
+	with open(path, "rt") as fp:
+		ss = fp.read()
+		hr = ss.find(str)
+		if hr != -1:
+			return
+		
+	with open(path, "at") as fp:
+		fp.write("\n"+str)
+
+def userNew(name, existOk, sshKey):
+	'''
+	needed sudo right
+	'''
+	if not existOk or runRet("id -u %s" % name) != 0:
+		run("useradd %s -m -s /bin/bash" % (name))
+
+	if sshKey:
+		if not os.access("/home/%s/.ssh/id_rsa" % name, os.F_OK):
+			run("sudo -u %s ssh-keygen -b 2048 -t rsa -f /home/%s/.ssh/id_rsa -N '' -q" % (name, name))
 
 def lineEndPos(ss, pt):
 	'''
@@ -132,28 +163,35 @@ def configLineStr(ss, regexp, line):
 	return ss
 
 def configLine(path, regexp, line, items=None):
+	'''
+	replace it to the [line] after finding [regexp]
+	no action if there is no regexp
+	'''
 	path = os.path.expanduser(path)
 	with open(path, "r") as fp:
 		ss = fp.read()
 
-		if items is not None:
-			lst = items.splitlines()
-			for item in lst:
-				regexp2 = regexp.replace("{{item}}", item)
-				line2 = line.replace("{{item}}", item)
-				s2 = configLineStr(ss, regexp2, line2)
-				if s2 is None:
-					print("can't find regexp[%s]" % (regexp2))
-				else:
-					ss = s2
-		else:
-			ss = configLineStr(ss, regexp, line)
+	if items is not None:
+		lst = items.splitlines()
+		for item in lst:
+			regexp2 = regexp.replace("{{item}}", item)
+			line2 = line.replace("{{item}}", item)
+			s2 = configLineStr(ss, regexp2, line2)
+			if s2 is None:
+				print("can't find regexp[%s]" % (regexp2))
+			else:
+				ss = s2
+	else:
+		ss = configLineStr(ss, regexp, line)
 
 	if ss is not None:
 		with open(path, "w") as fp:
 			fp.write(ss)
 
 def strExpand(ss, dic):
+	'''
+	convert {{target}} to the item in the dic
+	'''
 	while True:
 		m = re.search(r"\{\{([\w_.]+)\}\}", ss)
 		if m is None:
@@ -201,6 +239,10 @@ def main():
 		configBlock(**cfg)
 	elif func == "configLine":
 		configLine(**cfg)
+	elif func == "strEnsure":
+		strEnsure(**cfg)
+	elif func == "userNew":
+		userNew(**cfg)
 
 
 if __name__ == "__main__":

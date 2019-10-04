@@ -37,13 +37,14 @@ class MyUtil():
 	def __init__(self):
 		self.executableName = ""
 		self.deployRoot = ""	# only for deployment
-		self.deployOwner = None
+		#self.deployOwner = None	# 그냥 server.id를 기본값으로 한다.
 		self.isRestart = True	# First start or modified source files
 
 class Tasks():
 	def __init__(self, server):
 		self.proc = None
 		self.outStream = None
+		self._uploadHelper = False
 
 		#self.dic = Dict2()
 		self.dic = deepcopy(g_config)
@@ -181,7 +182,6 @@ class Tasks():
 		self.onlyRemote()
 		self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
 
-
 	def goBuild(self):
 		print("task: goBuild...")
 
@@ -244,39 +244,60 @@ class Tasks():
 		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (g_util.deployRoot)
 		self.ssh.run(cmd)
 
-	def configBlock(self, path, marker, block, insertAfter=None):
-		print("task: config block...")
-		self.onlyRemote()
-
-		cfg = dict(cmd="configBlock", dic=self.dic.dic,
-			path=path, marker=marker, block=block, insertAfter=insertAfter)
-		#pp = "/tmp/god_cfg.json"
-		#json.dump(cfg, "/tmp/god_cfg.json")
-		#g_ssh.uploadFile(pp, pp)
-
+	def _helperRun(self, args, sudo=False):
 		pp2 = "/tmp/godHelper.py"
-		self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
-		ss = str2arg(json.dumps(cfg, cls=ObjectEncoder))
-		self.run("python3 %s runStr \"%s\"" % (pp2, ss), expandVars=False)
+		if not self._uploadHelper:
+			self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
+			self._uploadHelper = True
 
-	def configLine(self, path, regexp, line, items=None, sudo=False):
-		print("task: config line...")
-		self.onlyRemote()
-
-		cfg = dict(cmd="configLine", dic=self.dic.dic,
-			path=path, regexp=regexp, line=line, items=items)
-
-		pp2 = "/tmp/godHelper.py"
-		self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
-		ss = str2arg(json.dumps(cfg, cls=ObjectEncoder))
+		ss = str2arg(json.dumps(args, cls=ObjectEncoder))
 		if sudo:
 			self.run("sudo python3 %s runStr \"%s\"" % (pp2, ss), expandVars=False)
 		else:
 			self.run("python3 %s runStr \"%s\"" % (pp2, ss), expandVars=False)
 
+	def userNew(self, name, existOk=False, sshKey=False):
+		print("task: userNew...")
+		self.onlyRemote()
+		
+		args = dict(cmd="userNew", dic=self.dic.dic,
+			name=name, existOk=existOk, sshKey=sshKey)
+		self._helperRun(args, sudo=True)
+
+	def strLoad(self, path):
+		print("task: strLoad...")
+		self.onlyLocal()
+
+		path = os.path.expanduser(path)
+		with open(path, "rt") as fp:
+			return fp.read()
+
+	def strEnsure(self, path, str, sudo=False):
+		print("task: strEnsure...")
+		self.onlyRemote
+
+		args = dict(cmd="strEnsure", dic=self.dic.dic,
+			path=path, str=str)
+		self._helperRun(args, sudo)
+
+	def configBlock(self, path, marker, block, insertAfter=None):
+		print("task: config block...")
+		self.onlyRemote()
+
+		args = dict(cmd="configBlock", dic=self.dic.dic,
+			path=path, marker=marker, block=block, insertAfter=insertAfter)
+		self._helperRun(args)
+
+	def configLine(self, path, regexp, line, items=None, sudo=False):
+		print("task: config line...")
+		self.onlyRemote()
+
+		args = dict(cmd="configLine", dic=self.dic.dic,
+			path=path, regexp=regexp, line=line, items=items)
+		self._helperRun(args, sudo)
+
 	def s3List(self, bucket, prefix):
 		print("task: s3 list[%s/%s]..." % (bucket, prefix))
-
 		self.onlyLocal()
 
 		if not prefix.endswith("/"):
@@ -377,8 +398,8 @@ def taskDeploy(serverName):
 	expandVar(g_config)
 
 	name = g_config.config.name
-	targetPath = server["targetPath"]
-	realTarget = g_remote.run("mkdir -p %s/shared && cd %s && mkdir -p releases && pwd" % (targetPath, targetPath))
+	targetPath = server.targetPath
+	realTarget = g_remote.run("mkdir -p %s/shared && cd %s && mkdir -p releases && sudo chown %s: %s %s/shared %s/releases && pwd" % (targetPath, targetPath, server.owner, targetPath, targetPath, targetPath))
 	realTarget = realTarget.strip("\r\n")	# for sftp
 
 	todayName = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")[2:]
@@ -393,17 +414,11 @@ def taskDeploy(serverName):
 		print("deploy: remove old %d folders" % (cnt - max))
 		removeList = releases[:cnt-max]
 		for ff in removeList:
-			if g_util.deployOwner is not None:
-				g_remote.run("sudo rm -rf %s/releases/%s" % (targetPath, ff))
-			else:
-				g_remote.run("rm -rf %s/releases/%s" % (targetPath, ff))
+			g_remote.run("sudo rm -rf %s/releases/%s" % (targetPath, ff))
 
 	# if deploy / owner is defined,
 	# create release folder as ssh user, upload, extract then change release folder to deploy / owner
-	if g_util.deployOwner is not None:
-		res = g_remote.run("cd %s/releases && sudo mkdir %s && sudo chown %s: %s" % (targetPath, todayName, server["id"], todayName))
-	else:
-		res = g_remote.run("cd %s/releases && mkdir %s" % (targetPath, todayName))
+	res = g_remote.run("cd %s/releases && sudo mkdir %s && sudo chown %s: %s" % (targetPath, todayName, server.owner, todayName))
 
 	# pre task
 	g_util.deployRoot = targetPath
@@ -427,7 +442,6 @@ def taskDeploy(serverName):
 	if strategy == "zip":
 		zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
 		with zipfile.ZipFile(zipPath, "w") as zipWork:
-
 			def _zipAdd(srcP, targetP):
 				if _filterFunc(srcP):
 					print("deploy: skip - %s" % srcP)
@@ -482,8 +496,8 @@ def taskDeploy(serverName):
 						for ff in files:
 							_zipAdd(os.path.join(folder, ff), os.path.join(target, cutpath(src, folder), ff))
 
-		g_remote.uploadFile(zipPath, os.path.join(realTargetFull, "data.zip"))	# we don't include it by default
-		g_remote.run("cd %s/releases/%s && unzip data.zip && rm data.zip" % (targetPath, todayName))
+		g_remote.uploadFile(zipPath, "/tmp/godUploadPkg.zip")	# we don't include it by default
+		g_remote.run("cd %s/releases/%s && sudo unzip /tmp/godUploadPkg.zip && rm /tmp/godUploadPkg.zip" % (targetPath, todayName))
 		os.remove(zipPath)
 		"""	no use copy strategy anymore
 		elif strategy == "copy":
@@ -523,20 +537,16 @@ def taskDeploy(serverName):
 	for pp in sharedLinks:
 		print("deploy: sharedLinks - %s" % pp)
 		folder = os.path.dirname(pp)
-		g_remote.run("cd %s && mkdir -p shared/%s && ln -sf %s/shared/%s releases/%s/%s" % (targetPath, folder, targetPath, pp, todayName, pp))
+		g_remote.run("cd %s && mkdir -p shared/%s && sudo ln -sf %s/shared/%s releases/%s/%s" % (targetPath, folder, targetPath, pp, todayName, pp))
 
 	# update link
-	if g_util.deployOwner is not None:
-		g_remote.run("cd %s && sudo rm current && sudo ln -sf releases/%s current && sudo chown %s: current" % (targetPath, todayName, server["id"]))
-	else:
-		g_remote.run("cd %s && rm current && ln -sf releases/%s current" % (targetPath, todayName))
+	g_remote.run("cd %s && sudo rm current && sudo ln -sf releases/%s current && sudo chown %s: current %s/releases/%s -R" % (targetPath, todayName, server.owner, targetPath, todayName))
 
 	# post process
 	if hasattr(g_mygod, "deployPostTask"):
-		g_mygod.deployPostTask(util=g_util, local=g_local, remote=g_remote)
+		g_mygod.deployPostTask(util=g_util, remote=g_remote, local=g_local)
 
-	if g_util.deployOwner is not None:
-		g_remote.run("cd %s && sudo chown %s: releases/%s current" % (targetPath, g_util.deployOwner, todayName))
+	g_remote.run("cd %s && sudo chown %s: releases/%s current" % (targetPath, server.owner, todayName))
 
 def initSamples(type, fn):
 	with open(fn, "w") as fp:
@@ -689,7 +699,7 @@ god setup [GOD_FILE] SERVER_NAME - Setup server defined in GOD_FILE.
 	g_local = Tasks(None)	
 
 	if cmd == "deploy":
-		g_util.deployOwner = g_config.get("deploy.owner", None)
+		#g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
 
 		target = sys.argv[2] if cnt > 2 else None
 		if target is None:
