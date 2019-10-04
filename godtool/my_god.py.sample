@@ -1,0 +1,55 @@
+
+config = """
+config:
+  name: sample
+
+serve:
+  patterns: [ "*.go", "*.yml", "*.graphql" ]
+
+deploy:
+  strategy: zip
+  maxRelease: 3
+  include:
+    - "*"
+  exclude:
+    - __pycache__
+    - log
+    - work
+    - co_py/.git
+    - co_py/__pycache__
+  sharedLinks:
+    - my.conf
+
+servers:
+  - name: test
+    host: tk1.synapbook.com
+    port: 9000
+    id: cjng96    # ssh worker user id
+    owner: engt   # generated files owner if it's not specified, you don't need sudo right
+        # if you need the operation needed sudo right, should specify it.
+    targetPath: /home/engt
+
+  - name: release
+    host: tk1.synapbook.com
+    port: 9000
+    id: eng
+    targetPath: /home/eng
+"""
+
+class myGod:
+	def __init__(self, helper, **kwargs):
+		helper.configStr("yaml", config)
+
+	# return: False(stop post processes)
+	def buildTask(self, util, local, **kwargs):
+		#local.gqlGen()
+		#local.goBuild()
+		pass
+
+	def deployPreTask(self, util, remote, local, **kwargs):
+		# create new user with ssh key
+		pass
+
+	def deployPostTask(self, util, remote, local, **kwargs):
+		#remote.pm2Register()
+		pass
