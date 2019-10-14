@@ -41,8 +41,11 @@ class myGod:
 
 	def buildTask(self, util, local, **_):
 		#local.gqlGen()
-		#local.goBuild()
-		pass
+		local.goBuild()
+
+	# it's default operation and you can override running cmd
+	#def runTask(self, util, local, **_):
+	#	return [util.config.config.name]
 
 	def deployPreTask(self, util, remote, local, **_):
 		#local.run("npm run build")

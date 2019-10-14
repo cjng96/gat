@@ -96,6 +96,22 @@ class Tasks():
 		else:
 			print("You should override buildTask method.")
 
+	def runTask(self, mygod):
+		self.onlyLocal()
+
+		print("run: running the app")
+		if hasattr(mygod, "runTask"):
+			cmd = mygod.runTask(util=g_util, local=g_local, remote=g_remote)
+		else:
+			cmd = g_config.config.name
+
+		if subprocess.call("type unbuffer", shell=True) == 0:
+			#cmd = ["unbuffer", "./"+g_util.executableName]
+			cmd = ["unbuffer"] + cmd
+
+		return cmd
+
+
 	def doServeStep(self, mygod):
 		#if hasattr(g_mygod, "doServeStep"):
 		#	return g_mygod.doServeStep()
@@ -118,11 +134,7 @@ class Tasks():
 			if buildExc is not None:
 				print("run: exception in buildTask...\n%s" % buildExc)
 			else:
-				print("run: run %s..." % g_util.executableName)
-				if subprocess.call("type unbuffer", shell=True) == 0:
-					cmd = ["unbuffer", "./"+g_util.executableName]
-				else:
-					cmd = ["./"+g_util.executableName]
+				cmd = self.runTask(mygod)
 
 				self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
 				self.outStream = NonBlockingStreamReader(self.proc.stdout)
