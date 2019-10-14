@@ -35,10 +35,10 @@ g_scriptPath = ""
 
 class MyUtil():
 	def __init__(self):
-		self.executableName = ""
 		self.deployRoot = ""	# only for deployment
 		#self.deployOwner = None	# 그냥 server.id를 기본값으로 한다.
 		self.isRestart = True	# First start or modified source files
+		self.config = None	# config object
 
 class Tasks():
 	def __init__(self, server):
@@ -102,15 +102,16 @@ class Tasks():
 		print("run: running the app")
 		if hasattr(mygod, "runTask"):
 			cmd = mygod.runTask(util=g_util, local=g_local, remote=g_remote)
+			if type(cmd) != list:
+				raise Exception("the return value of runTask function should be list type.")
 		else:
-			cmd = g_config.config.name
+			cmd = [g_config.config.name]
 
 		if subprocess.call("type unbuffer", shell=True) == 0:
 			#cmd = ["unbuffer", "./"+g_util.executableName]
 			cmd = ["unbuffer"] + cmd
 
 		return cmd
-
 
 	def doServeStep(self, mygod):
 		#if hasattr(g_mygod, "doServeStep"):
@@ -199,7 +200,7 @@ class Tasks():
 
 		self.onlyLocal()
 
-		cmd = ["go", "build", "-o", g_util.executableName]
+		cmd = ["go", "build", "-o", g_config.config.name]
 		ret = subprocess.run(cmd)
 		if ret.returncode != 0:
 			raise Exception("task.goBuild: build failed")
@@ -637,7 +638,7 @@ class Helper:
 		if cfgType == "yaml":
 			try:
 				g_config = Dict2(yaml.safe_load(ss))
-				g_util.executableName = g_config.config.name
+				g_util.config = g_config
 			except yaml.YAMLError as e:
 				raise e
 		else:
