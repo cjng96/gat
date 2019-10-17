@@ -42,6 +42,8 @@ class CoSsh:
 
 	# return: result
 	def run(self, cmd):
+		print("execute[%s].." % (cmd))
+
 		chan = self.ssh.get_transport().open_session()
 		#chan.get_pty()
 		chan.exec_command(cmd)
@@ -64,8 +66,11 @@ class CoSsh:
 			except socket.timeout as e:
 				pass
 
+			print(out, end="")	
+			out = ""
+
 		ret = chan.recv_exit_status()
-		print("execute[%s] - ret:%d\n%s" % (cmd, ret, out))
+		print("-> ret:%d" % (ret))
 		chan.close()
 		if ret != 0:
 			#raise CalledProcessError("ssh command failed with ret:%d" % ret)
