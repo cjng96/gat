@@ -99,14 +99,14 @@ class Tasks():
 	def runTask(self, mygod):
 		self.onlyLocal()
 
-		print("run: running the app")
 		if hasattr(mygod, "runTask"):
 			cmd = mygod.runTask(util=g_util, local=g_local, remote=g_remote)
 			if type(cmd) != list:
 				raise Exception("the return value of runTask function should be list type.")
 		else:
-			cmd = [g_config.config.name]
+			cmd = ["./"+g_config.config.name]
 
+		print("run: running the app[%s]..." % cmd)
 		if subprocess.call("type unbuffer", shell=True) == 0:
 			#cmd = ["unbuffer", "./"+g_util.executableName]
 			cmd = ["unbuffer"] + cmd
@@ -167,7 +167,7 @@ class Tasks():
 		if self.server is not None:
 			return self.ssh.run(cmd)
 		else:
-			return subprocess.check_output(cmd, shell=True)
+			return subprocess.check_output(cmd, shell=True, executable='/bin/bash')
 
 	def runRet(self, cmd):
 		try:
@@ -196,7 +196,7 @@ class Tasks():
 		self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
 
 	def goBuild(self):
-		print("task: goBuild...")
+		print("task: goBuild as [%s]..." % g_config.config.name)
 
 		self.onlyLocal()
 
