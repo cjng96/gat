@@ -145,6 +145,10 @@ class Dict2():
 	#	return dic2
 
 	def fill(self, dic):
+		if isinstance(dic, Dict2):
+			self.dic = deepcopy(dic)
+			return
+			
 		for key, value in dic.items():
 			tt = type(value)
 			if tt == dict:
