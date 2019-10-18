@@ -52,13 +52,13 @@ def configBlockStr(ss, start, end, block, insertAfter):
 		pt2 = pt
 
 	# insert
-	ss = ss[:pt] + start + "\n" + block + "\n" + end + "\n" + ss[pt2:]
+	ss = ss[:pt] + "\n" + start + "\n" + block + "\n" + end + "\n\n" + ss[pt2:]
 	return ss
 
 def configBlock(path, marker, block, insertAfter):
 	'''
-	marker: ### {mark} TEST\n
-	block: vv=1\n
+	marker: ### {mark} TEST
+	block: vv=1
 	'''
 	block = strExpand(block, g_dic)
 	if insertAfter is not None:
@@ -233,7 +233,7 @@ def main():
 	global g_dic
 	g_dic = cfg["dic"]
 	g_dic["hostname"] = platform.node()
-	#del cfg["dic"]
+	del cfg["dic"]
 
 	func = cfg["cmd"]
 	del cfg["cmd"]

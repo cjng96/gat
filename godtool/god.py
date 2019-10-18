@@ -172,7 +172,7 @@ class Tasks():
 		exception: subprocess.CalledProcessError(returncode, output)
 		"""
 		if expandVars:
-			cmd = strExpand(cmd, self.config)
+			cmd = strExpand(cmd, g_dic)
 
 		if self.server is not None:
 			return self.ssh.run(cmd)
@@ -304,6 +304,10 @@ class Tasks():
 		self._helperRun(args, sudo)
 
 	def configBlock(self, path, marker, block, insertAfter=None):
+		'''
+		marker: ### {mark} TEST
+		block: vv=1
+		'''
 		print("task: config block...")
 		self.onlyRemote()
 
@@ -389,7 +393,6 @@ def dicInit(server):
 	g_dic = deepcopy(g_config)
 	g_dic.server = server
 	g_dic.vars = deepcopy(server.vars)
-	print("dicInit -- ", g_dic)
 
 def configServerGet(name):
 	server = None
