@@ -47,9 +47,9 @@ class Tasks():
 		self._uploadHelper = False
 
 		#self.dic = Dict2()
-		self.dic = deepcopy(g_config)
+		self.config = deepcopy(g_config)
 		# 이건 일단은 남겨두자. 나중에 없앨꺼다.
-		self.dic.add("name", g_config.config.name)
+		self.config.add("name", g_config.config.name)
 
 		if server is None:
 			self.server = None
@@ -66,13 +66,13 @@ class Tasks():
 			server2 = deepcopy(server)
 			if "vars" in server2:
 				del server2["vars"]
-			self.dic.add("server", server2)
+			self.config.add("server", server2)
 
 			# vars
-			# 이거 좀 고민이다..
-			#self.dic.add("vars", server.vars)
-			if "vars" in server:
-				self.dic.fill(server["vars"])
+			# 이게 고민이 쓰기 편하게 하려면 루트에 넣는게 좋은데...
+			#self.config.fill(server["vars"])
+			self.config.add("vars", server.vars if "vars" in server else dict())
+	
 
 	def __del__(self):
 		if hasattr(self, "server") and self.server is not None:
@@ -162,7 +162,7 @@ class Tasks():
 		exception: subprocess.CalledProcessError(returncode, output)
 		"""
 		if expandVars:
-			cmd = strExpand(cmd, self.dic)
+			cmd = strExpand(cmd, self.config)
 
 		if self.server is not None:
 			return self.ssh.run(cmd)
@@ -273,7 +273,7 @@ class Tasks():
 		print("task: userNew...")
 		self.onlyRemote()
 		
-		args = dict(cmd="userNew", dic=self.dic.dic,
+		args = dict(cmd="userNew", dic=self.config.dic,
 			name=name, existOk=existOk, sshKey=sshKey)
 		self._helperRun(args, sudo=True)
 
@@ -289,7 +289,7 @@ class Tasks():
 		print("task: strEnsure...")
 		self.onlyRemote
 
-		args = dict(cmd="strEnsure", dic=self.dic.dic,
+		args = dict(cmd="strEnsure", dic=self.config.dic,
 			path=path, str=str)
 		self._helperRun(args, sudo)
 
@@ -297,7 +297,7 @@ class Tasks():
 		print("task: config block...")
 		self.onlyRemote()
 
-		args = dict(cmd="configBlock", dic=self.dic.dic,
+		args = dict(cmd="configBlock", dic=self.config.dic,
 			path=path, marker=marker, block=block, insertAfter=insertAfter)
 		self._helperRun(args)
 
@@ -305,7 +305,7 @@ class Tasks():
 		print("task: config line...")
 		self.onlyRemote()
 
-		args = dict(cmd="configLine", dic=self.dic.dic,
+		args = dict(cmd="configLine", dic=self.config.dic,
 			path=path, regexp=regexp, line=line, items=items)
 		self._helperRun(args, sudo)
 
@@ -607,7 +607,7 @@ def expandVar(dic):
 				expandVar(value)
 			elif tt == str:
 				value = envExpand(value)
-				value = strExpand(value, g_remote.dic)
+				value = strExpand(value, g_remote.config)
 				dic[idx] = value
 			elif tt == list:
 				expandVar(value)
@@ -620,7 +620,7 @@ def expandVar(dic):
 				expandVar(value)
 			elif tt == str:
 				value = envExpand(value)
-				value = strExpand(value, g_remote.dic)
+				value = strExpand(value, g_remote.config)
 				dic[key] = value
 			elif tt == list:
 				expandVar(value)

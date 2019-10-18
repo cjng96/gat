@@ -162,7 +162,7 @@ def configLineStr(ss, regexp, line):
 	ss = ss[:start] + line + ss[end:]
 	return ss
 
-def configLine(path, regexp, line, items=None):
+def configLine(path, regexp, line, dic, items=None):
 	'''
 	replace it to the [line] after finding [regexp]
 	no action if there is no regexp
@@ -176,13 +176,15 @@ def configLine(path, regexp, line, items=None):
 		for item in lst:
 			regexp2 = regexp.replace("{{item}}", item)
 			line2 = line.replace("{{item}}", item)
+			line2 = strExpand(line2, dic)
 			s2 = configLineStr(ss, regexp2, line2)
 			if s2 is None:
 				print("can't find regexp[%s]" % (regexp2))
 			else:
 				ss = s2
 	else:
-		ss = configLineStr(ss, regexp, line)
+		line2 = strExpand(line, dic)
+		ss = configLineStr(ss, regexp, line2)
 
 	if ss is not None:
 		with open(path, "w") as fp:
@@ -231,7 +233,7 @@ def main():
 	global g_dic
 	g_dic = cfg["dic"]
 	g_dic["hostname"] = platform.node()
-	del cfg["dic"]
+	#del cfg["dic"]
 
 	func = cfg["cmd"]
 	del cfg["cmd"]
