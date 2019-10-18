@@ -33,6 +33,9 @@ from .myutil import NonBlockingStreamReader, str2arg, mergeDict, envExpand, Dict
 g_cwd = ""
 g_scriptPath = ""
 
+
+
+
 class MyUtil():
 	def __init__(self):
 		self.deployRoot = ""	# only for deployment
@@ -46,11 +49,6 @@ class Tasks():
 		self.outStream = None
 		self._uploadHelper = False
 
-		#self.dic = Dict2()
-		self.config = deepcopy(g_config)
-		# 이건 일단은 남겨두자. 나중에 없앨꺼다.
-		self.config.add("name", g_config.config.name)
-
 		if server is None:
 			self.server = None
 		else:
@@ -62,6 +60,18 @@ class Tasks():
 			print("ssh: connecting to the server[%s:%d] with ID:%s" % (self.server.host, port, self.server.id))
 			self.ssh.init(self.server.host, port, self.server.id)
 
+			self.vars = server.vars
+
+		#self.configInit(server)
+
+	'''	
+	def configInit(self, server):
+		#self.dic = Dict2()
+		self.config = deepcopy(g_config)
+		# 이건 일단은 남겨두자. 나중에 없앨꺼다.
+		self.config.add("name", g_config.config.name)
+
+		if server is not None:		
 			# server without vars
 			server2 = deepcopy(server)
 			if "vars" in server2:
@@ -72,7 +82,7 @@ class Tasks():
 			# 이게 고민이 쓰기 편하게 하려면 루트에 넣는게 좋은데...
 			#self.config.fill(server["vars"])
 			self.config.add("vars", server.vars if "vars" in server else dict())
-	
+	'''
 
 	def __del__(self):
 		if hasattr(self, "server") and self.server is not None:
@@ -273,7 +283,7 @@ class Tasks():
 		print("task: userNew...")
 		self.onlyRemote()
 		
-		args = dict(cmd="userNew", dic=self.config.dic,
+		args = dict(cmd="userNew", dic=g_dic,
 			name=name, existOk=existOk, sshKey=sshKey)
 		self._helperRun(args, sudo=True)
 
@@ -289,7 +299,7 @@ class Tasks():
 		print("task: strEnsure...")
 		self.onlyRemote
 
-		args = dict(cmd="strEnsure", dic=self.config.dic,
+		args = dict(cmd="strEnsure", dic=g_dic,
 			path=path, str=str)
 		self._helperRun(args, sudo)
 
@@ -297,7 +307,7 @@ class Tasks():
 		print("task: config block...")
 		self.onlyRemote()
 
-		args = dict(cmd="configBlock", dic=self.config.dic,
+		args = dict(cmd="configBlock", dic=g_dic,
 			path=path, marker=marker, block=block, insertAfter=insertAfter)
 		self._helperRun(args)
 
@@ -305,7 +315,7 @@ class Tasks():
 		print("task: config line...")
 		self.onlyRemote()
 
-		args = dict(cmd="configLine", dic=self.config.dic,
+		args = dict(cmd="configLine", dic=g_dic,
 			path=path, regexp=regexp, line=line, items=items)
 		self._helperRun(args, sudo)
 
@@ -374,13 +384,12 @@ class MyHandler(PatternMatchingEventHandler):
 	def on_created(self, event):
 		self.process(event)
 
-g_config = Dict2()
-g_mygod = None
-
-g_util = MyUtil()
-g_local = None
-g_remote = None
-
+def dicInit(server):
+	global g_dic
+	g_dic = deepcopy(g_config)
+	g_dic.server = server
+	g_dic.vars = deepcopy(server.vars)
+	print("dicInit -- ", g_dic)
 
 def configServerGet(name):
 	server = None
@@ -406,6 +415,8 @@ def taskDeploy(serverName):
 
 	global g_remote
 	g_remote = Tasks(server)
+	dicInit(server)
+
 
 	# expand env and variables
 	expandVar(g_config)
@@ -607,7 +618,7 @@ def expandVar(dic):
 				expandVar(value)
 			elif tt == str:
 				value = envExpand(value)
-				value = strExpand(value, g_remote.config)
+				value = strExpand(value, g_dic)
 				dic[idx] = value
 			elif tt == list:
 				expandVar(value)
@@ -620,7 +631,7 @@ def expandVar(dic):
 				expandVar(value)
 			elif tt == str:
 				value = envExpand(value)
-				value = strExpand(value, g_remote.config)
+				value = strExpand(value, g_dic)
 				dic[key] = value
 			elif tt == list:
 				expandVar(value)
@@ -638,7 +649,7 @@ class Helper:
 		if cfgType == "yaml":
 			try:
 				g_config = Dict2(yaml.safe_load(ss))
-				g_util.config = g_config
+				#g_util.config = g_config
 			except yaml.YAMLError as e:
 				raise e
 		else:
@@ -653,6 +664,15 @@ class Helper:
 
 	def configGet(self):
 		return g_config
+
+
+g_config = Dict2()
+g_dic = None
+g_mygod = None
+
+g_util = MyUtil()
+g_local = None
+g_remote = None
 
 
 def main():
@@ -759,7 +779,8 @@ def taskSetup(target, serverName):
 		return
 
 	global g_remote
-	g_remote = Tasks(server)		
+	g_remote = Tasks(server)
+	dicInit(server)
 
 	# expand env and variables
 	expandVar(g_config)
@@ -768,7 +789,7 @@ def taskSetup(target, serverName):
 		print("setup: You should override setupTask function in your myGod class")
 		return
 
-	g_mygod.setupTask(util=g_util, remote=g_remote, local=g_local)
+	g_mygod.setupTask(cfg=g_config, util=g_util, remote=g_remote, local=g_local)
 
 
 def taskServe():

@@ -80,8 +80,8 @@ class myGod:
 	def __init__(self, helper, **_):
 		helper.configStr("yaml", config)	# helper.configFile("yaml", "god.yaml")
 
-	def setupTask(self, util, local, remote, **_):
+	def setupTask(self, cfg, util, local, remote, **_):
 		#remote.pm2Register():
-		#remote.run("cd %%s/current && echo 'finish'" %% args.deployRoot)
+		#remote.run("cd %%s/current && echo 'finish'" %% remote.vars.deployRoot)
 
 """
