@@ -60,6 +60,9 @@ class Tasks():
 			print("ssh: connecting to the server[%s:%d] with ID:%s" % (self.server.host, port, self.server.id))
 			self.ssh.init(self.server.host, port, self.server.id)
 
+			if "vars" not in server:
+				server.vars = {}
+
 			self.vars = server.vars
 
 		#self.configInit(server)
@@ -303,7 +306,7 @@ class Tasks():
 			path=path, str=str)
 		self._helperRun(args, sudo)
 
-	def configBlock(self, path, marker, block, insertAfter=None):
+	def configBlock(self, path, marker, block, insertAfter=None, sudo=False):
 		'''
 		marker: ### {mark} TEST
 		block: vv=1
@@ -313,7 +316,7 @@ class Tasks():
 
 		args = dict(cmd="configBlock", dic=g_dic,
 			path=path, marker=marker, block=block, insertAfter=insertAfter)
-		self._helperRun(args)
+		self._helperRun(args, sudo)
 
 	def configLine(self, path, regexp, line, items=None, sudo=False):
 		print("task: config line...")
