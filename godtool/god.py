@@ -193,11 +193,13 @@ class Tasks():
 	def uploadFile(self, src, dest):
 		self.onlyRemote()
 		src = os.path.expanduser(src)
+		dest = os.path.expanduser(dest)
 		self.ssh.uploadFile(src, dest)
 
 	def uploadFileTo(self, src, dest):
 		self.onlyRemote()
 		src = os.path.expanduser(src)
+		dest = os.path.expanduser(dest)
 		self.ssh.uploadFile(src, os.path.join(dest, os.path.basename(src)))
 
 	def uploadFolder(self, src, dest):
