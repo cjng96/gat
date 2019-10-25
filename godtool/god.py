@@ -133,43 +133,32 @@ class Tasks():
 	def doServeStep(self, mygod):
 		#if hasattr(g_mygod, "doServeStep"):
 		#	return g_mygod.doServeStep()
+		print("\n\n\n")
 
-		if g_util.isRestart:
-			print("\n\n\n")
+		buildExc = None
+		try:
+			self.buildTask(mygod)
+		except Exception as e:
+			buildExc = traceback.format_exc()
 
-			buildExc = None
-			try:
-				self.buildTask(mygod)
-			except Exception as e:
-				buildExc = traceback.format_exc()
+		if buildExc is not None:
+			print("run: exception in buildTask...\n%s" % buildExc)
+		else:
+			cmd = self.runTask(mygod)
 
-			if self.proc is not None:
-				print("run: stop the daemon...")
-				self.proc.kill()
-				self.proc = None
-				self.outStream = None
+			with subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr) as p:
+				while True:
+					try:
+						ret = p.wait(0.1)
+						raise Exception("run: the application has been terminated[ret:%d]" % ret)
 
-			if buildExc is not None:
-				print("run: exception in buildTask...\n%s" % buildExc)
-			else:
-				cmd = self.runTask(mygod)
+					except subprocess.TimeoutExpired as e:
+						pass
 
-				self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-				self.outStream = NonBlockingStreamReader(self.proc.stdout)
-
-			g_util.isRestart = False	# it's used in NonBlockingStreamReader
-
-		if self.outStream is not None:
-			line = self.outStream.readline(0.1)
-			if line is None:
-				return
-
-			if line is "":
-				if not g_util.isRestart:
-					raise Exception("run: the application has been terminated.")
-			else:
-				ss = line.decode("utf8")
-				print(ss[:-1])
+					if g_util.isRestart:
+						g_util.isRestart = False
+						p.terminate()
+						break
 
 	def run(self, cmd, expandVars=True):
 		"""
@@ -196,12 +185,10 @@ class Tasks():
 			"""
 			with Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, bufsize=1, universal_newlines=True) as p:
 				fdout = p.stdout.fileno()
-				fl = fcntl.fcntl(fdout, fcntl.F_GETFL)
-				fcntl.fcntl(fdout, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+				fcntl.fcntl(fdout, fcntl.F_SETFL, fcntl.fcntl(fdout, fcntl.F_GETFL) | os.O_NONBLOCK)
 
 				fderr = p.stderr.fileno()
-				fl = fcntl.fcntl(fderr, fcntl.F_GETFL)
-				fcntl.fcntl(fderr, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+				fcntl.fcntl(fderr, fcntl.F_SETFL, fcntl.fcntl(fderr, fcntl.F_GETFL) | os.O_NONBLOCK)
 
 				while True:
 					reads = [fdout, fderr]
@@ -214,16 +201,14 @@ class Tasks():
 						
 					if p.poll() != None:
 						break
-
 			rc = p.returncode
 			if rc != 0:
 				raise subprocess.CalledProcessError(rc, cmd)
 			"""
-			with Popen(cmd, shell=True, stdout=sys.stdout, stderr=sys.stderr, bufsize=1, universal_newlines=True) as p:
+			with Popen(cmd, shell=True, universal_newlines=True) as p:
 				p.communicate()
 				if p.returncode != 0:
 					raise subprocess.CalledProcessError(p.returncode, cmd)
-
 
 	def runRet(self, cmd):
 		try:
@@ -844,21 +829,24 @@ def taskSetup(target, serverName):
 
 
 def taskServe():
-	observer = Observer()
+	observer = None
 	if len(g_config.serve.patterns) > 0:
+		observer = Observer()
 		observer.schedule(MyHandler(g_config.serve.patterns), path=".", recursive=True)
 		observer.start()
 
-	g_util.isRestart = True
 	try:
 		while True:
 			time.sleep(0.01)
+			g_util.isRestart = False
 			g_local.doServeStep(g_mygod)
 
 	except KeyboardInterrupt:
-		observer.stop()
+		if observer is not None:
+			observer.stop()
 
-	observer.join()
+	if observer is not None:
+		observer.join()
 
 
 if __name__ == "__main__":
