@@ -160,7 +160,7 @@ class Tasks():
 						p.terminate()
 						break
 
-	def run(self, cmd, expandVars=True):
+	def runOutput(self, cmd, expandVars=True):
 		"""
 		cmd: string or array
 		expandVars:
@@ -175,12 +175,14 @@ class Tasks():
 		else:
 			return subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, executable='/bin/bash')
 
-	def runPipe(self, cmd, expandVars=True):
+	def run(self, cmd, expandVars=True):
+		print("execute[%s].." % (cmd))
+
 		if expandVars:
 			cmd = strExpand(cmd, g_dic)
 
 		if self.server is not None:
-			return self.ssh.runPipe(cmd)
+			return self.ssh.run(cmd)
 		else:
 			"""
 			with Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, bufsize=1, universal_newlines=True) as p:
@@ -207,6 +209,7 @@ class Tasks():
 			"""
 			with Popen(cmd, shell=True, universal_newlines=True) as p:
 				p.communicate()
+				print("  -> ret:%d" % (p.returncode))
 				if p.returncode != 0:
 					raise subprocess.CalledProcessError(p.returncode, cmd)
 

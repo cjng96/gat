@@ -40,8 +40,6 @@ class CoSsh:
 			self.ssh.close()
 
 	def _run(self, cmd, doOutput, arg):
-		print("execute[%s].." % (cmd))
-
 		chan = self.ssh.get_transport().open_session()
 		#chan.get_pty()
 		chan.exec_command(cmd)
@@ -67,7 +65,7 @@ class CoSsh:
 				pass
 
 		ret = chan.recv_exit_status()
-		print("-> ret:%d" % (ret))
+		print("  -> ret:%d" % (ret))
 		chan.close()
 		if ret != 0:
 			#raise CalledProcessError("ssh command failed with ret:%d" % ret)
@@ -75,14 +73,14 @@ class CoSsh:
 			raise subprocess.CalledProcessError(ret, cmd, "")
 
 	# return: nothing
-	def runPipe(self, cmd):
+	def run(self, cmd):
 		def doOutput(isStdout, ss):
 			print(ss, end="")	
 
 		self._run(cmd, doOutput, None)
 
 	# return: result
-	def run(self, cmd):
+	def runOutput(self, cmd):
 		out = [""]
 		def doOutput(isStdout, ss, arg):
 			arg[0] += ss
