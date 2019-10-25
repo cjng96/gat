@@ -27,11 +27,11 @@ servers:
   - name: test
     host: test.com
     port: 22
-    id: test			# ssh worker user id
+    id: test      # ssh worker user id
     owner: engt   # opt, generated files owner
       # if it's not specified, you don't need sudo right
       # if you need the operation needed sudo right, should specify it.
-    targetPath: ~/test	# deployment target path
+    targetPath: ~/test  # deployment target path
 
 '''
 
