@@ -39,22 +39,21 @@ class CoSsh:
 		if hasattr(self, "ssh"):
 			self.ssh.close()
 
-
-	# return: result
-	def run(self, cmd):
+	def _run(self, cmd, doOutput, arg):
 		print("execute[%s].." % (cmd))
 
 		chan = self.ssh.get_transport().open_session()
 		#chan.get_pty()
 		chan.exec_command(cmd)
 		chan.setblocking(0)
-		out = ""
 		while True:
 			try:
 				line = chan.recv(99999)
 				if len(line) == 0:
 					break
-				out += line.decode("utf-8")
+
+				doOutput(True, line.decode("utf-8"), arg)
+
 			except socket.timeout as e:
 				pass
 
@@ -62,21 +61,34 @@ class CoSsh:
 				line = chan.recv_stderr(99999)
 				if len(line) == 0:
 					break
-				out += line.decode("utf-8")
+
+				doOutput(False, line.decode("utf-8"), arg)
 			except socket.timeout as e:
 				pass
-
-			print(out, end="")	
-			out = ""
 
 		ret = chan.recv_exit_status()
 		print("-> ret:%d" % (ret))
 		chan.close()
 		if ret != 0:
 			#raise CalledProcessError("ssh command failed with ret:%d" % ret)
-			raise subprocess.CalledProcessError(ret, cmd, out)
-		return out
+			# TODO: output?
+			raise subprocess.CalledProcessError(ret, cmd, "")
 
+	# return: nothing
+	def runPipe(self, cmd):
+		def doOutput(isStdout, ss):
+			print(ss, end="")	
+
+		self._run(cmd, doOutput, None)
+
+	# return: result
+	def run(self, cmd):
+		out = [""]
+		def doOutput(isStdout, ss, arg):
+			arg[0] += ss
+
+		self._run(cmd, doOutput, out)
+		return out[0]
 
 	# sftp 상에 경로를 생성한다.
 	# remote 경로가 directory이면, is_dir에 True를 전달한다.

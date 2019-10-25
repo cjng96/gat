@@ -7,6 +7,8 @@ import json
 import paramiko
 import platform
 import yaml
+import fcntl
+import select
 import socket
 import subprocess
 import datetime
@@ -15,6 +17,8 @@ import re
 import inspect
 import traceback
 from copy import deepcopy
+from io import StringIO
+from subprocess import Popen, PIPE
 
 import zipfile
 import tempfile
@@ -180,7 +184,46 @@ class Tasks():
 		if self.server is not None:
 			return self.ssh.run(cmd)
 		else:
-			return subprocess.check_output(cmd, shell=True, executable='/bin/bash')
+			return subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, executable='/bin/bash')
+
+	def runPipe(self, cmd, expandVars=True):
+		if expandVars:
+			cmd = strExpand(cmd, g_dic)
+
+		if self.server is not None:
+			return self.ssh.runPipe(cmd)
+		else:
+			"""
+			with Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, bufsize=1, universal_newlines=True) as p:
+				fdout = p.stdout.fileno()
+				fl = fcntl.fcntl(fdout, fcntl.F_GETFL)
+				fcntl.fcntl(fdout, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+
+				fderr = p.stderr.fileno()
+				fl = fcntl.fcntl(fderr, fcntl.F_GETFL)
+				fcntl.fcntl(fderr, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+
+				while True:
+					reads = [fdout, fderr]
+					ret = select.select(reads, [], [])
+					for fd in ret[0]:
+						if fd == fdout:
+							print(p.stdout.read(), end='')
+						if fd == fderr:
+							print(p.stderr.read(), end='')
+						
+					if p.poll() != None:
+						break
+
+			rc = p.returncode
+			if rc != 0:
+				raise subprocess.CalledProcessError(rc, cmd)
+			"""
+			with Popen(cmd, shell=True, stdout=sys.stdout, stderr=sys.stderr, bufsize=1, universal_newlines=True) as p:
+				p.communicate()
+				if p.returncode != 0:
+					raise subprocess.CalledProcessError(p.returncode, cmd)
+
 
 	def runRet(self, cmd):
 		try:
@@ -802,8 +845,9 @@ def taskSetup(target, serverName):
 
 def taskServe():
 	observer = Observer()
-	observer.schedule(MyHandler(g_config.serve.patterns), path=".", recursive=True)
-	observer.start()
+	if len(g_config.serve.patterns) > 0:
+		observer.schedule(MyHandler(g_config.serve.patterns), path=".", recursive=True)
+		observer.start()
 
 	g_util.isRestart = True
 	try:
