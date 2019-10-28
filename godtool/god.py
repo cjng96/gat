@@ -8,6 +8,7 @@ import paramiko
 import platform
 import yaml
 import fcntl
+import shutil
 import select
 import socket
 import subprocess
@@ -305,15 +306,16 @@ class Tasks():
 
 	def _helperRun(self, args, sudo=False):
 		pp2 = "/tmp/godHelper.py"
-		if not self._uploadHelper:
-			self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
-			self._uploadHelper = True
+
+		if self == g_local:
+			shutil.copyfile(os.path.join(g_scriptPath, 'godHelper.py'), pp2)
+		else:
+			if not self._uploadHelper:
+				self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
+				self._uploadHelper = True
 
 		ss = str2arg(json.dumps(args, cls=ObjectEncoder))
-		if sudo:
-			self.run("sudo python3 %s runStr \"%s\"" % (pp2, ss), expandVars=False)
-		else:
-			self.run("python3 %s runStr \"%s\"" % (pp2, ss), expandVars=False)
+		self.run("%s python3 %s runStr \"%s\"" % ('sudo' if sudo else '', pp2, ss), expandVars=False)
 
 	def userNew(self, name, existOk=False, sshKey=False):
 		print("task: userNew...")
@@ -333,7 +335,7 @@ class Tasks():
 
 	def strEnsure(self, path, str, sudo=False):
 		print("task: strEnsure...")
-		self.onlyRemote
+		self.onlyRemote()
 
 		args = dict(cmd="strEnsure", dic=g_dic,
 			path=path, str=str)
@@ -345,7 +347,7 @@ class Tasks():
 		block: vv=1
 		'''
 		print("task: config block...")
-		self.onlyRemote()
+		#self.onlyRemote()
 
 		args = dict(cmd="configBlock", dic=g_dic,
 			path=path, marker=marker, block=block, insertAfter=insertAfter)
@@ -353,7 +355,7 @@ class Tasks():
 
 	def configLine(self, path, regexp, line, items=None, sudo=False):
 		print("task: config line...")
-		self.onlyRemote()
+		#self.onlyRemote()
 
 		args = dict(cmd="configLine", dic=g_dic,
 			path=path, regexp=regexp, line=line, items=items)
@@ -373,7 +375,6 @@ class Tasks():
 
 	def s3DownloadFiles(self, bucket, prefix, nameList, targetFolder):
 		print("task: s3 download files[%s/%s]..." % (bucket, prefix))
-
 		self.onlyLocal()
 
 		if not targetFolder.endswith("/"):
@@ -747,7 +748,7 @@ def main():
 			pass
 		elif cmd == "setup":
 			# server sys
-			if cnt < 4:
+			if cnt < 3:
 				print("god setup FILE.py SERVER_NAME")
 				return
 			target = sys.argv[2]
@@ -798,6 +799,15 @@ god setup [GOD_FILE] SERVER_NAME - Setup server defined in GOD_FILE.
 		taskDeploy(target)
 		return
 	elif cmd == "setup":
+		if cnt < 4:
+			ss = ''
+			for it in g_config.servers:
+				ss += it['name'] + '|'
+
+			print("god setup FILE.py [%s]" % ss[:-1])
+			return
+
+		# support empty server name?
 		serverName = "" if cnt <= 3 else sys.argv[3]
 		taskSetup(target, serverName)
 		return
