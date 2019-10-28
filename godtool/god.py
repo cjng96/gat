@@ -172,7 +172,7 @@ class Tasks():
 			cmd = strExpand(cmd, g_dic)
 
 		if self.server is not None:
-			return self.ssh.run(cmd)
+			return self.ssh.runOutput(cmd)
 		else:
 			return subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, executable='/bin/bash')
 
@@ -467,14 +467,14 @@ def taskDeploy(serverName):
 
 	name = g_config.config.name
 	targetPath = server.targetPath
-	realTarget = g_remote.run("mkdir -p %s/shared && cd %s" % (targetPath, targetPath) +
+	realTarget = g_remote.runOutput("mkdir -p %s/shared && cd %s" % (targetPath, targetPath) +
 		"&& mkdir -p releases" +
 		"&& sudo chown %s: %s %s/shared %s/releases" % (server.owner, targetPath, targetPath, targetPath) if server.owner else "" +
 		"&& pwd ")
 	realTarget = realTarget.strip("\r\n")	# for sftp
 
 	todayName = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")[2:]
-	res = g_remote.run("cd %s/releases && ls -d */" % targetPath)
+	res = g_remote.runOutput("cd %s/releases && ls -d */" % targetPath)
 	releases = list(filter(lambda x: re.match('\d{6}_\d{6}', x) is not None, res.split()))
 	releases.sort()
 
@@ -485,11 +485,11 @@ def taskDeploy(serverName):
 		print("deploy: remove old %d folders" % (cnt - max))
 		removeList = releases[:cnt-max]
 		for ff in removeList:
-			g_remote.run("%s rm -rf %s/releases/%s" % (sudoCmd, targetPath, ff))
+			g_remote.runOutput("%s rm -rf %s/releases/%s" % (sudoCmd, targetPath, ff))
 
 	# if deploy / owner is defined,
 	# create release folder as ssh user, upload, extract then change release folder to deploy / owner
-	res = g_remote.run("cd %s/releases" % targetPath +
+	res = g_remote.runOutput("cd %s/releases" % targetPath +
 		"&& %s mkdir %s" % (sudoCmd, todayName) +
 		"&& sudo chown %s: %s" % (server.owner, todayName) if server.owner else ""
 		)

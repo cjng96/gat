@@ -74,7 +74,7 @@ class CoSsh:
 
 	# return: nothing
 	def run(self, cmd):
-		def doOutput(isStdout, ss):
+		def doOutput(isStdout, ss, arg):
 			print(ss, end="")	
 
 		self._run(cmd, doOutput, None)
