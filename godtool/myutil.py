@@ -29,7 +29,7 @@ def str2arg(ss):
 
 def envExpand(ss):
 	while True:
-		m = re.search(r"\$\{([\w_]+)\}", ss)
+		m = re.search(r"\$\{\{([\w_]+)\}\}", ss)
 		if m is None:
 			return ss
 
