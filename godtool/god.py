@@ -7,7 +7,6 @@ import json
 import paramiko
 import platform
 import yaml
-import fcntl
 import shutil
 import select
 import socket
@@ -37,8 +36,6 @@ from .myutil import NonBlockingStreamReader, str2arg, mergeDict, envExpand, Dict
 
 g_cwd = ""
 g_scriptPath = ""
-
-
 
 
 class MyUtil():
@@ -77,7 +74,7 @@ class Tasks():
 		#self.dic = Dict2()
 		self.config = deepcopy(g_config)
 		# 이건 일단은 남겨두자. 나중에 없앨꺼다.
-		self.config.add("name", g_config.config.name)
+		self.config.add("name", g_config.name)
 
 		if server is not None:		
 			# server without vars
@@ -122,7 +119,7 @@ class Tasks():
 			if type(cmd) != list:
 				raise Exception("the return value of runTask function should be list type.")
 		else:
-			cmd = ["./"+g_config.config.name]
+			cmd = ["./"+g_config.name]
 
 		print("run: running the app[%s]..." % cmd)
 		if subprocess.call("type unbuffer", shell=True) == 0:
@@ -168,6 +165,8 @@ class Tasks():
 		return: stdout string
 		exception: subprocess.CalledProcessError(returncode, output)
 		"""
+		print("executeOutput[%s].." % (cmd))
+
 		if expandVars:
 			cmd = strExpand(cmd, g_dic)
 
@@ -243,11 +242,11 @@ class Tasks():
 		self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
 
 	def goBuild(self):
-		print("task: goBuild as [%s]..." % g_config.config.name)
+		print("task: goBuild as [%s]..." % g_config.name)
 
 		self.onlyLocal()
 
-		cmd = ["go", "build", "-o", g_config.config.name]
+		cmd = ["go", "build", "-o", g_config.name]
 		ret = subprocess.run(cmd)
 		if ret.returncode != 0:
 			raise Exception("task.goBuild: build failed")
@@ -428,8 +427,9 @@ class MyHandler(PatternMatchingEventHandler):
 def dicInit(server):
 	global g_dic
 	g_dic = deepcopy(g_config)
-	g_dic.server = server
-	g_dic.vars = deepcopy(server.vars)
+	g_dic.dic['server'] = server
+	g_dic.dic['vars'] = deepcopy(server.vars)
+	g_util.dic = g_dic
 
 def configServerGet(name):
 	server = None
@@ -465,16 +465,17 @@ def taskDeploy(serverName):
 	if server.owner:
 		sudoCmd = "sudo"
 
-	name = g_config.config.name
-	targetPath = server.targetPath
-	realTarget = g_remote.runOutput("mkdir -p %s/shared && cd %s" % (targetPath, targetPath) +
+	name = g_config.name
+	deployRoot = server.targetPath
+	realTarget = g_remote.runOutput("mkdir -p %s/shared && cd %s" % (deployRoot, deployRoot) +
 		"&& mkdir -p releases" +
-		"&& sudo chown %s: %s %s/shared %s/releases" % (server.owner, targetPath, targetPath, targetPath) if server.owner else "" +
-		"&& pwd ")
+		"&& sudo chown %s: %s %s/shared %s/releases && pwd" % (server.owner, deployRoot, deployRoot, deployRoot) if server.owner else "&& pwd")
+		# TODO: 이거 &&pwd 따로 붙이면 안되는데 이유를 모르겠다.
+
 	realTarget = realTarget.strip("\r\n")	# for sftp
 
 	todayName = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")[2:]
-	res = g_remote.runOutput("cd %s/releases && ls -d */" % targetPath)
+	res = g_remote.runOutput("cd %s/releases && ls -d */" % deployRoot)
 	releases = list(filter(lambda x: re.match('\d{6}_\d{6}', x) is not None, res.split()))
 	releases.sort()
 
@@ -485,22 +486,23 @@ def taskDeploy(serverName):
 		print("deploy: remove old %d folders" % (cnt - max))
 		removeList = releases[:cnt-max]
 		for ff in removeList:
-			g_remote.runOutput("%s rm -rf %s/releases/%s" % (sudoCmd, targetPath, ff))
+			g_remote.runOutput("%s rm -rf %s/releases/%s" % (sudoCmd, deployRoot, ff))
 
 	# if deploy / owner is defined,
 	# create release folder as ssh user, upload, extract then change release folder to deploy / owner
-	res = g_remote.runOutput("cd %s/releases" % targetPath +
+	res = g_remote.runOutput("cd %s/releases" % deployRoot +
 		"&& %s mkdir %s" % (sudoCmd, todayName) +
 		"&& sudo chown %s: %s" % (server.owner, todayName) if server.owner else ""
 		)
 
 	# pre task
-	g_util.deployRoot = targetPath
+	deployPath = os.path.join(realTarget, "releases", todayName)
+	g_dic.dic['deployRoot'] = deployRoot
+	g_dic.dic['deployPath'] = deployPath
 	if hasattr(g_mygod, "deployPreTask"):
 		g_mygod.deployPreTask(util=g_util, remote=g_remote, local=g_local)
 
 	# upload files
-	realTargetFull = os.path.join(realTarget, "releases", todayName)
 	include = []
 	include = g_config.deploy.include
 	exclude = g_config.get("deploy.exclude", [])
@@ -571,7 +573,7 @@ def taskDeploy(serverName):
 							_zipAdd(os.path.join(folder, ff), os.path.join(target, cutpath(src, folder), ff))
 
 		g_remote.uploadFile(zipPath, "/tmp/godUploadPkg.zip")	# we don't include it by default
-		g_remote.run("cd %s/releases/%s" % (targetPath, todayName) +
+		g_remote.run("cd %s/releases/%s" % (deployRoot, todayName) +
 			"&& %s unzip /tmp/godUploadPkg.zip && rm /tmp/godUploadPkg.zip" % sudoCmd
 			)
 		os.remove(zipPath)
@@ -613,13 +615,13 @@ def taskDeploy(serverName):
 	for pp in sharedLinks:
 		print("deploy: sharedLinks - %s" % pp)
 		folder = os.path.dirname(pp)
-		g_remote.run("cd %s && mkdir -p shared/%s" % (targetPath, folder) +
-		"&& %s ln -sf %s/shared/%s releases/%s/%s" % (sudoCmd, targetPath, pp, todayName, pp))
+		g_remote.run("cd %s && mkdir -p shared/%s" % (deployRoot, folder) +
+		"&& %s ln -sf %s/shared/%s releases/%s/%s" % (sudoCmd, deployRoot, pp, todayName, pp))
 
 	# update link
-	g_remote.run("cd %s && %s rm current" % (targetPath, sudoCmd) +
+	g_remote.run("cd %s && %s rm current" % (deployRoot, sudoCmd) +
 		"&& %s ln -sf releases/%s current" % (sudoCmd, todayName) +
-		"&& sudo chown %s: current %s/releases/%s -R" % (server.owner, targetPath, todayName) if server.owner else ""
+		"&& sudo chown %s: current %s/releases/%s -R" % (server.owner, deployRoot, todayName) if server.owner else ""
 	)
 
 	# post process
@@ -627,7 +629,7 @@ def taskDeploy(serverName):
 		g_mygod.deployPostTask(util=g_util, remote=g_remote, local=g_local)
 
 	if server.owner:
-		g_remote.run("cd %s && sudo chown %s: releases/%s current" % (targetPath, server.owner, todayName))
+		g_remote.run("cd %s && sudo chown %s: releases/%s current" % (deployRoot, server.owner, todayName))
 
 def initSamples(type, fn):
 	with open(fn, "w") as fp:
@@ -642,7 +644,7 @@ def printTasks():
 	print(
 '''god-tool V%s
 buildTask - 
-  goBuild(args): "go build -o config.name"
+  goBuild(args): "go build -o name"
 servePreTask - 
   gqlGen(): running "go run github.com/99designs/gqlgen" job for gqlgen(https://github.com/99designs/gqlgen)
 deployPostTask - 
@@ -708,6 +710,8 @@ class Helper:
 
 g_config = Dict2()
 g_dic = None
+# config, server, vars(of server)
+# deployRoot, deployPath
 g_mygod = None
 
 g_util = MyUtil()
@@ -781,8 +785,8 @@ god setup [GOD_FILE] SERVER_NAME - Setup server defined in GOD_FILE.
 
 	print("god-tool V%s" % __version__)
 	global g_config
-	name = g_config.config.name
-	type = g_config.get("config.type", "app")
+	name = g_config.name
+	type = g_config.get("type", "app")
 
 	print("** config[type:%s, name:%s]" % (type, name))
 	global g_local

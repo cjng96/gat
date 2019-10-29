@@ -44,13 +44,14 @@ class CoSsh:
 		#chan.get_pty()
 		chan.exec_command(cmd)
 		chan.setblocking(0)
-		while True:
+		isLoop = True
+		while isLoop:
 			try:
 				line = chan.recv(99999)
 				if len(line) == 0:
-					break
-
-				doOutput(True, line.decode("utf-8"), arg)
+					isLoop = False
+				else:
+					doOutput(True, line.decode("utf-8"), arg)
 
 			except socket.timeout as e:
 				pass
@@ -58,9 +59,10 @@ class CoSsh:
 			try:
 				line = chan.recv_stderr(99999)
 				if len(line) == 0:
-					break
+					isLoop = False
+				else:
+					doOutput(False, line.decode("utf-8"), arg)
 
-				doOutput(False, line.decode("utf-8"), arg)
 			except socket.timeout as e:
 				pass
 
@@ -81,11 +83,13 @@ class CoSsh:
 
 	# return: result
 	def runOutput(self, cmd):
-		out = [""]
+		out = ['']
 		def doOutput(isStdout, ss, arg):
+			print("ssh out - ", ss)
 			arg[0] += ss
 
 		self._run(cmd, doOutput, out)
+		print("  -> output:%s" % (out[0]))
 		return out[0]
 
 	# sftp 상에 경로를 생성한다.

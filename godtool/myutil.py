@@ -99,6 +99,7 @@ class ObjectEncoder(json.JSONEncoder):
 class Dict2():
 	'''
 	dic["attr"] -> dic.attr
+	dic.val = 1
 	'''
 	def __init__(self, dic=None):
 		self.dic = dict()

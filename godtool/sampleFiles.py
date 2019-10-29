@@ -1,9 +1,8 @@
 sampleApp = """
 # https://
 config='''
-config:
-  name: sample
-  type: app	# it's default
+name: sample
+type: app	# it's default
 
 serve:
   patterns: [ "*.go", "*.json", "*.graphql" ]
@@ -48,12 +47,13 @@ class myGod:
 	#	return [util.config.config.name]
 
 	def deployPreTask(self, util, remote, local, **_):
+		#print('deploy to {{server.name}}) # remote.server.name
 		#local.run("npm run build")
 		pass
 
 	def deployPostTask(self, util, remote, local, **_):
 		#remote.pm2Register():
-		#local.run("cd %%s/current && echo 'finish'" %% util.deployRoot)
+		#local.run("cd {{deployRoot}}/current && echo 'finish'") # util.dic.deployRoot
 		pass
 
 """
@@ -61,9 +61,9 @@ class myGod:
 sampleSys = """
 # https://
 config='''
-config:
-  type: sys
-  name: test	# hostname
+name: test	# hostname
+type: sys
+
 s3:
   key: ${aws_key}
   secret: ${aws_secret}

@@ -118,12 +118,13 @@ def configAdd(path, marker, str, insertAfter):
 			fp.write(ss)
 
 def strEnsure(path, str):
+	path = strExpand(path, g_dic)
 	with open(path, "rt") as fp:
 		ss = fp.read()
 		hr = ss.find(str)
 		if hr != -1:
 			return
-		
+
 	with open(path, "at") as fp:
 		fp.write("\n"+str)
 
