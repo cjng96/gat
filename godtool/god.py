@@ -431,6 +431,7 @@ def dicInit(server):
 	g_dic.dic['vars'] = deepcopy(server.vars)
 	g_util.dic = g_dic
 
+
 def configServerGet(name):
 	server = None
 	for it in g_config.servers:
@@ -467,10 +468,10 @@ def taskDeploy(serverName):
 
 	name = g_config.name
 	deployRoot = server.targetPath
-	realTarget = g_remote.runOutput("mkdir -p %s/shared && cd %s" % (deployRoot, deployRoot) +
-		"&& mkdir -p releases" +
-		"&& sudo chown %s: %s %s/shared %s/releases && pwd" % (server.owner, deployRoot, deployRoot, deployRoot) if server.owner else "&& pwd")
-		# TODO: 이거 &&pwd 따로 붙이면 안되는데 이유를 모르겠다.
+	realTarget = g_remote.runOutput('mkdir -p %s/shared && cd %s' % (deployRoot, deployRoot) +
+		'&& mkdir -p releases' +
+		#('&& sudo chown %s: %s %s/shared %s/releases' % (server.owner, deployRoot, deployRoot, deployRoot) if server.owner else '') +
+		'&& pwd')
 
 	realTarget = realTarget.strip("\r\n")	# for sftp
 
@@ -510,9 +511,7 @@ def taskDeploy(serverName):
 
 	def _filterFunc(pp):
 		pp = os.path.normpath(pp)
-		if pp in exclude:
-			return True
-		return False
+		return pp in exclude
 
 	strategy = g_config.deploy.strategy
 	if strategy == "zip":
@@ -549,12 +548,13 @@ def taskDeploy(serverName):
 							print("deploy: skip - %s" % pp)
 							continue
 
-						for folder, dirs, files in os.walk(pp):
+						for folder, dirs, files in os.walk(pp, followlinks=g_dic.deploy.followLinks):
 							# filtering dirs too
 							dirs2 = []
 							for d in dirs:
-								if _filterFunc(d):
-									print("deploy: skip - %s" % d)
+								dd = os.path.join(folder, d)
+								if _filterFunc(dd):
+									print("deploy: skip - %s" % dd)
 								else:
 									dirs2.append(d)
 							dirs[:] = dirs2
@@ -629,7 +629,8 @@ def taskDeploy(serverName):
 		g_mygod.deployPostTask(util=g_util, remote=g_remote, local=g_local)
 
 	if server.owner:
-		g_remote.run("cd %s && sudo chown %s: releases/%s current" % (deployRoot, server.owner, todayName))
+		g_remote.run('cd %s && sudo chown %s: shared releases/%s current -R' % (deployRoot, server.owner, todayName))
+		g_remote.run('cd %s && sudo chmod 775 shared releases/%s current -R' % (deployRoot, todayName))
 
 def initSamples(type, fn):
 	with open(fn, "w") as fp:
@@ -692,6 +693,11 @@ class Helper:
 			try:
 				g_config = Dict2(yaml.safe_load(ss))
 				#g_util.config = g_config
+
+				if g_config.type == 'app':
+					if 'followLinks' not in g_config.deploy:
+						g_config.deploy['followLinks'] = False
+
 			except yaml.YAMLError as e:
 				raise e
 		else:
