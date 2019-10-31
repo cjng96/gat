@@ -111,6 +111,12 @@ class Tasks():
 		else:
 			print("You should override buildTask method.")
 
+	def makeFile(self, content, path, sudo=False):
+		self.onlyRemote()
+		ss = content.replace('"', '\\"').replace('%', '\%')
+
+		self.run('echo "{1}" | sudo dd of={2}'.format('sudo' if sudo else '', ss, path))
+
 	def runTask(self, mygod):
 		self.onlyLocal()
 
