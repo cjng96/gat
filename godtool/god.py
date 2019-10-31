@@ -458,7 +458,6 @@ def taskDeploy(serverName):
 	g_remote = Tasks(server)
 	dicInit(server)
 
-
 	# expand env and variables
 	expandVar(g_config)
 
@@ -468,15 +467,22 @@ def taskDeploy(serverName):
 
 	name = g_config.name
 	deployRoot = server.targetPath
-	realTarget = g_remote.runOutput('mkdir -p %s/shared && cd %s' % (deployRoot, deployRoot) +
-		'&& mkdir -p releases' +
-		#('&& sudo chown %s: %s %s/shared %s/releases' % (server.owner, deployRoot, deployRoot, deployRoot) if server.owner else '') +
-		'&& pwd')
-
+	realTarget = g_remote.runOutput('realpath %s' % deployRoot)
 	realTarget = realTarget.strip("\r\n")	# for sftp
-
 	todayName = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")[2:]
-	res = g_remote.runOutput("cd %s/releases && ls -d */" % deployRoot)
+
+	# pre task
+	deployPath = os.path.join(realTarget, "releases", todayName)
+	g_dic.dic['deployRoot'] = deployRoot
+	g_dic.dic['deployPath'] = deployPath
+	if hasattr(g_mygod, "deployPreTask"):
+		g_mygod.deployPreTask(util=g_util, remote=g_remote, local=g_local)
+
+	# prepare target folder
+	g_remote.runOutput('{0} mkdir -p {1}/shared && {0} mkdir -p {1}/releases'.format(sudoCmd, deployRoot))
+	#('&& sudo chown %s: %s %s/shared %s/releases' % (server.owner, deployRoot, deployRoot, deployRoot) if server.owner else '') +
+
+	res = g_remote.runOutput("cd {0}/releases && ls -d *".format(deployRoot))
 	releases = list(filter(lambda x: re.match('\d{6}_\d{6}', x) is not None, res.split()))
 	releases.sort()
 
@@ -495,13 +501,6 @@ def taskDeploy(serverName):
 		"&& %s mkdir %s" % (sudoCmd, todayName) +
 		"&& sudo chown %s: %s" % (server.owner, todayName) if server.owner else ""
 		)
-
-	# pre task
-	deployPath = os.path.join(realTarget, "releases", todayName)
-	g_dic.dic['deployRoot'] = deployRoot
-	g_dic.dic['deployPath'] = deployPath
-	if hasattr(g_mygod, "deployPreTask"):
-		g_mygod.deployPreTask(util=g_util, remote=g_remote, local=g_local)
 
 	# upload files
 	include = []
@@ -619,8 +618,8 @@ def taskDeploy(serverName):
 		"&& %s ln -sf %s/shared/%s releases/%s/%s" % (sudoCmd, deployRoot, pp, todayName, pp))
 
 	# update link
-	g_remote.run("cd %s && %s rm current" % (deployRoot, sudoCmd) +
-		"&& %s ln -sf releases/%s current" % (sudoCmd, todayName) +
+	g_remote.run("cd %s && %s rm -f current " % (deployRoot, sudoCmd) +
+		"&& %s ln -sf releases/%s current " % (sudoCmd, todayName) +
 		"&& sudo chown %s: current %s/releases/%s -R" % (server.owner, deployRoot, todayName) if server.owner else ""
 	)
 
@@ -725,6 +724,16 @@ g_local = None
 g_remote = None
 
 
+def help(target):
+	print("god-tool V%s" % (__version__))
+	if target is not None:
+		print("There is no %s script file." % target)
+	print("""god init (sys|app) [GOD_FILE] - Generates god file.
+god [GOD_FILE] - Serves application service. use god_my.py file if GOD_FILE is skipped.
+god deploy SERVER_NAME - Deploy the application to the server.
+god setup [GOD_FILE] SERVER_NAME - Setup server defined in GOD_FILE."""
+ 	)
+
 def main():
 	global g_cwd, g_scriptPath, g_mygod
 	g_cwd = os.getcwd()
@@ -764,6 +773,10 @@ def main():
 			target = sys.argv[2]
 			if not target.endswith(".py"):
 				target += ".py"
+
+		elif cmd == '--help':
+			help(None)
+			return
 		else:
 			print("unknown command - %s" % cmd)
 			return
@@ -774,13 +787,7 @@ def main():
 
 	# check first
 	if not os.path.exists(target):	# or not os.path.exists("god.yml"):
-		print("""god-tool V%s\n
-There is no %s script file.
-god init (sys|app) [GOD_FILE] - Generates god file.
-god [GOD_FILE] - Serves application service. use god_my.py file if GOD_FILE is skipped.
-god deploy SERVER_NAME - Deploy the application to the server.
-god setup [GOD_FILE] SERVER_NAME - Setup server defined in GOD_FILE.
-""" % (__version__, target))
+		help(target)
 		return
 
 	helper = Helper()
@@ -796,7 +803,7 @@ god setup [GOD_FILE] SERVER_NAME - Setup server defined in GOD_FILE.
 
 	print("** config[type:%s, name:%s]" % (type, name))
 	global g_local
-	g_local = Tasks(None)	
+	g_local = Tasks(None)
 
 	if cmd == "deploy":
 		#g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
