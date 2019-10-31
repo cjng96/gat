@@ -3,6 +3,7 @@ import os
 import paramiko
 import socket
 import subprocess
+import signal
 
 from .coPath import cutpath, path2folderList
 
@@ -10,6 +11,23 @@ from .coPath import cutpath, path2folderList
 class SshAllowAllKeys(paramiko.MissingHostKeyPolicy):
     def missing_host_key(self, client, hostname, key):
    	    return
+
+
+class MyCalledProcessError(subprocess.CalledProcessError):
+	def __init__(self, returncode, cmd, output=None, stderr=None):
+		super(MyCalledProcessError, self).__init__(returncode, cmd, output, stderr)
+
+	def __str__(self):
+		if self.returncode and self.returncode < 0:
+			try:
+				return "Command '%s' died with %r." % (
+								self.cmd, signal.Signals(-self.returncode))
+			except ValueError:
+				return "Command '%s' died with unknown signal %d." % (
+								self.cmd, -self.returncode)
+		else:
+			return "Command '%s' returned non-zero exit status %d.%s" % (
+							self.cmd, self.returncode, '\n out:[%s]' % self.output if self.output else '')
 
 def falseFunc(pp):
 	return False
@@ -71,8 +89,8 @@ class CoSsh:
 		chan.close()
 		if ret != 0:
 			#raise CalledProcessError("ssh command failed with ret:%d" % ret)
-			# TODO: output?
-			raise subprocess.CalledProcessError(ret, cmd, "")
+			ss = '' if arg is None else arg[0]
+			raise MyCalledProcessError(ret, cmd, ss)
 
 	# return: nothing
 	def run(self, cmd):
@@ -85,7 +103,6 @@ class CoSsh:
 	def runOutput(self, cmd):
 		out = ['']
 		def doOutput(isStdout, ss, arg):
-			print("ssh out - ", ss)
 			arg[0] += ss
 
 		self._run(cmd, doOutput, out)
