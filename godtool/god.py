@@ -629,13 +629,15 @@ def taskDeploy(serverName):
 		"&& sudo chown %s: current %s/releases/%s -R" % (server.owner, deployRoot, todayName) if server.owner else ""
 	)
 
+	# file owner
+	if server.owner:
+		g_remote.run('cd %s && sudo chown %s: shared releases/%s current -R' % (deployRoot, server.owner, todayName))
+		g_remote.run('cd %s && sudo chmod 775 shared releases/%s current -R' % (deployRoot, todayName))
+
 	# post process
 	if hasattr(g_mygod, "deployPostTask"):
 		g_mygod.deployPostTask(util=g_util, remote=g_remote, local=g_local)
 
-	if server.owner:
-		g_remote.run('cd %s && sudo chown %s: shared releases/%s current -R' % (deployRoot, server.owner, todayName))
-		g_remote.run('cd %s && sudo chmod 775 shared releases/%s current -R' % (deployRoot, todayName))
 
 def initSamples(type, fn):
 	with open(fn, "w") as fp:
