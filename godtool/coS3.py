@@ -1,6 +1,7 @@
 import os
 import boto3
 import botocore
+import io
 #from myutil import glog
 
 class CoS3:
@@ -134,6 +135,12 @@ class CoBucket:
 
 		#f1 = self.s3.res.Object(self.name, key)
 		#f1.download_file(target)
-		self.bucket.download_file(key, target)
-		return target
+		if target is None:
+			with io.BytesIO() as f:
+				self.bucket.download_fileobj(key, f)
+				return f.read()
+
+		else:
+			self.bucket.download_file(key, target)
+			return target
 	
