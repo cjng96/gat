@@ -58,10 +58,8 @@ class Tasks():
 
 		if server is not None:
 			if dkTunnel is None:
-				self.ssh = CoSsh()
 				port = server.get("port", 22)
-				print("ssh: connecting to the server[%s:%d] with ID:%s" % (self.server.host, port, self.server.id))
-				self.ssh.init(self.server.host, port, self.server.id)
+				self.initSsh(server.host, port, server.id)
 
 			if "vars" not in server:
 				server.vars = {}
@@ -72,6 +70,10 @@ class Tasks():
 		self.dkTunnel = dkTunnel
 		self.dkName = dkName
 
+	def initSsh(self, host, port, id):
+		self.ssh = CoSsh()
+		print("ssh: connecting to the server[%s:%d] with ID:%s" % (host, port, id))
+		self.ssh.init(host, port, id)
 
 	'''	
 	def configInit(self, server):
@@ -94,21 +96,25 @@ class Tasks():
 	'''
 
 	def __del__(self):
-		if self.server is not None and self.dkTunnel is None:
+		if self.ssh is not None and self.dkTunnel is None:
 			self.ssh.close()
 			self.ssh = None
 
 	def onlyLocal(self):
-		if self.server is not None:
+		if self.ssh is not None:
 			raise Exception("this method only can be used in local service.")
 
 	def onlyRemote(self):
-		if self.server is None:
+		if self.ssh is None:
 			raise Exception("this method only can be used in remote service.")
 
 	def dockerConn(self, name):
-		# TODO: 커넥션을 공유할까?
 		dk = Tasks(self.server, self, name)
+		return dk
+
+	def remoteConn(self, host, port, id):
+		dk = Tasks(None)
+		dk.initSsh(host, port, id)
 		return dk
 
 	def buildTask(self, mygod):
@@ -185,7 +191,7 @@ class Tasks():
 		if expandVars:
 			cmd = strExpand(cmd, g_dic)
 
-		if self.server is not None:
+		if self.ssh is not None:
 			return self.ssh.runOutput(cmd)
 		else:
 			return subprocess.check_output(cmd, shell=True, executable='/bin/bash')
@@ -202,7 +208,7 @@ class Tasks():
 		if expandVars:
 			cmd = strExpand(cmd, g_dic)
 
-		if self.server is not None:
+		if self.ssh is not None:
 			return self.ssh.runOutputAll(cmd)
 		else:
 			return subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, executable='/bin/bash')
@@ -213,7 +219,7 @@ class Tasks():
 		if expandVars:
 			cmd = strExpand(cmd, g_dic)
 
-		if self.server is not None:
+		if self.ssh is not None:
 			if self.dkTunnel is not None:
 				# it하면 오류 난다
 				#cmd = cmd.replace('"', '\\"')
@@ -285,6 +291,13 @@ class Tasks():
 		self.onlyRemote()
 		self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
 
+	def mysqlUserDel(self, id, host):
+		self.run('''sudo mysql -e "DROP USER '%s'@'%s';"''' % (id, host))
+	
+	def mysqlUserGen(self, id, pw, host, priv):
+		self.run('''sudo mysql -e "CREATE USER '%s'@'%s' IDENTIFIED BY '%s';"''' % (id, host, pw))
+		self.run('''sudo mysql -e "GRANT ALL ON %s TO '%s'@'%s';"''' % (priv, id, host))
+	
 	def goBuild(self):
 		print("task: goBuild as [%s]..." % g_config.name)
 
@@ -350,7 +363,7 @@ class Tasks():
 	def _helperRun(self, args, sudo=False):
 		pp2 = "/tmp/godHelper.py"
 
-		if self.server is None:
+		if self.ssh is None:
 			shutil.copyfile(os.path.join(g_scriptPath, 'godHelper.py'), pp2)
 		else:
 			if not self._uploadHelper:
