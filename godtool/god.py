@@ -188,6 +188,23 @@ class Tasks():
 		if self.server is not None:
 			return self.ssh.runOutput(cmd)
 		else:
+			return subprocess.check_output(cmd, shell=True, executable='/bin/bash')
+
+	def runOutputAll(self, cmd, expandVars=True):
+		"""
+		cmd: string or array
+		expandVars:
+		return: stdout string
+		exception: subprocess.CalledProcessError(returncode, output)
+		"""
+		print("executeOutputAll[%s].." % (cmd))
+
+		if expandVars:
+			cmd = strExpand(cmd, g_dic)
+
+		if self.server is not None:
+			return self.ssh.runOutputAll(cmd)
+		else:
 			return subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, executable='/bin/bash')
 
 	def run(self, cmd, expandVars=True):

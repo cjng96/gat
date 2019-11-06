@@ -102,6 +102,18 @@ class CoSsh:
 	def runOutput(self, cmd):
 		out = ['']
 		def doOutput(isStdout, ss, arg):
+			if isStdout:
+				arg[0] += ss
+			else:
+				print(' stderr: ', ss)
+
+		self._run(cmd, doOutput, out)
+		print("  -> output:%s" % (out[0]))
+		return out[0]
+
+	def runOutputAll(self, cmd):
+		out = ['']
+		def doOutput(isStdout, ss, arg):
 			arg[0] += ss
 
 		self._run(cmd, doOutput, out)
