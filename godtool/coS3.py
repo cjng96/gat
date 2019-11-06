@@ -129,18 +129,17 @@ class CoBucket:
 
 	#'ucount-it.stage', 'aging.ucount.it/config/report.csv', "c:\\work\\pbi\\"
 	def downloadFile(self, key, target):
+		if target is None:
+			with io.BytesIO() as f:
+				self.bucket.download_fileobj(key, f)
+				return f.read()
+
 		if target.endswith(os.path.sep):
 			name = os.path.basename(key)
 			target = os.path.join(target, name)
 
 		#f1 = self.s3.res.Object(self.name, key)
 		#f1.download_file(target)
-		if target is None:
-			with io.BytesIO() as f:
-				self.bucket.download_fileobj(key, f)
-				return f.read()
-
-		else:
-			self.bucket.download_file(key, target)
-			return target
+		self.bucket.download_file(key, target)
+		return target
 	

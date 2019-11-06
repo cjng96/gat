@@ -193,7 +193,9 @@ class Tasks():
 		if expandVars:
 			cmd = strExpand(cmd, g_dic)
 
-		if self.ssh is not None:
+		if self.dkTunnel is not None:
+			return self.dkTunnel.ssh.runOutput("docker exec -i %s bash -c '" % (self.dkName) + cmd + "'")
+		elif self.ssh is not None:
 			return self.ssh.runOutput(cmd)
 		else:
 			return subprocess.check_output(cmd, shell=True, executable='/bin/bash')
@@ -210,7 +212,9 @@ class Tasks():
 		if expandVars:
 			cmd = strExpand(cmd, g_dic)
 
-		if self.ssh is not None:
+		if self.dkTunnel is not None:
+			return self.dkTunnel.ssh.runOutputAll("docker exec -i %s bash -c '" % (self.dkName) + cmd + "'")
+		elif self.ssh is not None:
 			return self.ssh.runOutputAll(cmd)
 		else:
 			return subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, executable='/bin/bash')
@@ -223,9 +227,6 @@ class Tasks():
 
 		if self.dkTunnel is not None:
 			# it하면 오류 난다
-			#cmd = cmd.replace('"', '\\"')
-			#cmd = str2arg(cmd)
-			#cmd = cmd.replace(' ', '\\ ')
 			return self.dkTunnel.ssh.run("docker exec -i %s bash -c '" % (self.dkName) + cmd + "'")
 		elif self.ssh is not None:
 				return self.ssh.run(cmd)
