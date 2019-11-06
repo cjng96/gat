@@ -80,6 +80,7 @@ def configBlock(path, marker, block, insertAfter):
 	if ss is not None and ss != orig:
 		with open(path, "w") as fp:
 			fp.write(ss)
+			print('configBlock - update file', path)
 
 def configAddStr(ss, marker, str, insertAfter):
 	# regexp
@@ -252,6 +253,8 @@ def main():
 		strEnsure(**cfg)
 	elif func == "userNew":
 		userNew(**cfg)
+	else:
+		raise Exception('unknow commad2[%s]' % func)
 
 
 if __name__ == "__main__":

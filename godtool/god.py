@@ -55,6 +55,7 @@ class Tasks():
 
 		#self.server = Dict2(server)	# None: local
 		self.server = server
+		self.ssh = None
 
 		if server is not None:
 			if dkTunnel is None:
@@ -96,7 +97,7 @@ class Tasks():
 	'''
 
 	def __del__(self):
-		if self.ssh is not None and self.dkTunnel is None:
+		if self.ssh is not None:
 			self.ssh.close()
 			self.ssh = None
 
@@ -105,7 +106,7 @@ class Tasks():
 			raise Exception("this method only can be used in local service.")
 
 	def onlyRemote(self):
-		if self.ssh is None:
+		if self.dkTunnel is None and self.ssh is None:
 			raise Exception("this method only can be used in remote service.")
 
 	def dockerConn(self, name):
@@ -126,11 +127,12 @@ class Tasks():
 		else:
 			print("You should override buildTask method.")
 
-	def makeFile(self, content, path, sudo=False):
+	def makeFile(self, content, path, sudo=False, mode=755):
 		self.onlyRemote()
 		ss = content.replace('"', '\\"').replace('%', '\%')
 
-		self.run('echo "{1}" | sudo dd of={2}'.format('sudo' if sudo else '', ss, path))
+		self.run('echo "{1}" | {0} dd of={2} && chmod {3} {2}'.format('sudo' if sudo else '', ss, path, mode))
+		
 
 	def runTask(self, mygod):
 		self.onlyLocal()
@@ -219,14 +221,13 @@ class Tasks():
 		if expandVars:
 			cmd = strExpand(cmd, g_dic)
 
-		if self.ssh is not None:
-			if self.dkTunnel is not None:
-				# it하면 오류 난다
-				#cmd = cmd.replace('"', '\\"')
-				#cmd = str2arg(cmd)
-				#cmd = cmd.replace(' ', '\\ ')
-				return self.dkTunnel.ssh.run("docker exec -i %s bash -c '" % (self.dkName) + cmd + "'")
-			else:
+		if self.dkTunnel is not None:
+			# it하면 오류 난다
+			#cmd = cmd.replace('"', '\\"')
+			#cmd = str2arg(cmd)
+			#cmd = cmd.replace(' ', '\\ ')
+			return self.dkTunnel.ssh.run("docker exec -i %s bash -c '" % (self.dkName) + cmd + "'")
+		elif self.ssh is not None:
 				return self.ssh.run(cmd)
 		else:
 			"""
@@ -296,7 +297,8 @@ class Tasks():
 	
 	def mysqlUserGen(self, id, pw, host, priv):
 		self.run('''sudo mysql -e "CREATE USER '%s'@'%s' IDENTIFIED BY '%s';"''' % (id, host, pw))
-		self.run('''sudo mysql -e "GRANT ALL ON %s TO '%s'@'%s';"''' % (priv, id, host))
+		priv2, oper = priv.split(':')
+		self.run('''sudo mysql -e "GRANT %s ON %s TO '%s'@'%s';"''' % (oper, priv2, id, host))
 	
 	def goBuild(self):
 		print("task: goBuild as [%s]..." % g_config.name)
@@ -363,7 +365,7 @@ class Tasks():
 	def _helperRun(self, args, sudo=False):
 		pp2 = "/tmp/godHelper.py"
 
-		if self.ssh is None:
+		if self.dkTunnel is None and self.ssh is None:
 			shutil.copyfile(os.path.join(g_scriptPath, 'godHelper.py'), pp2)
 		else:
 			if not self._uploadHelper:
@@ -451,14 +453,13 @@ class Tasks():
 		for name in nameList:
 			bb.downloadFile(prefix+name, targetFolder+name)
 
-	def s3DownloadFile(self, bucket, key, dest):
+	def s3DownloadFile(self, bucket, key, dest=None):
 		print("task: s3 download file[%s -> %s]..." % (key, dest))
 		self.onlyLocal()
 
 		s3 = CoS3(g_config.get("s3.key", None), g_config.get("s3.secret", None))
 		bb = s3.bucketGet(bucket)
-		bb.downloadFile(key, dest)
-
+		return bb.downloadFile(key, dest)
 
 # https://pythonhosted.org/watchdog/
 class MyHandler(PatternMatchingEventHandler):
