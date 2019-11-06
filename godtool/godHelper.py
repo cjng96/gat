@@ -4,6 +4,8 @@ import json
 import traceback
 import os
 import re
+import zlib
+import base64
 import platform
 import subprocess
 import os.path as pypath
@@ -215,7 +217,6 @@ def strExpand(ss, dic):
 		# dic can be int
 		ss = ss[:m.start()] + str(dic2) + ss[m.end():]
 
-
 def main():
 	if len(sys.argv) <= 2:
 		raise Exception("godHelper.py runFile configPath")
@@ -228,6 +229,11 @@ def main():
 			cfg = json.load(fp)
 	elif cmd == "runStr":
 		cfg = json.loads(pp)
+	elif cmd == "runBin":
+		# zip+base64
+		pp = base64.b64decode(pp)
+		ss = zlib.decompress(pp).decode()
+		cfg = json.loads(ss)
 	else:
 		raise Exception("unknown command[%s]" % cmd)
 

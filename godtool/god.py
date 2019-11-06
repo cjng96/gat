@@ -7,6 +7,7 @@ import json
 import paramiko
 import platform
 import yaml
+import zlib
 import shutil
 import select
 import socket
@@ -14,6 +15,7 @@ import subprocess
 import datetime
 import pathlib
 import re
+import base64
 import inspect
 import traceback
 from copy import deepcopy
@@ -46,21 +48,20 @@ class MyUtil():
 		self.config = None	# config object
 
 class Tasks():
-	def __init__(self, server):
+	def __init__(self, server, dkTunnel=None, dkName=None):
 		self.proc = None
-		self.outStream = None
+		#self.outStream = None
 		self._uploadHelper = False
 
-		if server is None:
-			self.server = None
-		else:
-			#self.server = Dict2(server)	# None: local
-			self.server = server
+		#self.server = Dict2(server)	# None: local
+		self.server = server
 
-			self.ssh = CoSsh()
-			port = server.get("port", 22)
-			print("ssh: connecting to the server[%s:%d] with ID:%s" % (self.server.host, port, self.server.id))
-			self.ssh.init(self.server.host, port, self.server.id)
+		if server is not None:
+			if dkTunnel is None:
+				self.ssh = CoSsh()
+				port = server.get("port", 22)
+				print("ssh: connecting to the server[%s:%d] with ID:%s" % (self.server.host, port, self.server.id))
+				self.ssh.init(self.server.host, port, self.server.id)
 
 			if "vars" not in server:
 				server.vars = {}
@@ -68,6 +69,9 @@ class Tasks():
 			self.vars = server.vars
 
 		#self.configInit(server)
+		self.dkTunnel = dkTunnel
+		self.dkName = dkName
+
 
 	'''	
 	def configInit(self, server):
@@ -90,7 +94,7 @@ class Tasks():
 	'''
 
 	def __del__(self):
-		if hasattr(self, "server") and self.server is not None:
+		if self.server is not None and self.dkTunnel is None:
 			self.ssh.close()
 			self.ssh = None
 
@@ -101,6 +105,11 @@ class Tasks():
 	def onlyRemote(self):
 		if self.server is None:
 			raise Exception("this method only can be used in remote service.")
+
+	def dockerConn(self, name):
+		# TODO: 커넥션을 공유할까?
+		dk = Tasks(self.server, self, name)
+		return dk
 
 	def buildTask(self, mygod):
 		self.onlyLocal()
@@ -188,7 +197,14 @@ class Tasks():
 			cmd = strExpand(cmd, g_dic)
 
 		if self.server is not None:
-			return self.ssh.run(cmd)
+			if self.dkTunnel is not None:
+				# it하면 오류 난다
+				#cmd = cmd.replace('"', '\\"')
+				#cmd = str2arg(cmd)
+				#cmd = cmd.replace(' ', '\\ ')
+				return self.dkTunnel.ssh.run("docker exec -i %s bash -c '" % (self.dkName) + cmd + "'")
+			else:
+				return self.ssh.run(cmd)
 		else:
 			"""
 			with Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, bufsize=1, universal_newlines=True) as p:
@@ -231,13 +247,18 @@ class Tasks():
 		self.onlyRemote()
 		src = os.path.expanduser(src)
 		dest = os.path.expanduser(dest)
-		self.ssh.uploadFile(src, dest)
+		if self.dkTunnel is not None:
+			self.dkTunnel.ssh.uploadFile(src, "/tmp/upload.tmp")
+			self.dkTunnel.ssh.run('docker cp /tmp/upload.tmp %s:%s' % (self.dkName, dest))
+		else:
+			self.ssh.uploadFile(src, dest)
 
 	def uploadFileTo(self, src, dest):
 		self.onlyRemote()
 		src = os.path.expanduser(src)
 		dest = os.path.expanduser(dest)
-		self.ssh.uploadFile(src, os.path.join(dest, os.path.basename(src)))
+		pp = os.path.join(dest, os.path.basename(src))
+		self.uploadFile(src, pp)
 
 	def uploadFolder(self, src, dest):
 		self.onlyRemote()
@@ -312,15 +333,23 @@ class Tasks():
 	def _helperRun(self, args, sudo=False):
 		pp2 = "/tmp/godHelper.py"
 
-		if self == g_local:
+		if self.server is None:
 			shutil.copyfile(os.path.join(g_scriptPath, 'godHelper.py'), pp2)
 		else:
 			if not self._uploadHelper:
-				self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
+				if self.dkTunnel is not None:
+					self.dkTunnel.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
+					self.dkTunnel.ssh.run("docker cp /tmp/godHelper.py %s:/tmp/godHelper.py" % self.dkName)
+				else:
+					self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
+
 				self._uploadHelper = True
 
-		ss = str2arg(json.dumps(args, cls=ObjectEncoder))
-		self.run("%s python3 %s runStr \"%s\"" % ('sudo' if sudo else '', pp2, ss), expandVars=False)
+		#ss = str2arg(json.dumps(args, cls=ObjectEncoder))
+		ss = json.dumps(args, cls=ObjectEncoder)
+		ss2 = zlib.compress(ss.encode()) # 1/3이나 절반
+		ss = base64.b64encode(ss2).decode()
+		self.run("%spython3 %s runBin \"%s\"" % ('sudo ' if sudo else '', pp2, ss), expandVars=False)
 
 	def userNew(self, name, existOk=False, sshKey=False):
 		print("task: userNew...")
