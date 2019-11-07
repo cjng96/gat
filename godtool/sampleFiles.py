@@ -67,6 +67,7 @@ type: sys
 s3:
   key: ${aws_key}
   secret: ${aws_secret}
+
 servers:
   - name: test
     host: test.com
@@ -80,7 +81,7 @@ class myGod:
 	def __init__(self, helper, **_):
 		helper.configStr("yaml", config)	# helper.configFile("yaml", "god.yaml")
 
-	def setupTask(self, cfg, util, local, remote, **_):
+	def setupTask(self, util, local, remote, **_):
 		#remote.pm2Register():
 		#remote.run("cd %%s/current && echo 'finish'" %% remote.vars.deployRoot)
 

@@ -492,12 +492,11 @@ class MyHandler(PatternMatchingEventHandler):
 		self.process(event)
 
 def dicInit(server):
-	global g_dic
+	global g_dic	# helper run할때 전달되는 기능
 	g_dic = deepcopy(g_config)
 	g_dic.dic['server'] = server
 	g_dic.dic['vars'] = deepcopy(server.vars)
-	g_util.dic = g_dic
-
+	g_util.cfg = g_config	
 
 def configServerGet(name):
 	server = None
@@ -709,17 +708,6 @@ def initSamples(type, fn):
 		
 	print("init: %s file generated. You should modify that file for your environment before service or deployment." % (fn))
 
-def printTasks():
-	print(
-'''god-tool V%s
-buildTask - 
-  goBuild(args): "go build -o name"
-servePreTask - 
-  gqlGen(): running "go run github.com/99designs/gqlgen" job for gqlgen(https://github.com/99designs/gqlgen)
-deployPostTask - 
-  pm2Register(): "pm2 start pm2.json" - You should define pm2.json file first.
-''' % __version__)
-
 def expandVar(dic):
 	dicType = type(dic)
 	if dicType == list:
@@ -782,38 +770,52 @@ class Helper:
 		return g_config
 
 
-g_config = Dict2()
-g_dic = None
+g_config = Dict2()	# py코드에서는 util.cfg로 접근 가능
+g_dic = None	# helper실행할때 씀, server, vars까지 설정
 # config, server, vars(of server)
 # deployRoot, deployPath
 g_mygod = None
 
 g_util = MyUtil()
 g_local = None
-g_remote = None
+g_remote = None	# server, vars직접 접근 가능
 
 
 def help(target):
 	print("god-tool V%s" % (__version__))
-	if target is not None:
-		print("There is no %s script file." % target)
-	print("""god init (sys|app) [GOD_FILE] - Generates god file.
-god [GOD_FILE] - Serves application service. use god_my.py file if GOD_FILE is skipped.
+	print("""\
+Usage.
+god init app - Generates god_app.py file for application.
+god init sys SYSTEM_NAME - Generates the file for system.
+  the SYSTEM_NAME.py file will be generated.
+
+For application(There should be god_app.py file.),
+god - Serves application.
+god test - running automatic test.
 god deploy SERVER_NAME - Deploy the application to the server.
-god setup [GOD_FILE] SERVER_NAME - Setup server defined in GOD_FILE."""
- 	)
+
+For system,
+god SYSTEM_NAME SERVER_NAME - Setup server defined in GOD_FILE.
+""")
+	if target is not None:
+		print("\nThere is no %s script file." % target)
 
 def main():
 	global g_cwd, g_scriptPath, g_mygod
 	g_cwd = os.getcwd()
 	g_scriptPath = os.path.dirname(os.path.realpath(__file__))
+	target = 'god_app.py'
 
 	cnt = len(sys.argv)
 	cmd = None
 	if cnt > 1:
 		cmd = sys.argv[1]
 
-		if cmd == "init":
+		if cmd == '--help':
+			help(None)
+			return
+
+		elif cmd == "init":
 			if cnt < 3:
 				print("god init app OR god init sys NAME.")
 				return
@@ -823,36 +825,45 @@ def main():
 				print("app or sys can be used for god init command.")
 				return
 
-			target = sys.argv[3] if cnt > 3 else "god_my.py"
-			if not target.endswith(".py"):
-				target += ".py"
-			initSamples(type, target)
-			return
-		elif cmd == "tasks":
-			printTasks()
-			return
-		elif cmd == "deploy":
-			target = "god_my.py"
-			pass
-		elif cmd == "setup":
-			# server sys
-			if cnt < 3:
-				print("god setup FILE.py SERVER_NAME")
-				return
-			target = sys.argv[2]
-			if not target.endswith(".py"):
-				target += ".py"
+			if type == 'app':
+				initSamples(type, target)
 
-		elif cmd == '--help':
-			help(None)
+			elif type == 'sys':
+				if cnt < 4:
+					print('Please specify SYSTEM_NAME to be generated.')
+					return
+
+				target = sys.argv[3]
+				if not target.endswith(".py"):
+					target += ".py"
+				initSamples(type, target)
+			
+			else:
+				print('unknown init type[%s]' % type)
+
 			return
+
+		elif cmd == "test":
+			print("not supported yet.")
+			return
+
+		elif cmd == "deploy":
+			pass
+
 		else:
-			print("unknown command - %s" % cmd)
-			return
+			# setup server system
+			cmd = 'setup'
+			if cnt < 2:
+				print("god SYSTEM_FILE SERVER_NAME")
+				return
+
+			target = sys.argv[1]
+			if not target.endswith(".py"):
+				target += ".py"
 
 	else:
-		# default operation for app
-		target = "god_my.py"
+		# app serve
+		cmd = 'serve'
 
 	# check first
 	if not os.path.exists(target):	# or not os.path.exists("god.yml"):
@@ -876,7 +887,6 @@ def main():
 
 	if cmd == "deploy":
 		#g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
-
 		target = sys.argv[2] if cnt > 2 else None
 		if target is None:
 			# todo: print server list
@@ -884,25 +894,33 @@ def main():
 			return
 		taskDeploy(target)
 		return
+
 	elif cmd == "setup":
-		if cnt < 4:
+		if cnt < 3:
 			ss = ''
 			for it in g_config.servers:
 				ss += it['name'] + '|'
 
-			print("god setup FILE.py [%s]" % ss[:-1])
+			print('\nPlease specify SERVER_NAME...')
+			print("eg> god SYSTEM_NAME.py SERVER_NAME")
+			print(" ** you can use [%s] as SERVER_NAME" % ss[:-1])
 			return
 
 		# support empty server name?
-		serverName = "" if cnt <= 3 else sys.argv[3]
+		serverName = sys.argv[2]
 		taskSetup(target, serverName)
 		return
 
-	# serve
-	if type != "app":
-		print("god [GOD_FILE] can be used for application type only.")
-		return
-	taskServe()
+	elif cmd == 'serve':
+		# serve
+		if type != "app":
+			print("just god command can be used for application type only.")
+			return
+
+		taskServe()
+
+	else:
+		print('unknown command mode[%s]' % cmd)
 
 def taskSetup(target, serverName):
 	if not os.path.exists(target):
@@ -924,8 +942,7 @@ def taskSetup(target, serverName):
 		print("setup: You should override setupTask function in your myGod class")
 		return
 
-	g_mygod.setupTask(cfg=g_config, util=g_util, remote=g_remote, local=g_local)
-
+	g_mygod.setupTask(util=g_util, remote=g_remote, local=g_local)
 
 def taskServe():
 	observer = None
