@@ -199,7 +199,7 @@ def strExpand(ss, dic):
 	convert {{target}} to the item in the dic
 	'''
 	while True:
-		m = re.search(r"\{\{([^\][\w_.]+)\}\}", ss)
+		m = re.search(r"\{\{([\w_.]+)\}\}", ss)
 		if m is None:
 			ss = ss.replace('\{{', '{{')
 			return ss

@@ -48,7 +48,7 @@ class MyUtil():
 		self.config = None	# config object
 
 class Tasks():
-	def __init__(self, server, dkTunnel=None, dkName=None):
+	def __init__(self, server, dkTunnel=None, dkName=None, dkId=None):
 		self.proc = None
 		#self.outStream = None
 		self._uploadHelper = False
@@ -70,6 +70,10 @@ class Tasks():
 		#self.configInit(server)
 		self.dkTunnel = dkTunnel
 		self.dkName = dkName
+
+		if dkId is not None:
+			dkId = strExpand(dkId, g_dic)
+		self.dkId = dkId
 
 	def initSsh(self, host, port, id):
 		self.ssh = CoSsh()
@@ -109,8 +113,8 @@ class Tasks():
 		if self.dkTunnel is None and self.ssh is None:
 			raise Exception("this method only can be used in remote service.")
 
-	def dockerConn(self, name):
-		dk = Tasks(self.server, self, name)
+	def dockerConn(self, name, dkId=None):
+		dk = Tasks(self.server, self, name, dkId)
 		return dk
 
 	def remoteConn(self, host, port, id):
@@ -195,7 +199,9 @@ class Tasks():
 			cmd = strExpand(cmd, g_dic)
 
 		if self.dkTunnel is not None:
-			return self.dkTunnel.ssh.runOutput("docker exec -i %s bash -c '" % (self.dkName) + cmd + "'")
+			dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
+			cmd = "docker exec -i %s %s bash -c '%s'" % (dkRunUser, self.dkName, cmd)
+			return self.dkTunnel.ssh.runOutput(cmd)
 		elif self.ssh is not None:
 			return self.ssh.runOutput(cmd)
 		else:
@@ -214,7 +220,9 @@ class Tasks():
 			cmd = strExpand(cmd, g_dic)
 
 		if self.dkTunnel is not None:
-			return self.dkTunnel.ssh.runOutputAll("docker exec -i %s bash -c '" % (self.dkName) + cmd + "'")
+			dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
+			cmd = "docker exec -i %s %s bash -c '%s'" % (dkRunUser, self.dkName, cmd)
+			return self.dkTunnel.ssh.runOutputAll(cmd)
 		elif self.ssh is not None:
 			return self.ssh.runOutputAll(cmd)
 		else:
@@ -228,7 +236,11 @@ class Tasks():
 
 		if self.dkTunnel is not None:
 			# it하면 오류 난다
-			return self.dkTunnel.ssh.run("docker exec -i %s bash -c '" % (self.dkName) + cmd + "'")
+			dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
+			#cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd.replace('"', '\\"'))
+			cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, str2arg(cmd))
+			print('cmd --- ', cmd)
+			return self.dkTunnel.ssh.run(cmd)
 		elif self.ssh is not None:
 				return self.ssh.run(cmd)
 		else:
@@ -261,7 +273,10 @@ class Tasks():
 				if p.returncode != 0:
 					raise subprocess.CalledProcessError(p.returncode, cmd)
 
-	def runRet(self, cmd):
+	def runSafe(self, cmd):
+		'''
+		return: success flag
+		'''
 		try:
 			self.run(cmd)
 			return True
@@ -298,7 +313,7 @@ class Tasks():
 		self.run('''sudo mysql -e "DROP USER '%s'@'%s';"''' % (id, host))
 	
 	def mysqlUserGen(self, id, pw, host, priv):
-		self.run('''sudo mysql -e "CREATE USER '%s'@'%s' IDENTIFIED BY '%s';"''' % (id, host, pw))
+		self.run('''sudo mysql -e "CREATE USER '%s'@'%s' IDENTIFIED BY '%s';"''' % (id, str2arg(host), str2arg(pw)))
 		priv2, oper = priv.split(':')
 		self.run('''sudo mysql -e "GRANT %s ON %s TO '%s'@'%s';"''' % (oper, priv2, id, host))
 	
