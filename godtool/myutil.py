@@ -25,7 +25,14 @@ def mergeDict(dic, dic2):
 	return newDic
 
 def str2arg(ss):
-	return ss.replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$")
+	'''
+	기본적으로 ""로 감쌌다고 가정하고 랩핑한다.
+	'''
+	ss = ss.replace("\\", "\\\\")
+	ss = ss.replace("\"", "\\\"")
+	ss = ss.replace("$", "\\$")	#.replace('&', '\&')#.replace('%', '\%')
+	ss = ss.replace("!", "\!")
+	return ss
 
 def envExpand(ss):
 	while True:
