@@ -910,18 +910,22 @@ def main():
 		return
 
 	elif cmd == "setup":
-		if cnt < 3:
-			ss = ''
-			for it in g_config.servers:
-				ss += it['name'] + '|'
+		if cnt < 3 and len(g_config.servers) == 1:
+			serverName = g_config.servers[0].name
+		else:
+			if cnt < 3:
+				ss = ''
+				for it in g_config.servers:
+					ss += it['name'] + '|'
 
-			print('\nPlease specify SERVER_NAME...')
-			print("eg> god SYSTEM_NAME.py SERVER_NAME")
-			print(" ** you can use [%s] as SERVER_NAME" % ss[:-1])
-			return
+				print('\nPlease specify SERVER_NAME...')
+				print("eg> god SYSTEM_NAME.py SERVER_NAME")
+				print(" ** you can use [%s] as SERVER_NAME" % ss[:-1])
+				return
 
-		# support empty server name?
-		serverName = sys.argv[2]
+			# support empty server name?
+			
+			serverName = sys.argv[2]
 		taskSetup(target, serverName)
 		return
 
