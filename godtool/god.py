@@ -132,7 +132,7 @@ class Tasks():
 		ss = content.replace('"', '\\"').replace('%', '\%').replace('$', '\$')
 
 		sudoCmd = 'sudo' if sudo else ''
-		self.run('echo "{1}" | {0} dd of={2} && {0} chmod {3} {2}'.format(sudoCmd, ss, path, mode))
+		self.run('echo "{1}" | {0} tee {2} > /dev/null && {0} chmod {3} {2}'.format(sudoCmd, ss, path, mode))
 		
 
 	def runTask(self, mygod):
@@ -497,7 +497,9 @@ def dicInit(server):
 	g_dic = deepcopy(g_config)
 	g_dic.dic['server'] = server
 	g_dic.dic['vars'] = deepcopy(server.vars)
-	g_util.cfg = g_config	
+	g_dic.dic['data'] = deepcopy(g_data)
+	g_util.cfg = g_config
+	g_util.data = g_data
 
 def configServerGet(name):
 	server = None
@@ -523,6 +525,7 @@ def taskDeploy(serverName):
 
 	global g_remote
 	g_remote = Tasks(server)
+	g_remote.data = g_data
 	dicInit(server)
 
 	# expand env and variables
@@ -773,6 +776,7 @@ class Helper:
 
 g_config = Dict2()	# py코드에서는 util.cfg로 접근 가능
 g_dic = None	# helper실행할때 씀, server, vars까지 설정
+g_data = None	# .data.yml
 # config, server, vars(of server)
 # deployRoot, deployPath
 g_mygod = None
@@ -886,6 +890,15 @@ def main():
 	global g_local
 	g_local = Tasks(None)
 
+	# load secret
+	secretPath = os.path.join(g_cwd, '.data.yml')
+	if os.path.exists(secretPath):
+		print('load data...')
+		# TODO: encrypt with input key when changed
+		with open(secretPath, "r") as fp:
+			global g_data
+			g_data = yaml.safe_load(fp.read())
+
 	if cmd == "deploy":
 		#g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
 		target = sys.argv[2] if cnt > 2 else None
@@ -932,8 +945,9 @@ def taskSetup(target, serverName):
 	if server is None:
 		return
 
-	global g_remote
+	global g_remote, g_data
 	g_remote = Tasks(server)
+	g_remote.data = g_data
 	dicInit(server)
 
 	# expand env and variables
