@@ -129,9 +129,10 @@ class Tasks():
 
 	def makeFile(self, content, path, sudo=False, mode=755):
 		self.onlyRemote()
-		ss = content.replace('"', '\\"').replace('%', '\%')
+		ss = content.replace('"', '\\"').replace('%', '\%').replace('$', '\$')
 
-		self.run('echo "{1}" | {0} dd of={2} && chmod {3} {2}'.format('sudo' if sudo else '', ss, path, mode))
+		sudoCmd = 'sudo' if sudo else ''
+		self.run('echo "{1}" | {0} dd of={2} && {0} chmod {3} {2}'.format(sudoCmd, ss, path, mode))
 		
 
 	def runTask(self, mygod):
