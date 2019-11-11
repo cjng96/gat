@@ -332,7 +332,8 @@ class Tasks():
 		self.run('''sudo mysql -e "DROP USER '%s'@'%s';"''' % (id, host))
 	
 	def mysqlUserGen(self, id, pw, host, priv):
-		pw = str2arg(pw).replace(';', '\\;').replace('`', '``').replace("'", "\\'")
+		#pw = str2arg(pw).replace(';', '\\;').replace('`', '``').replace("'", "\\'")
+		pw = str2arg(pw).replace("'", "''")
 		host = str2arg(host)
 		self.run('''sudo mysql -e "CREATE USER '%s'@'%s' IDENTIFIED BY '%s';"''' % (id, host, pw))
 		priv2, oper = priv.split(':')
