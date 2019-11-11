@@ -49,6 +49,10 @@ class MyUtil():
 
 class Tasks():
 	def __init__(self, server, dkTunnel=None, dkName=None, dkId=None):
+		'''
+		docker일 경우는 remote를 dkTunnel로 주고, dkName을 지정하며,
+		  부모 remote의 server도 가지고 있다.
+		'''
 		self.proc = None
 		#self.outStream = None
 		self._uploadHelper = False
@@ -117,9 +121,13 @@ class Tasks():
 		dk = Tasks(self.server, self, name, dkId)
 		return dk
 
-	def remoteConn(self, host, port, id):
-		dk = Tasks(None)
+	def remoteConn(self, host, port, id, dkName=None, dkId=None):
+		dk = Tasks(Dict2(dict(name='remote', host=host, port=port, id=id)))	# no have owner
 		dk.initSsh(host, port, id)
+
+		if dkName is not None:
+			dk = dk.dockerConn(dkName, dkId)
+
 		return dk
 
 	def buildTask(self, mygod):
@@ -187,13 +195,13 @@ class Tasks():
 						break
 
 	def runOutput(self, cmd, expandVars=True):
-		"""
+		'''
 		cmd: string or array
 		expandVars:
 		return: stdout string
 		exception: subprocess.CalledProcessError(returncode, output)
-		"""
-		print("executeOutput[%s].." % (cmd))
+		'''
+		print("executeOutput on %s[%s].." % (self._serverName(), cmd))
 
 		if expandVars:
 			cmd = strExpand(cmd, g_dic)
@@ -209,13 +217,13 @@ class Tasks():
 			return subprocess.check_output(cmd, shell=True, executable='/bin/bash')
 
 	def runOutputAll(self, cmd, expandVars=True):
-		"""
+		'''
 		cmd: string or array
 		expandVars:
 		return: stdout string
 		exception: subprocess.CalledProcessError(returncode, output)
-		"""
-		print("executeOutputAll[%s].." % (cmd))
+		'''
+		print("executeOutputAll on %s[%s].." % (self._serverName(), cmd))
 
 		if expandVars:
 			cmd = strExpand(cmd, g_dic)
@@ -230,8 +238,14 @@ class Tasks():
 		else:
 			return subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, executable='/bin/bash')
 
+	def _serverName(self):
+		if self.dkTunnel is None:
+			return self.server.host
+		else:
+			return "%s[%s]" % (self.dkName, self.server.host)
+
 	def run(self, cmd, expandVars=True):
-		print("execute[%s].." % (cmd))
+		print("execute on %s[%s].." % (self._serverName(), cmd))
 
 		if expandVars:
 			cmd = strExpand(cmd, g_dic)
@@ -311,10 +325,14 @@ class Tasks():
 		self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
 
 	def mysqlUserDel(self, id, host):
+		hr = self.runOutput('''sudo mysql -e "SELECT 'exist' FROM mysql.user where user='%s';"''' % (id))
+		if hr == "":
+			return
+
 		self.run('''sudo mysql -e "DROP USER '%s'@'%s';"''' % (id, host))
 	
 	def mysqlUserGen(self, id, pw, host, priv):
-		pw = str2arg(pw)
+		pw = str2arg(pw).replace(';', '\\;').replace('`', '``').replace("'", "\\'")
 		host = str2arg(host)
 		self.run('''sudo mysql -e "CREATE USER '%s'@'%s' IDENTIFIED BY '%s';"''' % (id, host, pw))
 		priv2, oper = priv.split(':')
@@ -350,7 +368,6 @@ class Tasks():
 			os.utime("models_gen.go", (t1, t1))
 		else:
 			print("task: gql - skip because of no modification.")
-
 
 	def dbXormReverse(self):
 		print("task: xorm reverse...")
@@ -403,6 +420,7 @@ class Tasks():
 		ss = base64.b64encode(ss2).decode()
 		self.run("%spython3 %s runBin \"%s\"" % ('sudo ' if sudo else '', pp2, ss), expandVars=False)
 
+	""" use myutil.makeUser
 	def userNew(self, name, existOk=False, sshKey=False):
 		print("task: userNew...")
 		self.onlyRemote()
@@ -410,6 +428,7 @@ class Tasks():
 		args = dict(cmd="userNew", dic=g_dic,
 			name=name, existOk=existOk, sshKey=sshKey)
 		self._helperRun(args, sudo=True)
+	"""
 
 	def strLoad(self, path):
 		print("task: strLoad...")
@@ -543,6 +562,9 @@ def taskDeploy(serverName):
 
 	global g_remote
 	g_remote = Tasks(server)
+	if 'dkName' in server.dic:
+		g_remote = g_remote.dockerConn(server.dkName)
+
 	g_remote.data = g_data
 	dicInit(server)
 
@@ -791,6 +813,17 @@ class Helper:
 	def configGet(self):
 		return g_config
 
+	def loadData(self, pp):
+		if not os.path.exists(pp):
+			raise Exception('there is no data file[%s]' % pp)
+
+		print('load data from %s...' % pp)
+		# TODO: encrypt with input key when changed
+		with open(pp, "r") as fp:
+			dd = Dict2(yaml.safe_load(fp.read()))
+			print('data - ', dd)
+			return dd
+
 
 g_config = Dict2()	# py코드에서는 util.cfg로 접근 가능
 g_dic = None	# helper실행할때 씀, server, vars까지 설정
@@ -922,8 +955,10 @@ def main():
 		#g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
 		target = sys.argv[2] if cnt > 2 else None
 		if target is None:
-			# todo: print server list
-			print("Please specify server name.")
+			ss = ''
+			for it in g_config.servers:
+				ss += it['name'] + '|'
+			print("Please specify server name.[%s]" % ss[:-1])
 			return
 		taskDeploy(target)
 		return
@@ -970,6 +1005,9 @@ def taskSetup(target, serverName):
 
 	global g_remote, g_data
 	g_remote = Tasks(server)
+	if 'dkName' in server.dic:
+		g_remote = g_remote.dockerConn(server.dkName)
+
 	g_remote.data = g_data
 	dicInit(server)
 
