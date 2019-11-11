@@ -133,11 +133,11 @@ class Tasks():
 
 	def makeFile(self, content, path, sudo=False, mode=755):
 		self.onlyRemote()
-		ss = content.replace('"', '\\"').replace('%', '\%').replace('$', '\$')
+		#ss = content.replace('"', '\\"').replace('%', '\%').replace('$', '\$')
+		content = str2arg(content)
 
 		sudoCmd = 'sudo' if sudo else ''
-		self.run('echo "{1}" | {0} tee {2} > /dev/null && {0} chmod {3} {2}'.format(sudoCmd, ss, path, mode))
-		
+		self.run('echo "{1}" | {0} tee {2} > /dev/null && {0} chmod {3} {2}'.format(sudoCmd, content, path, mode))
 
 	def runTask(self, mygod):
 		self.onlyLocal()
@@ -200,7 +200,8 @@ class Tasks():
 
 		if self.dkTunnel is not None:
 			dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
-			cmd = "docker exec -i %s %s bash -c '%s'" % (dkRunUser, self.dkName, cmd)
+			cmd = str2arg(cmd)			
+			cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
 			return self.dkTunnel.ssh.runOutput(cmd)
 		elif self.ssh is not None:
 			return self.ssh.runOutput(cmd)
@@ -221,7 +222,8 @@ class Tasks():
 
 		if self.dkTunnel is not None:
 			dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
-			cmd = "docker exec -i %s %s bash -c '%s'" % (dkRunUser, self.dkName, cmd)
+			cmd = str2arg(cmd)			
+			cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
 			return self.dkTunnel.ssh.runOutputAll(cmd)
 		elif self.ssh is not None:
 			return self.ssh.runOutputAll(cmd)
@@ -237,9 +239,8 @@ class Tasks():
 		if self.dkTunnel is not None:
 			# it하면 오류 난다
 			dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
-			#cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd.replace('"', '\\"'))
-			cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, str2arg(cmd))
-			print('cmd --- ', cmd)
+			cmd = str2arg(cmd)
+			cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
 			return self.dkTunnel.ssh.run(cmd)
 		elif self.ssh is not None:
 				return self.ssh.run(cmd)
@@ -313,7 +314,9 @@ class Tasks():
 		self.run('''sudo mysql -e "DROP USER '%s'@'%s';"''' % (id, host))
 	
 	def mysqlUserGen(self, id, pw, host, priv):
-		self.run('''sudo mysql -e "CREATE USER '%s'@'%s' IDENTIFIED BY '%s';"''' % (id, str2arg(host), str2arg(pw)))
+		pw = str2arg(pw)
+		host = str2arg(host)
+		self.run('''sudo mysql -e "CREATE USER '%s'@'%s' IDENTIFIED BY '%s';"''' % (id, host, pw))
 		priv2, oper = priv.split(':')
 		self.run('''sudo mysql -e "GRANT %s ON %s TO '%s'@'%s';"''' % (oper, priv2, id, host))
 	
@@ -912,7 +915,8 @@ def main():
 		# TODO: encrypt with input key when changed
 		with open(secretPath, "r") as fp:
 			global g_data
-			g_data = yaml.safe_load(fp.read())
+			g_data = Dict2(yaml.safe_load(fp.read()))
+			print('data - ', g_data)
 
 	if cmd == "deploy":
 		#g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
