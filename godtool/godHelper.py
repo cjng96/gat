@@ -130,7 +130,7 @@ def strEnsure(path, str):
 
 	with open(path, "at") as fp:
 		fp.write("\n"+str)
-
+"""
 def userNew(name, existOk, sshKey):
 	'''
 	needed sudo right
@@ -141,6 +141,7 @@ def userNew(name, existOk, sshKey):
 	if sshKey:
 		if not os.access("/home/%s/.ssh/id_rsa" % name, os.F_OK):
 			run("sudo -u %s ssh-keygen -b 2048 -t rsa -f /home/%s/.ssh/id_rsa -N '' -q" % (name, name))
+"""
 
 def lineEndPos(ss, pt):
 	'''
@@ -245,6 +246,7 @@ def main():
 	del cfg["dic"]
 
 	func = cfg["cmd"]
+	#print('godHelper - %s - %s' % (func, g_dic))
 	del cfg["cmd"]
 	if func == "configBlock":
 		configBlock(**cfg)
@@ -252,8 +254,8 @@ def main():
 		configLine(**cfg)
 	elif func == "strEnsure":
 		strEnsure(**cfg)
-	elif func == "userNew":
-		userNew(**cfg)
+	#elif func == "userNew":
+	#	userNew(**cfg)
 	else:
 		raise Exception('unknow commad2[%s]' % func)
 
