@@ -86,6 +86,9 @@ class Tasks():
 			self.ssh = None
 
 	def dockerConn(self, name, dkId=None):
+		if self.dkTunnel is not None:
+			raise Exception('dockerConn can be called only on remote connection.')
+
 		dk = Tasks(self.server, self, name, dkId)
 		return dk
 
@@ -94,10 +97,17 @@ class Tasks():
 			raise Exception('This connection is not docker connection.')
 		return self.dkTunnel
 
+	def otherDockerConn(self, name, dkId=None):
+		if self.dkTunnel is None:
+			raise Exception('otherDockerConn can be called on docker connection only.')
+
+		return self.dkTunnel.dockerConn(name, dkId)
+
 	def remoteConn(self, host, port, id, dkName=None, dkId=None):
 		'''
 		지정해서 커넥션을 만들어낸다.
 		docker지정까지 가능하다. 이거 설정을 컨피그로 할수 있게 하자
+		이건 util로 가는게 나을까
 		'''
 		dk = Tasks(Dict2(dict(name='remote', host=host, port=port, id=id)))	# no have owner
 		dk.initSsh(host, port, id)
@@ -562,7 +572,7 @@ def taskDeploy(serverName):
 		sudoCmd = "sudo"
 
 	name = g_config.name
-	deployRoot = server.targetPath
+	deployRoot = server.deployRoot
 	realTarget = g_remote.runOutput('realpath %s' % deployRoot)
 	realTarget = realTarget.strip("\r\n")	# for sftp
 	todayName = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")[2:]

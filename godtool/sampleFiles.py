@@ -30,7 +30,7 @@ servers:
     owner: engt   # opt, generated files owner
       # if it's not specified, you don't need sudo right
       # if you need the operation needed sudo right, should specify it.
-    targetPath: ~/test  # deployment target path
+    deployRoot: ~/test  # deployment target path
 
 '''
 
