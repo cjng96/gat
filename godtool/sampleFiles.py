@@ -72,6 +72,7 @@ servers:
   - name: test
     host: test.com
     port: 22
+		#dkName: name
     id: test
 	vars:
 	  hello: test

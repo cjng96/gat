@@ -50,14 +50,10 @@ class MyUtil():
 class Tasks():
 	def __init__(self, server, dkTunnel=None, dkName=None, dkId=None):
 		'''
-		docker일 경우는 remote를 dkTunnel로 주고, dkName을 지정하며,
-		  부모 remote의 server도 가지고 있다.
 		'''
 		self.proc = None
-		#self.outStream = None
 		self._uploadHelper = False
 
-		#self.server = Dict2(server)	# None: local
 		self.server = server
 		self.ssh = None
 
@@ -71,7 +67,7 @@ class Tasks():
 
 			self.vars = server.vars
 
-		#self.configInit(server)
+		# docker일 경우 dkTunnel, dkName가 필수며, 부모의 server도 있어야 함
 		self.dkTunnel = dkTunnel
 		self.dkName = dkName
 
@@ -84,30 +80,32 @@ class Tasks():
 		print("ssh: connecting to the server[%s:%d] with ID:%s" % (host, port, id))
 		self.ssh.init(host, port, id)
 
-	'''	
-	def configInit(self, server):
-		#self.dic = Dict2()
-		self.config = deepcopy(g_config)
-		# 이건 일단은 남겨두자. 나중에 없앨꺼다.
-		self.config.add("name", g_config.name)
-
-		if server is not None:		
-			# server without vars
-			server2 = deepcopy(server)
-			if "vars" in server2:
-				del server2["vars"]
-			self.config.add("server", server2)
-
-			# vars
-			# 이게 고민이 쓰기 편하게 하려면 루트에 넣는게 좋은데...
-			#self.config.fill(server["vars"])
-			self.config.add("vars", server.vars if "vars" in server else dict())
-	'''
-
 	def __del__(self):
 		if self.ssh is not None:
 			self.ssh.close()
 			self.ssh = None
+
+	def dockerConn(self, name, dkId=None):
+		dk = Tasks(self.server, self, name, dkId)
+		return dk
+
+	def parentConn(self):
+		if self.dkTunnel is None:
+			raise Exception('This connection is not docker connection.')
+		return self.dkTunnel
+
+	def remoteConn(self, host, port, id, dkName=None, dkId=None):
+		'''
+		지정해서 커넥션을 만들어낸다.
+		docker지정까지 가능하다. 이거 설정을 컨피그로 할수 있게 하자
+		'''
+		dk = Tasks(Dict2(dict(name='remote', host=host, port=port, id=id)))	# no have owner
+		dk.initSsh(host, port, id)
+
+		if dkName is not None:
+			dk = dk.dockerConn(dkName, dkId)
+
+		return dk
 
 	def onlyLocal(self):
 		if self.ssh is not None:
@@ -116,19 +114,6 @@ class Tasks():
 	def onlyRemote(self):
 		if self.dkTunnel is None and self.ssh is None:
 			raise Exception("this method only can be used in remote service.")
-
-	def dockerConn(self, name, dkId=None):
-		dk = Tasks(self.server, self, name, dkId)
-		return dk
-
-	def remoteConn(self, host, port, id, dkName=None, dkId=None):
-		dk = Tasks(Dict2(dict(name='remote', host=host, port=port, id=id)))	# no have owner
-		dk.initSsh(host, port, id)
-
-		if dkName is not None:
-			dk = dk.dockerConn(dkName, dkId)
-
-		return dk
 
 	def buildTask(self, mygod):
 		self.onlyLocal()
