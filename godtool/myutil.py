@@ -170,7 +170,7 @@ class Dict2():
 			else:
 				self.dic[key] = value
 		
-	def get(self, name, default):
+	def get(self, name, default=None):
 		lst = name.split(".")
 		dic = self.dic
 		for item in lst:
