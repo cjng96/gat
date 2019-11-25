@@ -329,6 +329,8 @@ class Tasks():
 	def mysqlUserGen(self, id, pw, host, priv):
 		#pw = str2arg(pw).replace(';', '\\;').replace('`', '``').replace("'", "\\'")
 		pw = str2arg(pw).replace("'", "''")
+		# 이게 좀 웃긴데, mysql 통해서 실행하는거기 때문에 \\는 \\\\로 바꿔야한다.
+		pw = pw.replace("\\\\", "\\\\\\\\")
 		host = str2arg(host)
 		self.run('''sudo mysql -e "CREATE USER '%s'@'%s' IDENTIFIED BY '%s';"''' % (id, host, pw))
 		priv2, oper = priv.split(':')

@@ -33,6 +33,7 @@ def str2arg(ss):
 	ss = ss.replace('$', '\\$')	#.replace('&', '\&')#.replace('%', '\%')
 	#ss = ss.replace("!", "\!")	# echo 문자열 내에 있을때는 안해도 되네...
 	ss = ss.replace('[^a-zA-Z]!', '\\!')	# a!는 변환하고 3!는 변환하지 말것
+	ss = ss.replace('`', '\\`')	# bash -c "echo '`'" 이거 오류난다.
 	return ss
 
 def envExpand(ss):
