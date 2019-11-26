@@ -437,7 +437,7 @@ class Tasks():
 			return fp.read()
 
 	def strEnsure(self, path, str, sudo=False):
-		print("task: strEnsure...")
+		print("task: strEnsure for %s..." % path)
 		self.onlyRemote()
 
 		args = dict(cmd="strEnsure", dic=g_dic,
