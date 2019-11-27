@@ -39,6 +39,8 @@ from .myutil import NonBlockingStreamReader, str2arg, mergeDict, envExpand, Dict
 g_cwd = ""
 g_scriptPath = ""
 
+class ExcProgramExit(Exception):
+	pass
 
 class MyUtil():
 	def __init__(self):
@@ -142,6 +144,7 @@ class Tasks():
 		sudoCmd = 'sudo' if sudo else ''
 		self.run('echo "{1}" | {0} tee {2} > /dev/null && {0} chmod {3} {2}'.format(sudoCmd, content, path, mode))
 
+	# runTask와 doServerStep등은 Task말고 별도로 빼자 remote.runTask를 호출할일은 없으니까
 	def runTask(self, mygod):
 		self.onlyLocal()
 
@@ -179,7 +182,7 @@ class Tasks():
 				while True:
 					try:
 						ret = p.wait(0.1)
-						raise Exception("run: the application has been terminated[ret:%d]" % ret)
+						raise ExcProgramExit("run: the application has been terminated[ret:%d]" % ret)
 
 					except subprocess.TimeoutExpired as e:
 						pass
@@ -188,6 +191,33 @@ class Tasks():
 						g_util.isRestart = False
 						p.terminate()
 						break
+
+	def doTestStep(self, mygod):
+		print("\n\n\n")
+
+		cmd = g_config.test.cmd
+		#if subprocess.call("type unbuffer", shell=True) == 0:
+		#	cmd = ["unbuffer"] + cmd
+
+		with subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr) as p:
+			while True:
+				try:
+					ret = p.wait(0.1)
+					raise ExcProgramExit("run: the application has been terminated[ret:%d]" % ret)
+
+				except subprocess.TimeoutExpired as e:
+					pass
+
+				except ExcProgramExit:
+					print('**** test job is finished')
+					# 이 경우 재구동까지 기다린다.
+					while not g_util.isRestart:
+						time.sleep(0.1)
+
+				if g_util.isRestart:
+					g_util.isRestart = False
+					p.terminate()
+					break
 
 	def runOutput(self, cmd, expandVars=True):
 		'''
@@ -518,7 +548,7 @@ class MyHandler(PatternMatchingEventHandler):
 		if g_util.isRestart:
 			return
 
-		print("run: file - %s is %s" % (event.src_path, event.event_type))
+		print("observer: file - %s is %s" % (event.src_path, event.event_type))
 		g_util.isRestart = True
 
 	def on_modified(self, event):
@@ -898,8 +928,7 @@ def main():
 			return
 
 		elif cmd == "test":
-			print("not supported yet.")
-			return
+			pass
 
 		elif cmd == "deploy":
 			pass
@@ -981,6 +1010,14 @@ def main():
 		taskSetup(target, serverName)
 		return
 
+	elif cmd == 'test':
+		# serve
+		if type != "app":
+			print("just god command can be used for application type only.")
+			return
+
+		taskTest()
+
 	elif cmd == 'serve':
 		# serve
 		if type != "app":
@@ -1017,6 +1054,27 @@ def taskSetup(target, serverName):
 		return
 
 	g_mygod.setupTask(util=g_util, remote=g_remote, local=g_local)
+
+def taskTest():
+	observer = None
+	if len(g_config.test.patterns) > 0:
+		observer = Observer()
+		observer.schedule(MyHandler(g_config.test.patterns), path=".", recursive=True)
+		observer.start()
+
+	try:
+		while True:
+			time.sleep(0.01)
+			g_util.isRestart = False
+			g_local.doTestStep(g_mygod)
+
+	except KeyboardInterrupt:
+		if observer is not None:
+			observer.stop()
+
+	if observer is not None:
+		observer.join()
+
 
 def taskServe():
 	observer = None
