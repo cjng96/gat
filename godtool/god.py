@@ -49,6 +49,9 @@ class MyUtil():
 		self.isRestart = True	# First start or modified source files
 		self.config = None	# config object
 
+	def str2arg(self, ss):
+		return str2arg(ss)
+
 class Tasks():
 	def __init__(self, server, dkTunnel=None, dkName=None, dkId=None):
 		'''
@@ -127,97 +130,13 @@ class Tasks():
 		if self.dkTunnel is None and self.ssh is None:
 			raise Exception("this method only can be used in remote service.")
 
-	def buildTask(self, mygod):
-		self.onlyLocal()
-
-		print("run: building the app")
-		if hasattr(mygod, "buildTask"):
-			return mygod.buildTask(util=g_util, local=g_local, remote=g_remote)
-		else:
-			print("You should override buildTask method.")
-
 	def makeFile(self, content, path, sudo=False, mode=755):
-		self.onlyRemote()
+		#self.onlyRemote()
 		#ss = content.replace('"', '\\"').replace('%', '\%').replace('$', '\$')
 		content = str2arg(content)
 
 		sudoCmd = 'sudo' if sudo else ''
 		self.run('echo "{1}" | {0} tee {2} > /dev/null && {0} chmod {3} {2}'.format(sudoCmd, content, path, mode))
-
-	# runTask와 doServerStep등은 Task말고 별도로 빼자 remote.runTask를 호출할일은 없으니까
-	def runTask(self, mygod):
-		self.onlyLocal()
-
-		if hasattr(mygod, "runTask"):
-			cmd = mygod.runTask(util=g_util, local=g_local, remote=g_remote)
-			if type(cmd) != list:
-				raise Exception("the return value of runTask function should be list type.")
-		else:
-			cmd = ["./"+g_config.name]
-
-		print("run: running the app[%s]..." % cmd)
-		if subprocess.call("type unbuffer", shell=True) == 0:
-			#cmd = ["unbuffer", "./"+g_util.executableName]
-			cmd = ["unbuffer"] + cmd
-
-		return cmd
-
-	def doServeStep(self, mygod):
-		#if hasattr(g_mygod, "doServeStep"):
-		#	return g_mygod.doServeStep()
-		print("\n\n\n")
-
-		buildExc = None
-		try:
-			self.buildTask(mygod)
-		except Exception as e:
-			buildExc = traceback.format_exc()
-
-		if buildExc is not None:
-			print("run: exception in buildTask...\n%s" % buildExc)
-		else:
-			cmd = self.runTask(mygod)
-
-			with subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr) as p:
-				while True:
-					try:
-						ret = p.wait(0.1)
-						raise ExcProgramExit("run: the application has been terminated[ret:%d]" % ret)
-
-					except subprocess.TimeoutExpired as e:
-						pass
-
-					if g_util.isRestart:
-						g_util.isRestart = False
-						p.terminate()
-						break
-
-	def doTestStep(self, mygod):
-		print("\n\n\n")
-
-		cmd = g_config.test.cmd
-		#if subprocess.call("type unbuffer", shell=True) == 0:
-		#	cmd = ["unbuffer"] + cmd
-
-		with subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr) as p:
-			while True:
-				try:
-					ret = p.wait(0.1)
-					raise ExcProgramExit("run: the application has been terminated[ret:%d]" % ret)
-
-				except subprocess.TimeoutExpired as e:
-					pass
-
-				except ExcProgramExit:
-					print('**** test job is finished')
-					# 이 경우 재구동까지 기다린다.
-					while not g_util.isRestart:
-						time.sleep(0.1)
-
-				if g_util.isRestart:
-					g_util.isRestart = False
-					p.terminate()
-					break
 
 	def runOutput(self, cmd, expandVars=True):
 		'''
@@ -264,7 +183,9 @@ class Tasks():
 			return subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, executable='/bin/bash')
 
 	def _serverName(self):
-		if self.dkTunnel is None:
+		if self.server is None:
+			return 'local'
+		elif self.dkTunnel is None:
 			return self.server.host
 		else:
 			return "%s[%s]" % (self.dkName, self.server.host)
@@ -349,6 +270,7 @@ class Tasks():
 		self.onlyRemote()
 		self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
 
+	# mysql, goBuild, gqlGen, dbXorm, pm2Register등은
 	def mysqlUserDel(self, id, host):
 		hr = self.runOutput('''sudo mysql -e "SELECT 'exist' FROM mysql.user where user='%s';"''' % (id))
 		if hr == "":
@@ -580,195 +502,349 @@ def configServerGet(name):
 
 	return server
 
-def taskDeploy(serverName):
-	global g_config
-	server = configServerGet(serverName)
-	if server is None:
-		return
+class Main():
 
-	g_local.buildTask(g_mygod)
+	# runTask와 doServerStep등은 Task말고 별도로 빼자 remote.runTask를 호출할일은 없으니까
+	def runTask(self, mygod):
+		#self.onlyLocal()
 
-	global g_remote
-	g_remote = Tasks(server)
-	if 'dkName' in server.dic:
-		g_remote = g_remote.dockerConn(server.dkName)
+		if hasattr(mygod, "runTask"):
+			cmd = mygod.runTask(util=g_util, local=g_local, remote=g_remote)
+			if type(cmd) != list:
+				raise Exception("the return value of runTask function should be list type.")
+		else:
+			cmd = ["./"+g_config.name]
 
-	g_remote.data = g_data
-	dicInit(server)
+		print("run: running the app[%s]..." % cmd)
+		if subprocess.call("type unbuffer", shell=True) == 0:
+			#cmd = ["unbuffer", "./"+g_util.executableName]
+			cmd = ["unbuffer"] + cmd
 
-	# expand env and variables
-	expandVar(g_config)
+		return cmd
 
-	sudoCmd = ""
-	if server.owner:
-		sudoCmd = "sudo"
+	def doServeStep(self, mygod):
+		#if hasattr(g_mygod, "doServeStep"):
+		#	return g_mygod.doServeStep()
+		print("\n\n\n")
 
-	name = g_config.name
-	deployRoot = server.deployRoot
-	realTarget = g_remote.runOutput('realpath %s' % deployRoot)
-	realTarget = realTarget.strip("\r\n")	# for sftp
-	todayName = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")[2:]
+		buildExc = None
+		try:
+			self.buildTask(mygod)
+		except Exception as e:
+			buildExc = traceback.format_exc()
 
-	# pre task
-	deployPath = os.path.join(realTarget, "releases", todayName)
-	g_dic.dic['deployRoot'] = deployRoot
-	g_dic.dic['deployPath'] = deployPath
-	if hasattr(g_mygod, "deployPreTask"):
-		g_mygod.deployPreTask(util=g_util, remote=g_remote, local=g_local)
+		if buildExc is not None:
+			print("run: exception in buildTask...\n%s" % buildExc)
+		else:
+			cmd = self.runTask(mygod)
 
-	# prepare target folder
-	g_remote.runOutput('{0} mkdir -p {1}/shared && {0} mkdir -p {1}/releases'.format(sudoCmd, deployRoot))
-	#('&& sudo chown %s: %s %s/shared %s/releases' % (server.owner, deployRoot, deployRoot, deployRoot) if server.owner else '') +
+			with subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr) as p:
+				while True:
+					try:
+						ret = p.wait(0.1)
+						raise ExcProgramExit("run: the application has been terminated[ret:%d]" % ret)
 
-	res = g_remote.runOutput("cd {0}/releases && ls -d *".format(deployRoot))
-	releases = list(filter(lambda x: re.match('\d{6}_\d{6}', x) is not None, res.split()))
-	releases.sort()
+					except subprocess.TimeoutExpired as e:
+						pass
 
-	max = g_config.deploy.maxRelease-1
-	cnt = len(releases)
-	print("deploy: releases folders count is %d" % cnt)
-	if cnt > max:
-		print("deploy: remove old %d folders" % (cnt - max))
-		removeList = releases[:cnt-max]
-		for ff in removeList:
-			g_remote.runOutput("%s rm -rf %s/releases/%s" % (sudoCmd, deployRoot, ff))
+					if g_util.isRestart:
+						g_util.isRestart = False
+						p.terminate()
+						break
 
-	# if deploy / owner is defined,
-	# create release folder as ssh user, upload, extract then change release folder to deploy / owner
-	res = g_remote.runOutput("cd %s/releases" % deployRoot +
-		"&& %s mkdir %s" % (sudoCmd, todayName) +
-		"&& sudo chown %s: %s" % (server.owner, todayName) if server.owner else ""
+	def doTestStep(self, mygod):
+		print("\n\n\n")
+
+		cmd = g_config.test.cmd
+		#if subprocess.call("type unbuffer", shell=True) == 0:
+		#	cmd = ["unbuffer"] + cmd
+
+		with subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr) as p:
+			while True:
+				try:
+					ret = p.wait(0.1)
+					raise ExcProgramExit("run: the application has been terminated[ret:%d]" % ret)
+
+				except subprocess.TimeoutExpired as e:
+					pass
+
+				except ExcProgramExit:
+					print('**** test job is finished')
+					# 이 경우 재구동까지 기다린다.
+					while not g_util.isRestart:
+						time.sleep(0.1)
+
+				if g_util.isRestart:
+					g_util.isRestart = False
+					p.terminate()
+					break
+
+	def buildTask(self, mygod):
+		self.onlyLocal()
+
+		print("run: building the app")
+		if hasattr(mygod, "buildTask"):
+			return mygod.buildTask(util=g_util, local=g_local, remote=g_remote)
+		else:
+			print("You should override buildTask method.")
+
+	def taskSetup(self, target, serverName):
+		if not os.path.exists(target):
+			print("There is no target file[%s]" % target)
+			return
+		
+		server = configServerGet(serverName)
+		if server is None:
+			return
+
+		global g_remote, g_data
+		g_remote = Tasks(server)
+		if 'dkName' in server.dic:
+			g_remote = g_remote.dockerConn(server.dkName)
+
+		g_remote.data = g_data
+		dicInit(server)
+
+		# expand env and variables
+		expandVar(g_config)
+
+		if not hasattr(g_mygod, "setupTask"):
+			print("setup: You should override setupTask function in your myGod class")
+			return
+
+		g_mygod.setupTask(util=g_util, remote=g_remote, local=g_local)
+
+	def taskTest(self):
+		observer = None
+		if len(g_config.test.patterns) > 0:
+			observer = Observer()
+			observer.schedule(MyHandler(g_config.test.patterns), path=".", recursive=True)
+			observer.start()
+
+		try:
+			while True:
+				time.sleep(0.01)
+				g_util.isRestart = False
+				g_local.doTestStep(g_mygod)
+
+		except KeyboardInterrupt:
+			if observer is not None:
+				observer.stop()
+
+		if observer is not None:
+			observer.join()
+
+
+	def taskServe(self):
+		observer = None
+		if len(g_config.serve.patterns) > 0:
+			observer = Observer()
+			observer.schedule(MyHandler(g_config.serve.patterns), path=".", recursive=True)
+			observer.start()
+
+		try:
+			while True:
+				time.sleep(0.01)
+				g_util.isRestart = False
+				g_local.doServeStep(g_mygod)
+
+		except KeyboardInterrupt:
+			if observer is not None:
+				observer.stop()
+
+		if observer is not None:
+			observer.join()
+
+	def taskDeploy(self, serverName):
+		global g_config
+		server = configServerGet(serverName)
+		if server is None:
+			return
+
+		g_local.buildTask(g_mygod)
+
+		global g_remote
+		g_remote = Tasks(server)
+		if 'dkName' in server.dic:
+			g_remote = g_remote.dockerConn(server.dkName)
+
+		g_remote.data = g_data
+		g_remote.util = g_util
+		dicInit(server)
+
+		# expand env and variables
+		expandVar(g_config)
+
+		sudoCmd = ""
+		if server.owner:
+			sudoCmd = "sudo"
+
+		name = g_config.name
+		deployRoot = server.deployRoot
+		realTarget = g_remote.runOutput('realpath %s' % deployRoot)
+		realTarget = realTarget.strip("\r\n")	# for sftp
+		todayName = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")[2:]
+
+		# pre task
+		deployPath = os.path.join(realTarget, "releases", todayName)
+		g_dic.dic['deployRoot'] = deployRoot
+		g_dic.dic['deployPath'] = deployPath
+		if hasattr(g_mygod, "deployPreTask"):
+			g_mygod.deployPreTask(util=g_util, remote=g_remote, local=g_local)
+
+		# prepare target folder
+		g_remote.runOutput('{0} mkdir -p {1}/shared && {0} mkdir -p {1}/releases'.format(sudoCmd, deployRoot))
+		#('&& sudo chown %s: %s %s/shared %s/releases' % (server.owner, deployRoot, deployRoot, deployRoot) if server.owner else '') +
+
+		res = g_remote.runOutput("cd {0}/releases && ls -d *".format(deployRoot))
+		releases = list(filter(lambda x: re.match('\d{6}_\d{6}', x) is not None, res.split()))
+		releases.sort()
+
+		max = g_config.deploy.maxRelease-1
+		cnt = len(releases)
+		print("deploy: releases folders count is %d" % cnt)
+		if cnt > max:
+			print("deploy: remove old %d folders" % (cnt - max))
+			removeList = releases[:cnt-max]
+			for ff in removeList:
+				g_remote.runOutput("%s rm -rf %s/releases/%s" % (sudoCmd, deployRoot, ff))
+
+		# if deploy / owner is defined,
+		# create release folder as ssh user, upload, extract then change release folder to deploy / owner
+		res = g_remote.runOutput("cd %s/releases" % deployRoot +
+			"&& %s mkdir %s" % (sudoCmd, todayName) +
+			"&& sudo chown %s: %s" % (server.owner, todayName) if server.owner else ""
+			)
+
+		# upload files
+		include = []
+		include = g_config.deploy.include
+		exclude = g_config.get("deploy.exclude", [])
+		sharedLinks = g_config.get("deploy.sharedLinks", [])
+
+		def _filterFunc(pp):
+			pp = os.path.normpath(pp)
+			return pp in exclude
+
+		strategy = g_config.deploy.strategy
+		if strategy == "zip":
+			zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
+			with zipfile.ZipFile(zipPath, "w") as zipWork:
+				def _zipAdd(srcP, targetP):
+					if _filterFunc(srcP):
+						print("deploy: skip - %s" % srcP)
+						return
+
+					# make "./aaa" -> "aaa"
+					targetP = os.path.normpath(targetP)
+
+					print("zipping %s -> %s" % (srcP, targetP))
+					zipWork.write(srcP, targetP, compress_type=zipfile.ZIP_DEFLATED)
+
+				#zipWork.write(name, name, compress_type=zipfile.ZIP_DEFLATED)
+				for pp in include:
+					if type(pp) == str:
+						if pp == "*":
+							pp = "."
+						
+						# daemon
+						dic = dict(name=name)
+						pp = strExpand(pp, dic)
+							
+						p = pathlib.Path(pp)
+						if not p.exists():
+							print("deploy: not exists - %s" % pp)
+							continue
+						
+						if p.is_dir():
+							if _filterFunc(pp):
+								print("deploy: skip - %s" % pp)
+								continue
+
+							for folder, dirs, files in os.walk(pp, followlinks=g_dic.deploy.followLinks):
+								# filtering dirs too
+								dirs2 = []
+								for d in dirs:
+									dd = os.path.join(folder, d)
+									if _filterFunc(dd):
+										print("deploy: skip - %s" % dd)
+									else:
+										dirs2.append(d)
+								dirs[:] = dirs2
+
+								for ff in files:
+									_zipAdd(os.path.join(folder, ff), os.path.join(folder, ff))
+						else:
+							_zipAdd(pp, pp)
+
+					else:
+						src = pp["src"]
+						target = pp["target"]
+
+						for folder, dirs, files in os.walk(src):
+							for ff in files:
+								_zipAdd(os.path.join(folder, ff), os.path.join(target, cutpath(src, folder), ff))
+
+			g_remote.uploadFile(zipPath, "/tmp/godUploadPkg.zip")	# we don't include it by default
+			g_remote.run("cd %s/releases/%s" % (deployRoot, todayName) +
+				"&& %s unzip /tmp/godUploadPkg.zip && rm /tmp/godUploadPkg.zip" % sudoCmd
+				)
+			os.remove(zipPath)
+			"""	no use copy strategy anymore
+			elif strategy == "copy":
+				ssh.uploadFile(name, os.path.join(realTargetFull, name))	# we don't include it by default
+				ssh.run("chmod 755 %s/%s" % (realTargetFull, name))
+
+				ssh.uploadFilterFunc = _filterFunc
+
+				for pp in include:
+					if type(pp) == str:
+						if pp == "*":
+							pp = "."
+						
+						# daemon
+						pp = pp.replace("${name}", name)
+												
+						p = pathlib.Path(pp)
+						if not p.exists():
+							print("deploy: not exists - %s" % pp)
+							continue
+						
+						if p.is_dir():
+							tt = os.path.join(realTargetFull, pp)
+							ssh.uploadFolder(pp, tt)
+						else: 
+							ssh.uploadFileTo(pp, realTargetFull)
+					else:
+						src = pp["src"]
+						target = pp["target"]
+						tt = os.path.join(realTargetFull, target)
+						ssh.uploadFolder(src, tt)
+			"""
+		else:
+			raise Exception("unknown strategy[%s]" % strategy)
+
+		# shared links
+		for pp in sharedLinks:
+			print("deploy: sharedLinks - %s" % pp)
+			folder = os.path.dirname(pp)
+			g_remote.run("cd %s && mkdir -p shared/%s" % (deployRoot, folder) +
+			"&& %s ln -sf %s/shared/%s releases/%s/%s" % (sudoCmd, deployRoot, pp, todayName, pp))
+
+		# update link
+		g_remote.run("cd %s && %s rm -f current " % (deployRoot, sudoCmd) +
+			"&& %s ln -sf releases/%s current " % (sudoCmd, todayName) +
+			"&& sudo chown %s: current %s/releases/%s -R" % (server.owner, deployRoot, todayName) if server.owner else ""
 		)
 
-	# upload files
-	include = []
-	include = g_config.deploy.include
-	exclude = g_config.get("deploy.exclude", [])
-	sharedLinks = g_config.get("deploy.sharedLinks", [])
+		# file owner
+		if server.owner:
+			g_remote.run('cd %s && sudo chown %s: shared releases/%s current -R' % (deployRoot, server.owner, todayName))
+			g_remote.run('cd %s && sudo chmod 775 shared releases/%s current -R' % (deployRoot, todayName))
 
-	def _filterFunc(pp):
-		pp = os.path.normpath(pp)
-		return pp in exclude
-
-	strategy = g_config.deploy.strategy
-	if strategy == "zip":
-		zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
-		with zipfile.ZipFile(zipPath, "w") as zipWork:
-			def _zipAdd(srcP, targetP):
-				if _filterFunc(srcP):
-					print("deploy: skip - %s" % srcP)
-					return
-
-				# make "./aaa" -> "aaa"
-				targetP = os.path.normpath(targetP)
-
-				print("zipping %s -> %s" % (srcP, targetP))
-				zipWork.write(srcP, targetP, compress_type=zipfile.ZIP_DEFLATED)
-
-			#zipWork.write(name, name, compress_type=zipfile.ZIP_DEFLATED)
-			for pp in include:
-				if type(pp) == str:
-					if pp == "*":
-						pp = "."
-					
-					# daemon
-					dic = dict(name=name)
-					pp = strExpand(pp, dic)
-						
-					p = pathlib.Path(pp)
-					if not p.exists():
-						print("deploy: not exists - %s" % pp)
-						continue
-					
-					if p.is_dir():
-						if _filterFunc(pp):
-							print("deploy: skip - %s" % pp)
-							continue
-
-						for folder, dirs, files in os.walk(pp, followlinks=g_dic.deploy.followLinks):
-							# filtering dirs too
-							dirs2 = []
-							for d in dirs:
-								dd = os.path.join(folder, d)
-								if _filterFunc(dd):
-									print("deploy: skip - %s" % dd)
-								else:
-									dirs2.append(d)
-							dirs[:] = dirs2
-
-							for ff in files:
-								_zipAdd(os.path.join(folder, ff), os.path.join(folder, ff))
-					else:
-						_zipAdd(pp, pp)
-
-				else:
-					src = pp["src"]
-					target = pp["target"]
-
-					for folder, dirs, files in os.walk(src):
-						for ff in files:
-							_zipAdd(os.path.join(folder, ff), os.path.join(target, cutpath(src, folder), ff))
-
-		g_remote.uploadFile(zipPath, "/tmp/godUploadPkg.zip")	# we don't include it by default
-		g_remote.run("cd %s/releases/%s" % (deployRoot, todayName) +
-			"&& %s unzip /tmp/godUploadPkg.zip && rm /tmp/godUploadPkg.zip" % sudoCmd
-			)
-		os.remove(zipPath)
-		"""	no use copy strategy anymore
-		elif strategy == "copy":
-			ssh.uploadFile(name, os.path.join(realTargetFull, name))	# we don't include it by default
-			ssh.run("chmod 755 %s/%s" % (realTargetFull, name))
-
-			ssh.uploadFilterFunc = _filterFunc
-
-			for pp in include:
-				if type(pp) == str:
-					if pp == "*":
-						pp = "."
-					
-					# daemon
-					pp = pp.replace("${name}", name)
-											
-					p = pathlib.Path(pp)
-					if not p.exists():
-						print("deploy: not exists - %s" % pp)
-						continue
-					
-					if p.is_dir():
-						tt = os.path.join(realTargetFull, pp)
-						ssh.uploadFolder(pp, tt)
-					else: 
-						ssh.uploadFileTo(pp, realTargetFull)
-				else:
-					src = pp["src"]
-					target = pp["target"]
-					tt = os.path.join(realTargetFull, target)
-					ssh.uploadFolder(src, tt)
-		"""
-	else:
-		raise Exception("unknown strategy[%s]" % strategy)
-
-	# shared links
-	for pp in sharedLinks:
-		print("deploy: sharedLinks - %s" % pp)
-		folder = os.path.dirname(pp)
-		g_remote.run("cd %s && mkdir -p shared/%s" % (deployRoot, folder) +
-		"&& %s ln -sf %s/shared/%s releases/%s/%s" % (sudoCmd, deployRoot, pp, todayName, pp))
-
-	# update link
-	g_remote.run("cd %s && %s rm -f current " % (deployRoot, sudoCmd) +
-		"&& %s ln -sf releases/%s current " % (sudoCmd, todayName) +
-		"&& sudo chown %s: current %s/releases/%s -R" % (server.owner, deployRoot, todayName) if server.owner else ""
-	)
-
-	# file owner
-	if server.owner:
-		g_remote.run('cd %s && sudo chown %s: shared releases/%s current -R' % (deployRoot, server.owner, todayName))
-		g_remote.run('cd %s && sudo chmod 775 shared releases/%s current -R' % (deployRoot, todayName))
-
-	# post process
-	if hasattr(g_mygod, "deployPostTask"):
-		g_mygod.deployPostTask(util=g_util, remote=g_remote, local=g_local)
+		# post process
+		if hasattr(g_mygod, "deployPostTask"):
+			g_mygod.deployPostTask(util=g_util, remote=g_remote, local=g_local)
 
 
 def initSamples(type, fn):
@@ -853,6 +929,7 @@ class Helper:
 			return dd
 
 
+g_main = Main()
 g_config = Dict2()	# py코드에서는 util.cfg로 접근 가능
 g_dic = None	# helper실행할때 씀, server, vars까지 설정
 g_data = None	# .data.yml
@@ -967,6 +1044,7 @@ def main():
 	print("** config[type:%s, name:%s]" % (type, name))
 	global g_local
 	g_local = Tasks(None)
+	g_local.util = g_util
 
 	# load secret
 	secretPath = os.path.join(g_cwd, '.data.yml')
@@ -987,7 +1065,7 @@ def main():
 				ss += it['name'] + '|'
 			print("Please specify server name.[%s]" % ss[:-1])
 			return
-		taskDeploy(target)
+		g_main.taskDeploy(target)
 		return
 
 	elif cmd == "setup":
@@ -1007,7 +1085,7 @@ def main():
 			# support empty server name?
 			
 			serverName = sys.argv[2]
-		taskSetup(target, serverName)
+		g_main.taskSetup(target, serverName)
 		return
 
 	elif cmd == 'test':
@@ -1016,7 +1094,7 @@ def main():
 			print("just god command can be used for application type only.")
 			return
 
-		taskTest()
+		g_main.taskTest()
 
 	elif cmd == 'serve':
 		# serve
@@ -1024,77 +1102,10 @@ def main():
 			print("just god command can be used for application type only.")
 			return
 
-		taskServe()
+		g_main.taskServe()
 
 	else:
 		print('unknown command mode[%s]' % cmd)
-
-def taskSetup(target, serverName):
-	if not os.path.exists(target):
-		print("There is no target file[%s]" % target)
-		return
-	
-	server = configServerGet(serverName)
-	if server is None:
-		return
-
-	global g_remote, g_data
-	g_remote = Tasks(server)
-	if 'dkName' in server.dic:
-		g_remote = g_remote.dockerConn(server.dkName)
-
-	g_remote.data = g_data
-	dicInit(server)
-
-	# expand env and variables
-	expandVar(g_config)
-
-	if not hasattr(g_mygod, "setupTask"):
-		print("setup: You should override setupTask function in your myGod class")
-		return
-
-	g_mygod.setupTask(util=g_util, remote=g_remote, local=g_local)
-
-def taskTest():
-	observer = None
-	if len(g_config.test.patterns) > 0:
-		observer = Observer()
-		observer.schedule(MyHandler(g_config.test.patterns), path=".", recursive=True)
-		observer.start()
-
-	try:
-		while True:
-			time.sleep(0.01)
-			g_util.isRestart = False
-			g_local.doTestStep(g_mygod)
-
-	except KeyboardInterrupt:
-		if observer is not None:
-			observer.stop()
-
-	if observer is not None:
-		observer.join()
-
-
-def taskServe():
-	observer = None
-	if len(g_config.serve.patterns) > 0:
-		observer = Observer()
-		observer.schedule(MyHandler(g_config.serve.patterns), path=".", recursive=True)
-		observer.start()
-
-	try:
-		while True:
-			time.sleep(0.01)
-			g_util.isRestart = False
-			g_local.doServeStep(g_mygod)
-
-	except KeyboardInterrupt:
-		if observer is not None:
-			observer.stop()
-
-	if observer is not None:
-		observer.join()
 
 
 if __name__ == "__main__":
