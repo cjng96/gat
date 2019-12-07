@@ -580,8 +580,6 @@ class Main():
 					break
 
 	def buildTask(self, mygod):
-		self.onlyLocal()
-
 		print("run: building the app")
 		if hasattr(mygod, "buildTask"):
 			return mygod.buildTask(util=g_util, local=g_local, remote=g_remote)
@@ -625,7 +623,7 @@ class Main():
 			while True:
 				time.sleep(0.01)
 				g_util.isRestart = False
-				g_local.doTestStep(g_mygod)
+				self.doTestStep(g_mygod)
 
 		except KeyboardInterrupt:
 			if observer is not None:
@@ -646,7 +644,7 @@ class Main():
 			while True:
 				time.sleep(0.01)
 				g_util.isRestart = False
-				g_local.doServeStep(g_mygod)
+				self.doServeStep(g_mygod)
 
 		except KeyboardInterrupt:
 			if observer is not None:
@@ -661,7 +659,7 @@ class Main():
 		if server is None:
 			return
 
-		g_local.buildTask(g_mygod)
+		self.buildTask(g_mygod)
 
 		global g_remote
 		g_remote = Tasks(server)
