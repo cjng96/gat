@@ -39,6 +39,9 @@ from .myutil import NonBlockingStreamReader, str2arg, mergeDict, envExpand, Dict
 g_cwd = ""
 g_scriptPath = ""
 
+class Error(Exception):
+	pass
+
 class ExcProgramExit(Exception):
 	pass
 
@@ -296,7 +299,7 @@ class Tasks():
 		cmd = ["go", "build", "-o", g_config.name]
 		ret = subprocess.run(cmd)
 		if ret.returncode != 0:
-			raise Exception("task.goBuild: build failed")
+			raise Error("task.goBuild: build failed")
 
 	def gqlGen(self):
 		print("task: gql gen...")
@@ -530,11 +533,18 @@ class Main():
 		buildExc = None
 		try:
 			self.buildTask(mygod)
+		except Error as e:
+			buildExc = e.args
 		except Exception as e:
 			buildExc = traceback.format_exc()
 
 		if buildExc is not None:
-			print("run: exception in buildTask...\n%s" % buildExc)
+			print("\nrun: exception in buildTask...\n  %s" % buildExc)
+			while True:	# wait for file modification
+				if g_util.isRestart:
+					return
+					
+				time.sleep(0.1)
 		else:
 			cmd = self.runTask(mygod)
 
