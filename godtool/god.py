@@ -611,6 +611,7 @@ class Main():
 			g_remote = g_remote.dockerConn(server.dkName)
 
 		g_remote.data = g_data
+		g_remote.util = g_util		
 		dicInit(server)
 
 		# expand env and variables
