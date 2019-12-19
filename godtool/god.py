@@ -47,10 +47,10 @@ class ExcProgramExit(Exception):
 
 class MyUtil():
 	def __init__(self):
-		self.deployRoot = ""	# only for deployment
+		#self.deployRoot = ""	# only for deployment -- 이거 그냥. g_remote.server.deployRoot쓰면 된다.
 		#self.deployOwner = None	# 그냥 server.id를 기본값으로 한다.
 		self.isRestart = True	# First start or modified source files
-		self.config = None	# config object
+		self.cfg = None	# config object(g_config)
 
 	def str2arg(self, ss):
 		return str2arg(ss)
@@ -349,7 +349,7 @@ class Tasks():
 		cmd = ""
 		if useNvm:
 			cmd += ". ~/.nvm/nvm.sh && "
-		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (g_util.deployRoot)
+		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (g_remote.server.deployRoot)
 		self.ssh.run(cmd)
 
 	def _helperRun(self, args, sudo=False):
@@ -685,12 +685,12 @@ class Main():
 		expandVar(g_config)
 
 		sudoCmd = ""
-		if server.owner:
+		if "owner" in server:
 			sudoCmd = "sudo"
 
 		name = g_config.name
 		deployRoot = server.deployRoot
-		realTarget = g_remote.runOutput('realpath %s' % deployRoot)
+		realTarget = g_remote.runOutput('realpath %s' %  deployRoot)
 		realTarget = realTarget.strip("\r\n")	# for sftp
 		todayName = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")[2:]
 
@@ -722,7 +722,7 @@ class Main():
 		# create release folder as ssh user, upload, extract then change release folder to deploy / owner
 		res = g_remote.runOutput("cd %s/releases" % deployRoot +
 			"&& %s mkdir %s" % (sudoCmd, todayName) +
-			"&& sudo chown %s: %s" % (server.owner, todayName) if server.owner else ""
+			("&& sudo chown %s: %s" % (server.owner, todayName) if "owner" in server else "")
 			)
 
 		# upload files
@@ -795,7 +795,7 @@ class Main():
 								_zipAdd(os.path.join(folder, ff), os.path.join(target, cutpath(src, folder), ff))
 
 			g_remote.uploadFile(zipPath, "/tmp/godUploadPkg.zip")	# we don't include it by default
-			g_remote.run("cd %s/releases/%s" % (deployRoot, todayName) +
+			g_remote.run("cd %s/releases/%s " % (deployRoot, todayName) +
 				"&& %s unzip /tmp/godUploadPkg.zip && rm /tmp/godUploadPkg.zip" % sudoCmd
 				)
 			os.remove(zipPath)
@@ -843,11 +843,11 @@ class Main():
 		# update link
 		g_remote.run("cd %s && %s rm -f current " % (deployRoot, sudoCmd) +
 			"&& %s ln -sf releases/%s current " % (sudoCmd, todayName) +
-			"&& sudo chown %s: current %s/releases/%s -R" % (server.owner, deployRoot, todayName) if server.owner else ""
+			("&& sudo chown %s: current %s/releases/%s -R" % (server.owner, deployRoot, todayName) if "owner" in server else "")
 		)
 
 		# file owner
-		if server.owner:
+		if "owner" in server:
 			g_remote.run('cd %s && sudo chown %s: shared releases/%s current -R' % (deployRoot, server.owner, todayName))
 			g_remote.run('cd %s && sudo chmod 775 shared releases/%s current -R' % (deployRoot, todayName))
 

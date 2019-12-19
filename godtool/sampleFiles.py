@@ -28,7 +28,7 @@ servers:
     port: 22
     id: test      # ssh worker user id
     owner: engt   # opt, generated files owner
-      # if it's not specified, you don't need sudo right
+      # you don't need sudo right if it's not specified.
       # if you need the operation needed sudo right, should specify it.
     deployRoot: ~/test  # deployment target path
 
