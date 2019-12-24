@@ -273,7 +273,7 @@ class Tasks():
 		self.onlyRemote()
 		self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
 
-	# mysql, goBuild, gqlGen, dbXorm, pm2Register등은
+	# TODO: mysql, goBuild, gqlGen, dbXorm, pm2Register등은 기본 task에서 빼야할듯
 	def mysqlUserDel(self, id, host):
 		hr = self.runOutput('''sudo mysql -e "SELECT 'exist' FROM mysql.user where user='%s';"''' % (id))
 		if hr == "":
@@ -350,7 +350,7 @@ class Tasks():
 		if useNvm:
 			cmd += ". ~/.nvm/nvm.sh && "
 		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (g_remote.server.deployRoot)
-		self.ssh.run(cmd)
+		self.run(cmd)
 
 	def _helperRun(self, args, sudo=False):
 		pp2 = "/tmp/godHelper.py"
@@ -705,7 +705,7 @@ class Main():
 		g_remote.runOutput('{0} mkdir -p {1}/shared && {0} mkdir -p {1}/releases'.format(sudoCmd, deployRoot))
 		#('&& sudo chown %s: %s %s/shared %s/releases' % (server.owner, deployRoot, deployRoot, deployRoot) if server.owner else '') +
 
-		res = g_remote.runOutput("cd {0}/releases && ls -d *".format(deployRoot))
+		res = g_remote.runOutput("cd {0}/releases && ls -d *;echo".format(deployRoot))
 		releases = list(filter(lambda x: re.match('\d{6}_\d{6}', x) is not None, res.split()))
 		releases.sort()
 
