@@ -411,12 +411,12 @@ class Tasks():
 			path=path, marker=marker, block=block, insertAfter=insertAfter)
 		self._helperRun(args, sudo)
 
-	def configLine(self, path, regexp, line, items=None, sudo=False):
+	def configLine(self, path, regexp, line, items=None, sudo=False, append=False):
 		print("task: config line...")
 		#self.onlyRemote()
 
 		args = dict(cmd="configLine", dic=g_dic,
-			path=path, regexp=regexp, line=line, items=items)
+			path=path, regexp=regexp, line=line, items=items, append=append)
 		self._helperRun(args, sudo)
 
 	def s3List(self, bucket, prefix):
