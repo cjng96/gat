@@ -65,6 +65,10 @@ class Tasks():
 		self.server = server
 		self.ssh = None
 
+		# accessbility
+		self.data = g_data
+		self.util = g_util		
+
 		if server is not None:
 			if dkTunnel is None:
 				port = server.get("port", 22)
@@ -610,8 +614,8 @@ class Main():
 		if 'dkName' in server.dic:
 			g_remote = g_remote.dockerConn(server.dkName)
 
-		g_remote.data = g_data
-		g_remote.util = g_util		
+		#g_remote.data = g_data
+		#g_remote.util = g_util		
 		dicInit(server)
 
 		# expand env and variables
@@ -677,8 +681,8 @@ class Main():
 		if 'dkName' in server.dic:
 			g_remote = g_remote.dockerConn(server.dkName)
 
-		g_remote.data = g_data
-		g_remote.util = g_util
+		#g_remote.data = g_data
+		#g_remote.util = g_util
 		dicInit(server)
 
 		# expand env and variables
@@ -1053,7 +1057,7 @@ def main():
 	print("** config[type:%s, name:%s]" % (type, name))
 	global g_local
 	g_local = Tasks(None)
-	g_local.util = g_util
+	#g_local.util = g_util
 
 	# load secret
 	secretPath = os.path.join(g_cwd, '.data.yml')
