@@ -18,6 +18,7 @@ import re
 import base64
 import inspect
 import traceback
+import importlib
 from copy import deepcopy
 from io import StringIO
 from subprocess import Popen, PIPE
@@ -136,6 +137,39 @@ class Tasks():
 	def onlyRemote(self):
 		if self.dkTunnel is None and self.ssh is None:
 			raise Exception("this method only can be used in remote service.")
+
+	def deployApp(self, path, profile, serverOvr=None, varsOvr=None):
+		sys.path.insert(0, path)
+		try:
+			config = Config()
+			helper = Helper(config)
+			mymod = importlib.import_module('god_app')
+			mygod = mymod.myGod(helper=helper)
+
+			server = config.configServerGet(profile)
+			if server is None:
+				return
+
+			# override configure
+			server = deepcopy(server)
+			if serverOvr is not None:
+				server.fill(serverOvr)
+			if varsOvr is not None:
+				server.vars.fill(varsOvr)
+
+			remote = Tasks(server)
+			if 'dkName' in server.dic:
+				remote = remote.dockerConn(server.dkName)
+
+			pp = os.curdir
+			os.chdir(path)
+			try:
+				g_main.taskDeploy(remote, server, mygod, config)
+			finally:
+				os.chdir(pp)
+
+		finally:
+			sys.path = sys.path[1:]
 
 	def makeFile(self, content, path, sudo=False, mode=755):
 		#self.onlyRemote()
@@ -495,20 +529,6 @@ def dicInit(server):
 	g_util.cfg = g_config
 	g_util.data = g_data
 
-def configServerGet(name):
-	server = None
-	for it in g_config.servers:
-		if it["name"] == name:
-			server = it
-			print("deploy: selected server - ", it)
-			break
-
-	if server is None:
-		print("Not found server[%s]" % name)
-		return None
-
-	return server
-
 class Main():
 
 	# runTask와 doServerStep등은 Task말고 별도로 빼자 remote.runTask를 호출할일은 없으니까
@@ -605,7 +625,7 @@ class Main():
 			print("There is no target file[%s]" % target)
 			return
 		
-		server = configServerGet(serverName)
+		server = g_config.configServerGet(serverName)
 		if server is None:
 			return
 
@@ -668,33 +688,20 @@ class Main():
 		if observer is not None:
 			observer.join()
 
-	def taskDeploy(self, serverName):
-		global g_config
-		server = configServerGet(serverName)
-		if server is None:
-			return
+	def taskDeploy(self, env, server, mygod, config):
+		self.buildTask(mygod)
 
-		self.buildTask(g_mygod)
-
-		global g_remote
-		g_remote = Tasks(server)
-		if 'dkName' in server.dic:
-			g_remote = g_remote.dockerConn(server.dkName)
-
-		#g_remote.data = g_data
-		#g_remote.util = g_util
 		dicInit(server)
-
 		# expand env and variables
-		expandVar(g_config)
+		expandVar(config)
 
 		sudoCmd = ""
 		if "owner" in server:
 			sudoCmd = "sudo"
 
-		name = g_config.name
+		name = config.name
 		deployRoot = server.deployRoot
-		realTarget = g_remote.runOutput('realpath %s' %  deployRoot)
+		realTarget = env.runOutput('realpath %s' %  deployRoot)
 		realTarget = realTarget.strip("\r\n")	# for sftp
 		todayName = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")[2:]
 
@@ -702,44 +709,44 @@ class Main():
 		deployPath = os.path.join(realTarget, "releases", todayName)
 		g_dic.dic['deployRoot'] = deployRoot
 		g_dic.dic['deployPath'] = deployPath
-		if hasattr(g_mygod, "deployPreTask"):
-			g_mygod.deployPreTask(util=g_util, remote=g_remote, local=g_local)
+		if hasattr(mygod, "deployPreTask"):
+			mygod.deployPreTask(util=g_util, remote=env, local=g_local)
 
 		# prepare target folder
-		g_remote.runOutput('{0} mkdir -p {1}/shared && {0} mkdir -p {1}/releases'.format(sudoCmd, deployRoot))
+		env.runOutput('{0} mkdir -p {1}/shared && {0} mkdir -p {1}/releases'.format(sudoCmd, deployRoot))
 		#('&& sudo chown %s: %s %s/shared %s/releases' % (server.owner, deployRoot, deployRoot, deployRoot) if server.owner else '') +
 
-		res = g_remote.runOutput("cd {0}/releases && ls -d *;echo".format(deployRoot))
+		res = env.runOutput("cd {0}/releases && ls -d *;echo".format(deployRoot))
 		releases = list(filter(lambda x: re.match('\d{6}_\d{6}', x) is not None, res.split()))
 		releases.sort()
 
-		max = g_config.deploy.maxRelease-1
+		max = config.deploy.maxRelease-1
 		cnt = len(releases)
 		print("deploy: releases folders count is %d" % cnt)
 		if cnt > max:
 			print("deploy: remove old %d folders" % (cnt - max))
 			removeList = releases[:cnt-max]
 			for ff in removeList:
-				g_remote.runOutput("%s rm -rf %s/releases/%s" % (sudoCmd, deployRoot, ff))
+				env.runOutput("%s rm -rf %s/releases/%s" % (sudoCmd, deployRoot, ff))
 
 		# if deploy / owner is defined,
 		# create release folder as ssh user, upload, extract then change release folder to deploy / owner
-		res = g_remote.runOutput("cd %s/releases" % deployRoot +
+		res = env.runOutput("cd %s/releases" % deployRoot +
 			"&& %s mkdir %s" % (sudoCmd, todayName) +
 			("&& sudo chown %s: %s" % (server.owner, todayName) if "owner" in server else "")
 			)
 
 		# upload files
 		include = []
-		include = g_config.deploy.include
-		exclude = g_config.get("deploy.exclude", [])
-		sharedLinks = g_config.get("deploy.sharedLinks", [])
+		include = config.deploy.include
+		exclude = config.get("deploy.exclude", [])
+		sharedLinks = config.get("deploy.sharedLinks", [])
 
 		def _filterFunc(pp):
 			pp = os.path.normpath(pp)
 			return pp in exclude
 
-		strategy = g_config.deploy.strategy
+		strategy = config.deploy.strategy
 		if strategy == "zip":
 			zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
 			with zipfile.ZipFile(zipPath, "w") as zipWork:
@@ -774,7 +781,7 @@ class Main():
 								print("deploy: skip - %s" % pp)
 								continue
 
-							for folder, dirs, files in os.walk(pp, followlinks=g_dic.deploy.followLinks):
+							for folder, dirs, files in os.walk(pp, followlinks=config.deploy.followLinks):
 								# filtering dirs too
 								dirs2 = []
 								for d in dirs:
@@ -798,8 +805,8 @@ class Main():
 							for ff in files:
 								_zipAdd(os.path.join(folder, ff), os.path.join(target, cutpath(src, folder), ff))
 
-			g_remote.uploadFile(zipPath, "/tmp/godUploadPkg.zip")	# we don't include it by default
-			g_remote.run("cd %s/releases/%s " % (deployRoot, todayName) +
+			env.uploadFile(zipPath, "/tmp/godUploadPkg.zip")	# we don't include it by default
+			env.run("cd %s/releases/%s " % (deployRoot, todayName) +
 				"&& %s unzip /tmp/godUploadPkg.zip && rm /tmp/godUploadPkg.zip" % sudoCmd
 				)
 			os.remove(zipPath)
@@ -841,23 +848,23 @@ class Main():
 		for pp in sharedLinks:
 			print("deploy: sharedLinks - %s" % pp)
 			folder = os.path.dirname(pp)
-			g_remote.run("cd %s && mkdir -p shared/%s" % (deployRoot, folder) +
+			env.run("cd %s && mkdir -p shared/%s" % (deployRoot, folder) +
 			"&& %s ln -sf %s/shared/%s releases/%s/%s" % (sudoCmd, deployRoot, pp, todayName, pp))
 
 		# update link
-		g_remote.run("cd %s && %s rm -f current " % (deployRoot, sudoCmd) +
+		env.run("cd %s && %s rm -f current " % (deployRoot, sudoCmd) +
 			"&& %s ln -sf releases/%s current " % (sudoCmd, todayName) +
 			("&& sudo chown %s: current %s/releases/%s -R" % (server.owner, deployRoot, todayName) if "owner" in server else "")
 		)
 
 		# file owner
 		if "owner" in server:
-			g_remote.run('cd %s && sudo chown %s: shared releases/%s current -R' % (deployRoot, server.owner, todayName))
-			g_remote.run('cd %s && sudo chmod 775 shared releases/%s current -R' % (deployRoot, todayName))
+			env.run('cd %s && sudo chown %s: shared releases/%s current -R' % (deployRoot, server.owner, todayName))
+			env.run('cd %s && sudo chmod 775 shared releases/%s current -R' % (deployRoot, todayName))
 
 		# post process
-		if hasattr(g_mygod, "deployPostTask"):
-			g_mygod.deployPostTask(util=g_util, remote=g_remote, local=g_local)
+		if hasattr(mygod, "deployPostTask"):
+			mygod.deployPostTask(util=g_util, remote=env, local=g_local)
 
 
 def initSamples(type, fn):
@@ -896,24 +903,23 @@ def expandVar(dic):
 			elif tt == list:
 				expandVar(value)
 
-
-class Helper:
+class Config(Dict2):
 	def __init__(self):
-		pass
+		super().__init__()
 
 	def configStr(self, cfgType, ss):
 		'''
 		type: yaml
 		'''
-		global g_config
 		if cfgType == "yaml":
 			try:
-				g_config = Dict2(yaml.safe_load(ss))
+				#self.cfg = Dict2()
+				self.fill(yaml.safe_load(ss))
 				#g_util.config = g_config
 
-				if g_config.type == 'app':
-					if 'followLinks' not in g_config.deploy:
-						g_config.deploy['followLinks'] = False
+				if self.type == 'app':
+					if 'followLinks' not in self.deploy:
+						self.deploy['followLinks'] = False
 
 			except yaml.YAMLError as e:
 				raise e
@@ -927,8 +933,32 @@ class Helper:
 		with open(pp, "r") as fp:
 			self.configStr(cfgType, fp.read())
 
+	def configServerGet(self, name):
+		server = None
+		for it in self.servers:
+			if it["name"] == name:
+				server = it
+				print("deploy: selected server - ", it)
+				break
+
+		if server is None:
+			print("Not found server[%s]" % name)
+			return None
+
+		return server
+
+class Helper:
+	def __init__(self, config):
+		self.config = config
+
+	def configStr(self, cfgType, ss):
+		self.config.configStr(cfgType, ss)
+
+	def configFile(self, cfgType, pp):
+		self.config.configFile(cfgType, pp)
+
 	def configGet(self):
-		return g_config
+		return self.config.configGet()
 
 	def loadData(self, pp):
 		if not os.path.exists(pp):
@@ -942,8 +972,10 @@ class Helper:
 			return dd
 
 
+#g_helper = Helper()
+g_config = Config()
 g_main = Main()
-g_config = Dict2()	# py코드에서는 util.cfg로 접근 가능
+#g_config = Dict2()	# py코드에서는 util.cfg로 접근 가능
 g_dic = None	# helper실행할때 씀, server, vars까지 설정
 g_data = None	# .data.yml
 # config, server, vars(of server)
@@ -1043,14 +1075,14 @@ def main():
 		help(target)
 		return
 
-	helper = Helper()
+	global g_config
+	helper = Helper(g_config)
 
 	sys.path.append(g_cwd)
 	mymod = __import__(target[:-3], fromlist=[''])
 	g_mygod = mymod.myGod(helper=helper)
 
 	print("god-tool V%s" % __version__)
-	global g_config
 	name = g_config.name
 	type = g_config.get("type", "app")
 
@@ -1078,7 +1110,16 @@ def main():
 				ss += it['name'] + '|'
 			print("Please specify server name.[%s]" % ss[:-1])
 			return
-		g_main.taskDeploy(target)
+
+		server = g_config.configServerGet(target)
+		if server is None:
+			return
+
+		env = Tasks(server)
+		if 'dkName' in server.dic:
+			env = env.dockerConn(server.dkName)			
+
+		g_main.taskDeploy(env, server, g_mygod, g_config)
 		return
 
 	elif cmd == "setup":

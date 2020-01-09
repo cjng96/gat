@@ -156,7 +156,7 @@ class Dict2():
 
 	def fill(self, dic):
 		if isinstance(dic, Dict2):
-			self.dic = deepcopy(dic)
+			self.dic = deepcopy(dic.dic)
 			return
 			
 		for key, value in dic.items():
