@@ -1007,159 +1007,160 @@ god SYSTEM_NAME SERVER_NAME - Setup server defined in GOD_FILE.
 		print("\nThere is no %s script file." % target)
 
 def main():
-	global g_cwd, g_scriptPath, g_mygod
-	g_cwd = os.getcwd()
-	g_scriptPath = os.path.dirname(os.path.realpath(__file__))
-	target = 'god_app.py'
+  global g_cwd, g_scriptPath, g_mygod
+  g_cwd = os.getcwd()
+  g_scriptPath = os.path.dirname(os.path.realpath(__file__))
+  target = 'god_app.py'
 
-	cnt = len(sys.argv)
-	cmd = None
-	if cnt > 1:
-		cmd = sys.argv[1]
+  cnt = len(sys.argv)
+  cmd = None
+  if cnt > 1:
+    cmd = sys.argv[1]
 
-		if cmd == '--help':
-			help(None)
-			return
+    if cmd == '--help':
+      help(None)
+      return
 
-		elif cmd == "init":
-			if cnt < 3:
-				print("god init app OR god init sys NAME.")
-				return
+    elif cmd == "init":
+      if cnt < 3:
+        print("god init app OR god init sys NAME.")
+        return
 
-			type = sys.argv[2]
-			if type != "app" and type != "sys":
-				print("app or sys can be used for god init command.")
-				return
+      type = sys.argv[2]
+      if type != "app" and type != "sys":
+        print("app or sys can be used for god init command.")
+        return
 
-			if type == 'app':
-				initSamples(type, target)
+      if type == 'app':
+        initSamples(type, target)
 
-			elif type == 'sys':
-				if cnt < 4:
-					print('Please specify SYSTEM_NAME to be generated.')
-					return
+      elif type == 'sys':
+        if cnt < 4:
+          print('Please specify SYSTEM_NAME to be generated.')
+          return
 
-				target = sys.argv[3]
-				if not target.endswith(".py"):
-					target += ".py"
-				initSamples(type, target)
-			
-			else:
-				print('unknown init type[%s]' % type)
+        target = sys.argv[3]
+        if not target.endswith(".py"):
+          target += ".py"
+        initSamples(type, target)
+      
+      else:
+        print('unknown init type[%s]' % type)
 
-			return
+      return
 
-		elif cmd == "test":
-			pass
+    elif cmd == "test":
+      pass
 
-		elif cmd == "deploy":
-			pass
+    elif cmd == "deploy":
+      pass
 
-		else:
-			# setup server system
-			cmd = 'setup'
-			if cnt < 2:
-				print("god SYSTEM_FILE SERVER_NAME")
-				return
+    else:
+      # setup server system
+      cmd = 'setup'
+      if cnt < 2:
+        print("god SYSTEM_FILE SERVER_NAME")
+        return
 
-			target = sys.argv[1]
-			if not target.endswith(".py"):
-				target += ".py"
+      target = sys.argv[1]
+      if not target.endswith(".py"):
+        target += ".py"
 
-	else:
-		# app serve
-		cmd = 'serve'
+  else:
+    # app serve
+    cmd = 'serve'
 
-	# check first
-	if not os.path.exists(target):	# or not os.path.exists("god.yml"):
-		help(target)
-		return
+  # check first
+  if not os.path.exists(target):	# or not os.path.exists("god.yml"):
+    help(target)
+    return
 
-	global g_config
-	helper = Helper(g_config)
+  global g_config
+  helper = Helper(g_config)
 
-	sys.path.append(g_cwd)
-	mymod = __import__(target[:-3], fromlist=[''])
-	g_mygod = mymod.myGod(helper=helper)
+  sys.path.append(g_cwd)
+  mymod = __import__(target[:-3], fromlist=[''])
+  g_mygod = mymod.myGod(helper=helper)
 
-	print("god-tool V%s" % __version__)
-	name = g_config.name
-	type = g_config.get("type", "app")
+  print("god-tool V%s" % __version__)
+  name = g_config.name
+  type = g_config.get("type", "app")
 
-	print("** config[type:%s, name:%s]" % (type, name))
-	global g_local
-	g_local = Tasks(None)
-	#g_local.util = g_util
+  print("** config[type:%s, name:%s]" % (type, name))
+  global g_local
+  g_local = Tasks(None)
+  #g_local.util = g_util
 
-	# load secret
-	secretPath = os.path.join(g_cwd, '.data.yml')
-	if os.path.exists(secretPath):
-		print('load data...')
-		# TODO: encrypt with input key when changed
-		with open(secretPath, "r") as fp:
-			global g_data
-			g_data = Dict2(yaml.safe_load(fp.read()))
-			print('data - ', g_data)
+  # load secret
+  global g_data
+  secretPath = os.path.join(g_cwd, '.data.yml')
+  if os.path.exists(secretPath):
+    print('load data...')
+    # TODO: encrypt with input key when changed
+    with open(secretPath, "r") as fp:
+      ss = fp.read()
+      g_data = Dict2(yaml.safe_load(ss))
+      print('data - ', g_data)
 
-	if cmd == "deploy":
-		#g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
-		target = sys.argv[2] if cnt > 2 else None
-		if target is None:
-			ss = ''
-			for it in g_config.servers:
-				ss += it['name'] + '|'
-			print("Please specify server name.[%s]" % ss[:-1])
-			return
+  if cmd == "deploy":
+    #g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
+    target = sys.argv[2] if cnt > 2 else None
+    if target is None:
+      ss = ''
+      for it in g_config.servers:
+        ss += it['name'] + '|'
+      print("Please specify server name.[%s]" % ss[:-1])
+      return
 
-		server = g_config.configServerGet(target)
-		if server is None:
-			return
+    server = g_config.configServerGet(target)
+    if server is None:
+      return
 
-		env = Tasks(server)
-		if 'dkName' in server.dic:
-			env = env.dockerConn(server.dkName)			
+    env = Tasks(server)
+    if 'dkName' in server.dic:
+      env = env.dockerConn(server.dkName)			
 
-		g_main.taskDeploy(env, server, g_mygod, g_config)
-		return
+    g_main.taskDeploy(env, server, g_mygod, g_config)
+    return
 
-	elif cmd == "setup":
-		if cnt < 3 and len(g_config.servers) == 1:
-			serverName = g_config.servers[0].name
-		else:
-			if cnt < 3:
-				ss = ''
-				for it in g_config.servers:
-					ss += it['name'] + '|'
+  elif cmd == "setup":
+    if cnt < 3 and len(g_config.servers) == 1:
+      serverName = g_config.servers[0].name
+    else:
+      if cnt < 3:
+        ss = ''
+        for it in g_config.servers:
+          ss += it['name'] + '|'
 
-				print('\nPlease specify SERVER_NAME...')
-				print("eg> god SYSTEM_NAME.py SERVER_NAME")
-				print(" ** you can use [%s] as SERVER_NAME" % ss[:-1])
-				return
+        print('\nPlease specify SERVER_NAME...')
+        print("eg> god SYSTEM_NAME.py SERVER_NAME")
+        print(" ** you can use [%s] as SERVER_NAME" % ss[:-1])
+        return
 
-			# support empty server name?
-			
-			serverName = sys.argv[2]
-		g_main.taskSetup(target, serverName)
-		return
+      # support empty server name?
+      
+      serverName = sys.argv[2]
+    g_main.taskSetup(target, serverName)
+    return
 
-	elif cmd == 'test':
-		# serve
-		if type != "app":
-			print("just god command can be used for application type only.")
-			return
+  elif cmd == 'test':
+    # serve
+    if type != "app":
+      print("just god command can be used for application type only.")
+      return
 
-		g_main.taskTest()
+    g_main.taskTest()
 
-	elif cmd == 'serve':
-		# serve
-		if type != "app":
-			print("just god command can be used for application type only.")
-			return
+  elif cmd == 'serve':
+    # serve
+    if type != "app":
+      print("just god command can be used for application type only.")
+      return
 
-		g_main.taskServe()
+    g_main.taskServe()
 
-	else:
-		print('unknown command mode[%s]' % cmd)
+  else:
+    print('unknown command mode[%s]' % cmd)
 
 
 if __name__ == "__main__":
