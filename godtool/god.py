@@ -57,439 +57,440 @@ class MyUtil():
 		return str2arg(ss)
 
 class Tasks():
-	def __init__(self, server, dkTunnel=None, dkName=None, dkId=None):
-		'''
-		'''
-		self.proc = None
-		self._uploadHelper = False
-
-		self.server = server
-		self.ssh = None
-
-		# accessbility
-		self.data = g_data
-		self.util = g_util		
-
-		if server is not None:
-			if dkTunnel is None:
-				port = server.get("port", 22)
-				self.initSsh(server.host, port, server.id)
-
-			if "vars" not in server:
-				server.vars = {}
-
-			self.vars = server.vars
-
-		# docker일 경우 dkTunnel, dkName가 필수며, 부모의 server도 있어야 함
-		self.dkTunnel = dkTunnel
-		self.dkName = dkName
-
-		if dkId is not None:
-			dkId = strExpand(dkId, g_dic)
-		self.dkId = dkId
-
-	def initSsh(self, host, port, id):
-		self.ssh = CoSsh()
-		print("ssh: connecting to the server[%s:%d] with ID:%s" % (host, port, id))
-		self.ssh.init(host, port, id)
-
-	def __del__(self):
-		if self.ssh is not None:
-			self.ssh.close()
-			self.ssh = None
-
-	def dockerConn(self, name, dkId=None):
-		if self.dkTunnel is not None:
-			raise Exception('dockerConn can be called only on remote connection.')
-
-		dk = Tasks(self.server, self, name, dkId)
-		return dk
-
-	def parentConn(self):
-		if self.dkTunnel is None:
-			raise Exception('This connection is not docker connection.')
-		return self.dkTunnel
-
-	def otherDockerConn(self, name, dkId=None):
-		if self.dkTunnel is None:
-			raise Exception('otherDockerConn can be called on docker connection only.')
-
-		return self.dkTunnel.dockerConn(name, dkId)
-
-	def remoteConn(self, host, port, id, dkName=None, dkId=None):
-		'''
-		지정해서 커넥션을 만들어낸다.
-		docker지정까지 가능하다. 이거 설정을 컨피그로 할수 있게 하자
-		이건 util로 가는게 나을까
-		'''
-		dk = Tasks(Dict2(dict(name='remote', host=host, port=port, id=id)))	# no have owner
-		dk.initSsh(host, port, id)
-
-		if dkName is not None:
-			dk = dk.dockerConn(dkName, dkId)
-
-		return dk
-
-	def onlyLocal(self):
-		if self.ssh is not None:
-			raise Exception("this method only can be used in local service.")
-
-	def onlyRemote(self):
-		if self.dkTunnel is None and self.ssh is None:
-			raise Exception("this method only can be used in remote service.")
-
-	def deployApp(self, path, profile, serverOvr=None, varsOvr=None):
-		sys.path.insert(0, path)
-		try:
-			config = Config()
-			helper = Helper(config)
-			mymod = importlib.import_module('god_app')
-			mygod = mymod.myGod(helper=helper)
-
-			server = config.configServerGet(profile)
-			if server is None:
-				return
-
-			# override configure
-			server = deepcopy(server)
-			if serverOvr is not None:
-				server.fill(serverOvr)
-			if varsOvr is not None:
-				server.vars.fill(varsOvr)
-
-			remote = Tasks(server)
-			if 'dkName' in server.dic:
-				remote = remote.dockerConn(server.dkName)
-
-			pp = os.curdir
-			os.chdir(path)
-			try:
-				g_main.taskDeploy(remote, server, mygod, config)
-			finally:
-				os.chdir(pp)
-
-		finally:
-			sys.path = sys.path[1:]
-
-	def makeFile(self, content, path, sudo=False, mode=755):
-		#self.onlyRemote()
-		#ss = content.replace('"', '\\"').replace('%', '\%').replace('$', '\$')
-		content = str2arg(content)
-
-		sudoCmd = 'sudo' if sudo else ''
-		self.run('echo "{1}" | {0} tee {2} > /dev/null && {0} chmod {3} {2}'.format(sudoCmd, content, path, mode))
-
-	def runOutput(self, cmd, expandVars=True):
-		'''
-		cmd: string or array
-		expandVars:
-		return: stdout string
-		exception: subprocess.CalledProcessError(returncode, output)
-		'''
-		print("executeOutput on %s[%s].." % (self._serverName(), cmd))
-
-		if expandVars:
-			cmd = strExpand(cmd, g_dic)
-
-		if self.dkTunnel is not None:
-			dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
-			cmd = str2arg(cmd)			
-			cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
-			return self.dkTunnel.ssh.runOutput(cmd)
-		elif self.ssh is not None:
-			return self.ssh.runOutput(cmd)
-		else:
-			return subprocess.check_output(cmd, shell=True, executable='/bin/bash')
-
-	def runOutputAll(self, cmd, expandVars=True):
-		'''
-		cmd: string or array
-		expandVars:
-		return: stdout string
-		exception: subprocess.CalledProcessError(returncode, output)
-		'''
-		print("executeOutputAll on %s[%s].." % (self._serverName(), cmd))
-
-		if expandVars:
-			cmd = strExpand(cmd, g_dic)
-
-		if self.dkTunnel is not None:
-			dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
-			cmd = str2arg(cmd)			
-			cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
-			return self.dkTunnel.ssh.runOutputAll(cmd)
-		elif self.ssh is not None:
-			return self.ssh.runOutputAll(cmd)
-		else:
-			return subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, executable='/bin/bash')
-
-	def _serverName(self):
-		if self.server is None:
-			return 'local'
-		elif self.dkTunnel is None:
-			return self.server.host
-		else:
-			return "%s[%s]" % (self.dkName, self.server.host)
-
-	def run(self, cmd, expandVars=True):
-		print("execute on %s[%s].." % (self._serverName(), cmd))
-
-		if expandVars:
-			cmd = strExpand(cmd, g_dic)
-
-		if self.dkTunnel is not None:
-			# it하면 오류 난다
-			dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
-			cmd = str2arg(cmd)
-			cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
-			return self.dkTunnel.ssh.run(cmd)
-		elif self.ssh is not None:
-				return self.ssh.run(cmd)
-		else:
-			"""
-			with Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, bufsize=1, universal_newlines=True) as p:
-				fdout = p.stdout.fileno()
-				fcntl.fcntl(fdout, fcntl.F_SETFL, fcntl.fcntl(fdout, fcntl.F_GETFL) | os.O_NONBLOCK)
-
-				fderr = p.stderr.fileno()
-				fcntl.fcntl(fderr, fcntl.F_SETFL, fcntl.fcntl(fderr, fcntl.F_GETFL) | os.O_NONBLOCK)
-
-				while True:
-					reads = [fdout, fderr]
-					ret = select.select(reads, [], [])
-					for fd in ret[0]:
-						if fd == fdout:
-							print(p.stdout.read(), end='')
-						if fd == fderr:
-							print(p.stderr.read(), end='')
-						
-					if p.poll() != None:
-						break
-			rc = p.returncode
-			if rc != 0:
-				raise subprocess.CalledProcessError(rc, cmd)
-			"""
-			with Popen(cmd, shell=True, universal_newlines=True) as p:
-				p.communicate()
-				print("  -> ret:%d" % (p.returncode))
-				if p.returncode != 0:
-					raise subprocess.CalledProcessError(p.returncode, cmd)
-
-	def runSafe(self, cmd):
-		'''
-		return: success flag
-		'''
-		try:
-			self.run(cmd)
-			return True
-		except subprocess.CalledProcessError as e:
-			print("run: failed %d\n -- %s\n" % (e.returncode, e.output))
-			return False
-
-	def uploadFile(self, src, dest):
-		self.onlyRemote()
-		src = os.path.expanduser(src)
-		dest = os.path.expanduser(dest)
-		if self.dkTunnel is not None:
-			self.dkTunnel.ssh.uploadFile(src, "/tmp/upload.tmp")
-			self.dkTunnel.ssh.run('docker cp /tmp/upload.tmp %s:%s' % (self.dkName, dest))
-		else:
-			self.ssh.uploadFile(src, dest)
-
-	def uploadFileTo(self, src, dest):
-		self.onlyRemote()
-		src = os.path.expanduser(src)
-		dest = os.path.expanduser(dest)
-		pp = os.path.join(dest, os.path.basename(src))
-		self.uploadFile(src, pp)
-
-	def uploadFolder(self, src, dest):
-		self.onlyRemote()
-		self.ssh.uploadFolder(src, dest)
-
-	def uploadFolderTo(self, src, dest):
-		self.onlyRemote()
-		self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
-
-	# TODO: mysql, goBuild, gqlGen, dbXorm, pm2Register등은 기본 task에서 빼야할듯
-	def mysqlUserDel(self, id, host):
-		hr = self.runOutput('''sudo mysql -e "SELECT 'exist' FROM mysql.user where user='%s';"''' % (id))
-		if hr == "":
-			return
-
-		self.run('''sudo mysql -e "DROP USER '%s'@'%s';"''' % (id, host))
-	
-	def mysqlUserGen(self, id, pw, host, priv):
-		#pw = str2arg(pw).replace(';', '\\;').replace('`', '``').replace("'", "\\'")
-		pw = str2arg(pw).replace("'", "''")
-		# 이게 좀 웃긴데, mysql 통해서 실행하는거기 때문에 \\는 \\\\로 바꿔야한다.
-		pw = pw.replace("\\\\", "\\\\\\\\")
-		host = str2arg(host)
-		self.run('''sudo mysql -e "CREATE USER '%s'@'%s' IDENTIFIED BY '%s';"''' % (id, host, pw))
-		priv2, oper = priv.split(':')
-		self.run('''sudo mysql -e "GRANT %s ON %s TO '%s'@'%s';"''' % (oper, priv2, id, host))
-	
-	def goBuild(self):
-		print("task: goBuild as [%s]..." % g_config.name)
-
-		self.onlyLocal()
-
-		cmd = ["go", "build", "-o", g_config.name]
-		ret = subprocess.run(cmd)
-		if ret.returncode != 0:
-			raise Error("task.goBuild: build failed")
-
-	def gqlGen(self):
-		print("task: gql gen...")
-		self.onlyLocal()
-
-		# run only it's changed
-		t1 = os.path.getmtime("schema.graphql")
-		t2 = 0
-		if os.path.exists("models_gen.go"):
-			t2 = os.path.getmtime("models_gen.go")
-
-		if t1 != t2:
-			print("task: gql - graphql schema is updated... re-generate it.")
-			cmd = ["go", "run", "github.com/99designs/gqlgen"]
-			ret = subprocess.run(cmd)
-			if ret.returncode != 0:
-				raise Exception("task.gqlGen: failed to build graphql")
-
-			os.utime("models_gen.go", (t1, t1))
-		else:
-			print("task: gql - skip because of no modification.")
-
-	def dbXormReverse(self):
-		print("task: xorm reverse...")
-		self.onlyLocal()
-
-		# load from config
-		with open("./config/base.json") as f:
-			cfg = json.load(f)
-
-		with open("./config/my.json") as f:
-			cfg2 = json.load(f)
-			cfg = mergeDict(cfg, cfg2)
-
-		print("run: ", cfg)
-
-		db = cfg["db"]
-		uri = "%s:%s@tcp(%s:%d)/%s?charset=utf8" % (db["id"], db["pw"], db["host"], db["port"], db["name"])
-		cmd = ["xorm", "reverse", "mysql", uri,
-				"/home/cjng96/go/src/github.com/go-xorm/cmd/xorm/templates/goxorm"]
-		self.run(cmd)
-
-	def pm2Register(self, useNvm=True):
-		print("task: pm2 register...")
-		self.onlyRemote()
-
-		cmd = ""
-		if useNvm:
-			cmd += ". ~/.nvm/nvm.sh && "
-		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (self.server.deployRoot)
-		self.run(cmd)
-
-	def _helperRun(self, args, sudo=False):
-		pp2 = "/tmp/godHelper.py"
-
-		if self.dkTunnel is None and self.ssh is None:
-			shutil.copyfile(os.path.join(g_scriptPath, 'godHelper.py'), pp2)
-		else:
-			if not self._uploadHelper:
-				if self.dkTunnel is not None:
-					self.dkTunnel.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
-					self.dkTunnel.ssh.run("docker cp /tmp/godHelper.py %s:/tmp/godHelper.py" % self.dkName)
-				else:
-					self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
-
-				self._uploadHelper = True
-
-		#ss = str2arg(json.dumps(args, cls=ObjectEncoder))
-		ss = json.dumps(args, cls=ObjectEncoder)
-		ss2 = zlib.compress(ss.encode()) # 1/3이나 절반
-		ss = base64.b64encode(ss2).decode()
-		self.run("%spython3 %s runBin \"%s\"" % ('sudo ' if sudo else '', pp2, ss), expandVars=False)
-
-	""" use myutil.makeUser
-	def userNew(self, name, existOk=False, sshKey=False):
-		print("task: userNew...")
-		self.onlyRemote()
-		
-		args = dict(cmd="userNew", dic=g_dic,
-			name=name, existOk=existOk, sshKey=sshKey)
-		self._helperRun(args, sudo=True)
-	"""
-
-	def strLoad(self, path):
-		print("task: strLoad...")
-		self.onlyLocal()
-
-		path = os.path.expanduser(path)
-		with open(path, "rt") as fp:
-			return fp.read()
-
-	def strEnsure(self, path, str, sudo=False):
-		print("task: strEnsure for %s..." % path)
-		self.onlyRemote()
-
-		args = dict(cmd="strEnsure", dic=g_dic,
-			path=path, str=str)
-		self._helperRun(args, sudo)
-
-	def configBlock(self, path, marker, block, insertAfter=None, sudo=False):
-		'''
-		marker: ### {mark} TEST
-		block: vv=1
-		'''
-		print("task: config block...")
-		#self.onlyRemote()
-
-		args = dict(cmd="configBlock", dic=g_dic,
-			path=path, marker=marker, block=block, insertAfter=insertAfter)
-		self._helperRun(args, sudo)
-
-	def configLine(self, path, regexp, line, items=None, sudo=False, append=False):
-		print("task: config line...")
-		#self.onlyRemote()
-
-		args = dict(cmd="configLine", dic=g_dic,
-			path=path, regexp=regexp, line=line, items=items, append=append)
-		self._helperRun(args, sudo)
-
-	def s3List(self, bucket, prefix):
-		print("task: s3 list[%s/%s]..." % (bucket, prefix))
-		self.onlyLocal()
-
-		if not prefix.endswith("/"):
-			prefix += "/"
-
-		s3 = CoS3(g_config.get("s3.key", None), g_config.get("s3.secret", None))
-		bb = s3.bucketGet(bucket)
-		lst = bb.fileList(prefix)
-		return lst
-
-	def s3DownloadFiles(self, bucket, prefix, nameList, targetFolder):
-		print("task: s3 download files[%s/%s]..." % (bucket, prefix))
-		self.onlyLocal()
-
-		if not targetFolder.endswith("/"):
-			targetFolder += "/"
-		if not prefix.endswith("/"):
-			prefix += "/"
-
-		s3 = CoS3(g_config.get("s3.key", None), g_config.get("s3.secret", None))
-		bb = s3.bucketGet(bucket)
-		for name in nameList:
-			bb.downloadFile(prefix+name, targetFolder+name)
-
-	def s3DownloadFile(self, bucket, key, dest=None):
-		print("task: s3 download file[%s -> %s]..." % (key, dest))
-		self.onlyLocal()
-
-		s3 = CoS3(g_config.get("s3.key", None), g_config.get("s3.secret", None))
-		bb = s3.bucketGet(bucket)
-		return bb.downloadFile(key, dest)
+  def __init__(self, server, dkTunnel=None, dkName=None, dkId=None):
+    '''
+    '''
+    self.proc = None
+    self._uploadHelper = False
+
+    self.server = server
+    self.ssh = None
+
+    # accessbility
+    self.data = g_data
+    self.util = g_util		
+
+    if server is not None:
+      if dkTunnel is None:
+        port = server.get("port", 22)
+        self.initSsh(server.host, port, server.id)
+
+      if "vars" not in server:
+        server.vars = {}
+
+      self.vars = server.vars
+
+    # docker일 경우 dkTunnel, dkName가 필수며, 부모의 server도 있어야 함
+    self.dkTunnel = dkTunnel
+    self.dkName = dkName
+
+    if dkId is not None:
+      dkId = strExpand(dkId, g_dic)
+    self.dkId = dkId
+
+  def initSsh(self, host, port, id):
+    self.ssh = CoSsh()
+    print("ssh: connecting to the server[%s:%d] with ID:%s" % (host, port, id))
+    self.ssh.init(host, port, id)
+
+  def __del__(self):
+    if self.ssh is not None:
+      self.ssh.close()
+      self.ssh = None
+
+  def dockerConn(self, name, dkId=None):
+    if self.dkTunnel is not None:
+      raise Exception('dockerConn can be called only on remote connection.')
+
+    dk = Tasks(self.server, self, name, dkId)
+    return dk
+
+  def parentConn(self):
+    if self.dkTunnel is None:
+      raise Exception('This connection is not docker connection.')
+    return self.dkTunnel
+
+  def otherDockerConn(self, name, dkId=None):
+    if self.dkTunnel is None:
+      raise Exception('otherDockerConn can be called on docker connection only.')
+
+    return self.dkTunnel.dockerConn(name, dkId)
+
+  def remoteConn(self, host, port, id, dkName=None, dkId=None):
+    '''
+    지정해서 커넥션을 만들어낸다.
+    docker지정까지 가능하다. 이거 설정을 컨피그로 할수 있게 하자
+    이건 util로 가는게 나을까
+    '''
+    dk = Tasks(Dict2(dict(name='remote', host=host, port=port, id=id)))	# no have owner
+    dk.initSsh(host, port, id)
+
+    if dkName is not None:
+      dk = dk.dockerConn(dkName, dkId)
+
+    return dk
+
+  def onlyLocal(self):
+    if self.ssh is not None:
+      raise Exception("this method only can be used in local service.")
+
+  def onlyRemote(self):
+    if self.dkTunnel is None and self.ssh is None:
+      raise Exception("this method only can be used in remote service.")
+
+  def deployApp(self, path, profile, serverOvr=None, varsOvr=None):
+    sys.path.insert(0, path)
+    try:
+      config = Config()
+      helper = Helper(config)
+      mymod = importlib.import_module('god_app')
+      mygod = mymod.myGod(helper=helper)
+
+      server = config.configServerGet(profile)
+      if server is None:
+        return
+
+      # override configure
+      server = deepcopy(server)
+      if serverOvr is not None:
+        server.fill(serverOvr)
+      if varsOvr is not None:
+        server.vars.fill(varsOvr)
+
+      remote = Tasks(server)
+      if 'dkName' in server.dic:
+        remote = remote.dockerConn(server.dkName)
+
+      pp = os.curdir
+      os.chdir(path)
+      try:
+        g_main.taskDeploy(remote, server, mygod, config)
+      finally:
+        os.chdir(pp)
+
+    finally:
+      sys.path = sys.path[1:]
+
+  def makeFile(self, content, path, sudo=False, mode=755):
+    #self.onlyRemote()
+    #ss = content.replace('"', '\\"').replace('%', '\%').replace('$', '\$')
+    content = str2arg(content)
+
+    sudoCmd = 'sudo' if sudo else ''
+    self.run('echo "{1}" | {0} tee {2} > /dev/null && {0} chmod {3} {2}'.format(sudoCmd, content, path, mode))
+
+  def runOutput(self, cmd, expandVars=True):
+    '''
+    cmd: string or array
+    expandVars:
+    return: stdout string
+    exception: subprocess.CalledProcessError(returncode, output)
+    '''
+    print("executeOutput on %s[%s].." % (self._serverName(), cmd))
+
+    if expandVars:
+      cmd = strExpand(cmd, g_dic)
+
+    if self.dkTunnel is not None:
+      dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
+      cmd = str2arg(cmd)			
+      cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
+      return self.dkTunnel.ssh.runOutput(cmd)
+    elif self.ssh is not None:
+      return self.ssh.runOutput(cmd)
+    else:
+      return subprocess.check_output(cmd, shell=True, executable='/bin/bash')
+
+  def runOutputAll(self, cmd, expandVars=True):
+    '''
+    cmd: string or array
+    expandVars:
+    return: stdout string
+    exception: subprocess.CalledProcessError(returncode, output)
+    '''
+    print("executeOutputAll on %s[%s].." % (self._serverName(), cmd))
+
+    if expandVars:
+      cmd = strExpand(cmd, g_dic)
+
+    if self.dkTunnel is not None:
+      dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
+      cmd = str2arg(cmd)			
+      cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
+      return self.dkTunnel.ssh.runOutputAll(cmd)
+    elif self.ssh is not None:
+      return self.ssh.runOutputAll(cmd)
+    else:
+      return subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, executable='/bin/bash')
+
+  def _serverName(self):
+    if self.server is None:
+      return 'local'
+    elif self.dkTunnel is None:
+      return self.server.host
+    else:
+      return "%s[%s]" % (self.dkName, self.server.host)
+
+  def run(self, cmd, expandVars=True):
+    print("execute on %s[%s].." % (self._serverName(), cmd))
+
+    if expandVars:
+      cmd = strExpand(cmd, g_dic)
+
+    if self.dkTunnel is not None:
+      # it하면 오류 난다
+      dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
+      cmd = str2arg(cmd)
+      cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
+      print('cmd - %s' % cmd)
+      return self.dkTunnel.ssh.run(cmd)
+    elif self.ssh is not None:
+        return self.ssh.run(cmd)
+    else:
+      """
+      with Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, bufsize=1, universal_newlines=True) as p:
+        fdout = p.stdout.fileno()
+        fcntl.fcntl(fdout, fcntl.F_SETFL, fcntl.fcntl(fdout, fcntl.F_GETFL) | os.O_NONBLOCK)
+
+        fderr = p.stderr.fileno()
+        fcntl.fcntl(fderr, fcntl.F_SETFL, fcntl.fcntl(fderr, fcntl.F_GETFL) | os.O_NONBLOCK)
+
+        while True:
+          reads = [fdout, fderr]
+          ret = select.select(reads, [], [])
+          for fd in ret[0]:
+            if fd == fdout:
+              print(p.stdout.read(), end='')
+            if fd == fderr:
+              print(p.stderr.read(), end='')
+            
+          if p.poll() != None:
+            break
+      rc = p.returncode
+      if rc != 0:
+        raise subprocess.CalledProcessError(rc, cmd)
+      """
+      with Popen(cmd, shell=True, universal_newlines=True) as p:
+        p.communicate()
+        print("  -> ret:%d" % (p.returncode))
+        if p.returncode != 0:
+          raise subprocess.CalledProcessError(p.returncode, cmd)
+
+  def runSafe(self, cmd):
+    '''
+    return: success flag
+    '''
+    try:
+      self.run(cmd)
+      return True
+    except subprocess.CalledProcessError as e:
+      print("run: failed %d\n -- %s\n" % (e.returncode, e.output))
+      return False
+
+  def uploadFile(self, src, dest):
+    self.onlyRemote()
+    src = os.path.expanduser(src)
+    dest = os.path.expanduser(dest)
+    if self.dkTunnel is not None:
+      self.dkTunnel.ssh.uploadFile(src, "/tmp/upload.tmp")
+      self.dkTunnel.ssh.run('docker cp /tmp/upload.tmp %s:%s' % (self.dkName, dest))
+    else:
+      self.ssh.uploadFile(src, dest)
+
+  def uploadFileTo(self, src, dest):
+    self.onlyRemote()
+    src = os.path.expanduser(src)
+    dest = os.path.expanduser(dest)
+    pp = os.path.join(dest, os.path.basename(src))
+    self.uploadFile(src, pp)
+
+  def uploadFolder(self, src, dest):
+    self.onlyRemote()
+    self.ssh.uploadFolder(src, dest)
+
+  def uploadFolderTo(self, src, dest):
+    self.onlyRemote()
+    self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
+
+  # TODO: mysql, goBuild, gqlGen, dbXorm, pm2Register등은 기본 task에서 빼야할듯
+  def mysqlUserDel(self, id, host):
+    hr = self.runOutput('''sudo mysql -e "SELECT 'exist' FROM mysql.user where user='%s';"''' % (id))
+    if hr == "":
+      return
+
+    self.run('''sudo mysql -e "DROP USER '%s'@'%s';"''' % (id, host))
+
+  def mysqlUserGen(self, id, pw, host, priv):
+    #pw = str2arg(pw).replace(';', '\\;').replace('`', '``').replace("'", "\\'")
+    pw = str2arg(pw).replace("'", "''")
+    # 이게 좀 웃긴데, mysql 통해서 실행하는거기 때문에 \\는 \\\\로 바꿔야한다.
+    pw = pw.replace("\\\\", "\\\\\\\\")
+    host = str2arg(host)
+    self.run('''sudo mysql -e "CREATE USER '%s'@'%s' IDENTIFIED BY '%s';"''' % (id, host, pw))
+    priv2, oper = priv.split(':')
+    self.run('''sudo mysql -e "GRANT %s ON %s TO '%s'@'%s';"''' % (oper, priv2, id, host))
+
+  def goBuild(self):
+    print("task: goBuild as [%s]..." % g_config.name)
+
+    self.onlyLocal()
+
+    cmd = ["go", "build", "-o", g_config.name]
+    ret = subprocess.run(cmd)
+    if ret.returncode != 0:
+      raise Error("task.goBuild: build failed")
+
+  def gqlGen(self):
+    print("task: gql gen...")
+    self.onlyLocal()
+
+    # run only it's changed
+    t1 = os.path.getmtime("schema.graphql")
+    t2 = 0
+    if os.path.exists("models_gen.go"):
+      t2 = os.path.getmtime("models_gen.go")
+
+    if t1 != t2:
+      print("task: gql - graphql schema is updated... re-generate it.")
+      cmd = ["go", "run", "github.com/99designs/gqlgen"]
+      ret = subprocess.run(cmd)
+      if ret.returncode != 0:
+        raise Exception("task.gqlGen: failed to build graphql")
+
+      os.utime("models_gen.go", (t1, t1))
+    else:
+      print("task: gql - skip because of no modification.")
+
+  def dbXormReverse(self):
+    print("task: xorm reverse...")
+    self.onlyLocal()
+
+    # load from config
+    with open("./config/base.json") as f:
+      cfg = json.load(f)
+
+    with open("./config/my.json") as f:
+      cfg2 = json.load(f)
+      cfg = mergeDict(cfg, cfg2)
+
+    print("run: ", cfg)
+
+    db = cfg["db"]
+    uri = "%s:%s@tcp(%s:%d)/%s?charset=utf8" % (db["id"], db["pw"], db["host"], db["port"], db["name"])
+    cmd = ["xorm", "reverse", "mysql", uri,
+        "/home/cjng96/go/src/github.com/go-xorm/cmd/xorm/templates/goxorm"]
+    self.run(cmd)
+
+  def pm2Register(self, useNvm=True):
+    print("task: pm2 register...")
+    self.onlyRemote()
+
+    cmd = ""
+    if useNvm:
+      cmd += ". ~/.nvm/nvm.sh && "
+    cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (self.server.deployRoot)
+    self.run(cmd)
+
+  def _helperRun(self, args, sudo=False):
+    pp2 = "/tmp/godHelper.py"
+
+    if self.dkTunnel is None and self.ssh is None:
+      shutil.copyfile(os.path.join(g_scriptPath, 'godHelper.py'), pp2)
+    else:
+      if not self._uploadHelper:
+        if self.dkTunnel is not None:
+          self.dkTunnel.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
+          self.dkTunnel.ssh.run("docker cp /tmp/godHelper.py %s:/tmp/godHelper.py" % self.dkName)
+        else:
+          self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
+
+        self._uploadHelper = True
+
+    #ss = str2arg(json.dumps(args, cls=ObjectEncoder))
+    ss = json.dumps(args, cls=ObjectEncoder)
+    ss2 = zlib.compress(ss.encode()) # 1/3이나 절반
+    ss = base64.b64encode(ss2).decode()
+    self.run("%spython3 %s runBin \"%s\"" % ('sudo ' if sudo else '', pp2, ss), expandVars=False)
+
+  """ use myutil.makeUser
+  def userNew(self, name, existOk=False, sshKey=False):
+    print("task: userNew...")
+    self.onlyRemote()
+    
+    args = dict(cmd="userNew", dic=g_dic,
+      name=name, existOk=existOk, sshKey=sshKey)
+    self._helperRun(args, sudo=True)
+  """
+
+  def strLoad(self, path):
+    print("task: strLoad...")
+    self.onlyLocal()
+
+    path = os.path.expanduser(path)
+    with open(path, "rt") as fp:
+      return fp.read()
+
+  def strEnsure(self, path, str, sudo=False):
+    print("task: strEnsure for %s..." % path)
+    self.onlyRemote()
+
+    args = dict(cmd="strEnsure", dic=g_dic,
+      path=path, str=str)
+    self._helperRun(args, sudo)
+
+  def configBlock(self, path, marker, block, insertAfter=None, sudo=False):
+    '''
+    marker: ### {mark} TEST
+    block: vv=1
+    '''
+    print("task: config block...")
+    #self.onlyRemote()
+
+    args = dict(cmd="configBlock", dic=g_dic,
+      path=path, marker=marker, block=block, insertAfter=insertAfter)
+    self._helperRun(args, sudo)
+
+  def configLine(self, path, regexp, line, items=None, sudo=False, append=False):
+    print("task: config line...")
+    #self.onlyRemote()
+
+    args = dict(cmd="configLine", dic=g_dic,
+      path=path, regexp=regexp, line=line, items=items, append=append)
+    self._helperRun(args, sudo)
+
+  def s3List(self, bucket, prefix):
+    print("task: s3 list[%s/%s]..." % (bucket, prefix))
+    self.onlyLocal()
+
+    if not prefix.endswith("/"):
+      prefix += "/"
+
+    s3 = CoS3(g_config.get("s3.key", None), g_config.get("s3.secret", None))
+    bb = s3.bucketGet(bucket)
+    lst = bb.fileList(prefix)
+    return lst
+
+  def s3DownloadFiles(self, bucket, prefix, nameList, targetFolder):
+    print("task: s3 download files[%s/%s]..." % (bucket, prefix))
+    self.onlyLocal()
+
+    if not targetFolder.endswith("/"):
+      targetFolder += "/"
+    if not prefix.endswith("/"):
+      prefix += "/"
+
+    s3 = CoS3(g_config.get("s3.key", None), g_config.get("s3.secret", None))
+    bb = s3.bucketGet(bucket)
+    for name in nameList:
+      bb.downloadFile(prefix+name, targetFolder+name)
+
+  def s3DownloadFile(self, bucket, key, dest=None):
+    print("task: s3 download file[%s -> %s]..." % (key, dest))
+    self.onlyLocal()
+
+    s3 = CoS3(g_config.get("s3.key", None), g_config.get("s3.secret", None))
+    bb = s3.bucketGet(bucket)
+    return bb.downloadFile(key, dest)
 
 # https://pythonhosted.org/watchdog/
 class MyHandler(PatternMatchingEventHandler):
