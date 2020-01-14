@@ -387,7 +387,7 @@ class Tasks():
 		cmd = ""
 		if useNvm:
 			cmd += ". ~/.nvm/nvm.sh && "
-		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (g_remote.server.deployRoot)
+		cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (self.server.deployRoot)
 		self.run(cmd)
 
 	def _helperRun(self, args, sudo=False):
