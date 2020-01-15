@@ -854,20 +854,21 @@ class Main():
 
       env.run("cd %s && %s ln -sf ../../shared/%s releases/%s/%s" % (deployRoot, sudoCmd, pp, todayName, pp))
 
-    # update link
-    env.run("cd %s && %s rm -f current " % (deployRoot, sudoCmd) +
-      "&& %s ln -sf releases/%s current " % (sudoCmd, todayName) +
-      ("&& sudo chown %s: current %s/releases/%s -R" % (server.owner, deployRoot, todayName) if "owner" in server else "")
-    )
-
     # file owner
     if "owner" in server:
-      env.run('cd %s && sudo chown %s: shared releases/%s current -R' % (deployRoot, server.owner, todayName))
-      env.run('cd %s && sudo chmod 775 shared releases/%s current -R' % (deployRoot, todayName))
+      env.run('cd %s && sudo chown %s: shared releases/%s -R' % (deployRoot, server.owner, todayName))
+      env.run('cd %s && sudo chmod 775 shared releases/%s -R' % (deployRoot, todayName))
+
+    # update current
+    env.run("cd %s && %s rm -f current && %s ln -sf releases/%s current" % (deployRoot, sudoCmd, sudoCmd, todayName))
+    if "owner" in server:
+      env.run("cd %s && %s chown %s: current" % (deployRoot, sudoCmd, server.owner))
 
     # post process
     if hasattr(mygod, "deployPostTask"):
       mygod.deployPostTask(util=g_util, remote=env, local=g_local)
+    
+    # TODO: postTask에서 오류 발생시 다시 돌려놔야
 
 
 def initSamples(type, fn):
