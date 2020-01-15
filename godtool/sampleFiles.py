@@ -27,6 +27,8 @@ servers:
     host: test.com
     port: 22
     id: test      # ssh worker user id
+    #dkName: con  #
+    #dkId: test
     owner: engt   # opt, generated files owner
       # you don't need sudo right if it's not specified.
       # if you need the operation needed sudo right, should specify it.
