@@ -327,8 +327,18 @@ class Tasks():
     pw = pw.replace("\\\\", "\\\\\\\\")
     host = str2arg(host)
     self.run('''sudo mysql -e "CREATE USER '%s'@'%s' IDENTIFIED BY '%s';"''' % (id, host, pw))
-    priv2, oper = priv.split(':')
-    self.run('''sudo mysql -e "GRANT %s ON %s TO '%s'@'%s';"''' % (oper, priv2, id, host))
+
+    privList = priv.split('/')
+    for priv in privList:
+      priv2, oper = priv.split(':')
+
+      grantOper = ''
+      lst = list(map(lambda x: x.strip().upper(), oper.split(',')))
+      if 'GRANT' in lst:
+        lst.remove('GRANT')
+        oper = ','.join(lst)
+        grantOper = 'WITH GRANT OPTION'
+      self.run('''sudo mysql -e "GRANT %s ON %s TO '%s'@'%s' %s;"''' % (oper, priv2, id, host, grantOper))
 
   def goBuild(self):
     print("task: goBuild as [%s]..." % g_config.name)
