@@ -161,7 +161,7 @@ class Tasks():
       if 'dkName' in server.dic:
         remote = remote.dockerConn(server.dkName, dkId=server.get('dkId'))
 
-      pp = os.curdir
+      pp = os.path.abspath(os.curdir)
       os.chdir(path)
       try:
         g_main.taskDeploy(remote, server, mygod, config)
