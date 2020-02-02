@@ -1086,7 +1086,7 @@ def main():
     else:
       # setup server system
       cmd = 'setup'
-      if cnt < 3:
+      if cnt < 2: # can skip SERVER_NAME
         print("god SYSTEM_FILE [build] SERVER_NAME")
         return
 
