@@ -631,7 +631,7 @@ class Main():
     else:
       print("You should override buildTask method.")
 
-  def taskSetup(self, target, serverName):
+  def taskSetup(self, target, serverName, buildImage):
     if not os.path.exists(target):
       print("There is no target file[%s]" % target)
       return
@@ -639,6 +639,8 @@ class Main():
     server = g_config.configServerGet(serverName)
     if server is None:
       return
+
+    server['buildImage'] = buildImage
 
     global g_remote, g_data
     g_remote = Tasks(server)
@@ -821,6 +823,11 @@ class Main():
         "&& %s unzip /tmp/godUploadPkg.zip && rm /tmp/godUploadPkg.zip" % sudoCmd
         )
       os.remove(zipPath)
+
+      # ssh user용으로 변경해놔야 post process에서 쉽게 접근 가능
+      if "owner" in server:
+        env.run('sudo chown %s: %s/releases/%s -R' % (server.get('dkId', server.id), deployRoot, todayName))
+
       """	no use copy strategy anymore
       elif strategy == "copy":
         ssh.uploadFile(name, os.path.join(realTargetFull, name))	# we don't include it by default
@@ -864,20 +871,20 @@ class Main():
 
       env.run("cd %s && %s ln -sf ../../shared/%s releases/%s/%s" % (deployRoot, sudoCmd, pp, todayName, pp))
 
-    # file owner
-    if "owner" in server:
-      env.run('cd %s && sudo chown %s: shared releases/%s -R' % (deployRoot, server.owner, todayName))
-      env.run('cd %s && sudo chmod 775 shared releases/%s -R' % (deployRoot, todayName))
-
-    # update current
+    # update current - post전에 갱신되어 있어야 current에 있는거 실행한다
     env.run("cd %s && %s rm -f current && %s ln -sf releases/%s current" % (deployRoot, sudoCmd, sudoCmd, todayName))
-    if "owner" in server:
-      env.run("cd %s && %s chown %s: current" % (deployRoot, sudoCmd, server.owner))
+    #if "owner" in server:
+    #  env.run("cd %s && %s chown %s: current" % (deployRoot, sudoCmd, server.owner))
 
     # post process
     if hasattr(mygod, "deployPostTask"):
       mygod.deployPostTask(util=g_util, remote=env, local=g_local)
-    
+
+    # file owner - 이걸 post후에 해야 ssh user가 파일 접근이 가능하다
+    if "owner" in server:
+      env.run('cd %s && sudo chown %s: shared releases/%s -R' % (deployRoot, server.owner, todayName))
+      env.run('cd %s && sudo chmod 775 shared releases/%s -R' % (deployRoot, todayName))
+
     # TODO: postTask에서 오류 발생시 다시 돌려놔야
 
 
@@ -1079,8 +1086,8 @@ def main():
     else:
       # setup server system
       cmd = 'setup'
-      if cnt < 2:
-        print("god SYSTEM_FILE SERVER_NAME")
+      if cnt < 3:
+        print("god SYSTEM_FILE [build] SERVER_NAME")
         return
 
       target = sys.argv[1]
@@ -1145,6 +1152,17 @@ def main():
     return
 
   elif cmd == "setup":
+    buildImage = False
+    if cnt == 4:
+      if sys.argv[2] == 'build':
+        cnt -= 1
+        del sys.argv[2]
+        buildImage = True
+        print('Building image for container...')
+      else:
+        print('unknown command line argument')
+        return
+
     if cnt < 3 and len(g_config.servers) == 1:
       serverName = g_config.servers[0].name
     else:
@@ -1161,7 +1179,8 @@ def main():
       # support empty server name?
       
       serverName = sys.argv[2]
-    g_main.taskSetup(target, serverName)
+
+    g_main.taskSetup(target, serverName, buildImage)
     return
 
   elif cmd == 'test':
