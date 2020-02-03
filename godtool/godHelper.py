@@ -216,7 +216,7 @@ def configLine(path, regexp, line, items=None, append=False):
     line2 = strExpand(line, g_dic)
     ss = configLineStr(ss, regexp, line2, append)
     if ss is None:
-      print("can't find regexp[%s]" % (regexp2))
+      print("can't find regexp[%s]" % (regexp))
 
   if ss is not None:
     with open(path, "w") as fp:
