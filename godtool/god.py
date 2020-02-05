@@ -824,10 +824,6 @@ class Main():
         )
       os.remove(zipPath)
 
-      # ssh user용으로 변경해놔야 post process에서 쉽게 접근 가능
-      if "owner" in server:
-        env.run('sudo chown %s: %s/releases/%s -R' % (server.get('dkId', server.id), deployRoot, todayName))
-
       """	no use copy strategy anymore
       elif strategy == "copy":
         ssh.uploadFile(name, os.path.join(realTargetFull, name))	# we don't include it by default
@@ -870,6 +866,10 @@ class Main():
         pp = pp[:-1]
 
       env.run("cd %s && %s ln -sf ../../shared/%s releases/%s/%s" % (deployRoot, sudoCmd, pp, todayName, pp))
+
+      # ssh user용으로 변경해놔야 post process에서 쉽게 접근 가능
+      if "owner" in server:
+        env.run('cd %s && sudo chown %s: releases/%s shared -R' % (deployRoot, server.get('dkId', server.id), todayName))
 
     # update current - post전에 갱신되어 있어야 current에 있는거 실행한다
     env.run("cd %s && %s rm -f current && %s ln -sf releases/%s current" % (deployRoot, sudoCmd, sudoCmd, todayName))
