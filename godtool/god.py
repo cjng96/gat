@@ -865,7 +865,8 @@ class Main():
         env.run("cd %s && %s mkdir -p shared/%s " % (deployRoot, sudoCmd, pp))
         pp = pp[:-1]
 
-      env.run("cd %s && %s ln -sf ../../shared/%s releases/%s/%s" % (deployRoot, sudoCmd, pp, todayName, pp))
+
+      env.run("%s ln -rsf %s/shared/%s %s/releases/%s/%s" % (sudoCmd, deployRoot, pp, deployRoot, todayName, pp))
 
       # ssh user용으로 변경해놔야 post process에서 쉽게 접근 가능
       if "owner" in server:
