@@ -194,7 +194,7 @@ class Tasks():
     if self.dkTunnel is not None:
       dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
       cmd = str2arg(cmd)			
-      cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
+      cmd = 'sudo docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)  # alias defined in .bashrc is working but -l should be used for something in /etc/profile.d.
       return self.dkTunnel.ssh.runOutput(cmd)
     elif self.ssh is not None:
       return self.ssh.runOutput(cmd)
@@ -216,7 +216,7 @@ class Tasks():
     if self.dkTunnel is not None:
       dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
       cmd = str2arg(cmd)			
-      cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
+      cmd = 'sudo docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
       return self.dkTunnel.ssh.runOutputAll(cmd)
     elif self.ssh is not None:
       return self.ssh.runOutputAll(cmd)
@@ -241,7 +241,7 @@ class Tasks():
       # it하면 오류 난다
       dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
       cmd = str2arg(cmd)
-      cmd = 'docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
+      cmd = 'sudo docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
       print('cmd - %s' % cmd)
       return self.dkTunnel.ssh.run(cmd)
     elif self.ssh is not None:
@@ -293,7 +293,7 @@ class Tasks():
     dest = os.path.expanduser(dest)
     if self.dkTunnel is not None:
       self.dkTunnel.ssh.uploadFile(src, "/tmp/upload.tmp")
-      self.dkTunnel.ssh.run('docker cp /tmp/upload.tmp %s:%s' % (self.dkName, dest))
+      self.dkTunnel.ssh.run('sudo docker cp /tmp/upload.tmp %s:%s' % (self.dkName, dest))
     else:
       self.ssh.uploadFile(src, dest)
 
@@ -306,7 +306,21 @@ class Tasks():
 
   def uploadFolder(self, src, dest):
     self.onlyRemote()
-    self.ssh.uploadFolder(src, dest)
+    if self.dkTunnel is not None:
+      self.dkTunnel.ssh.run('rm -rf /tmp/god_upload && mkdir /tmp/god_upload')
+      allDir = []
+      allFile = []
+      src = src.rstrip('/') + '/'
+      for pp, dirs, files in os.walk(src):
+        for dir in dirs:
+          self.dkTunnel.ssh.run('mkdir ' + os.path.join('/tmp/god_upload', pp, dir))
+        for file in files:
+          self.dkTunnel.ssh.uploadFile(os.path.join(src, pp, file), os.path.join("/tmp/god_upload", pp[len(src):], file))
+
+      self.run('rm -rf %s' % dest)
+      self.dkTunnel.ssh.run('sudo docker cp /tmp/god_upload %s:%s && rm -rf /tmp/god_upload' % (self.dkName, dest))
+    else:
+      self.ssh.uploadFolder(src, dest)
 
   def uploadFolderTo(self, src, dest):
     self.onlyRemote()
@@ -410,7 +424,7 @@ class Tasks():
       if not self._uploadHelper:
         if self.dkTunnel is not None:
           self.dkTunnel.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
-          self.dkTunnel.ssh.run("docker cp /tmp/godHelper.py %s:/tmp/godHelper.py" % self.dkName)
+          self.dkTunnel.ssh.run("sudo docker cp /tmp/godHelper.py %s:/tmp/godHelper.py" % self.dkName)
         else:
           self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
 
