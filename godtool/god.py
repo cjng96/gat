@@ -199,7 +199,7 @@ class Tasks():
     elif self.ssh is not None:
       return self.ssh.runOutput(cmd)
     else:
-      return subprocess.check_output(cmd, shell=True, executable='/bin/bash')
+      return subprocess.check_output(cmd, shell=True, executable='/bin/bash').decode()
 
   def runOutputAll(self, cmd, expandVars=True):
     '''
