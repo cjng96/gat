@@ -455,7 +455,7 @@ class Tasks():
       return fp.read()
 
   def strEnsure(self, path, str, sudo=False):
-    print("task: strEnsure for %s..." % path)
+    print("task: strEnsure[%s] for %s..." % (str, path))
     self.onlyRemote()
 
     args = dict(cmd="strEnsure", dic=g_dic,
@@ -467,7 +467,7 @@ class Tasks():
     marker: ### {mark} TEST
     block: vv=1
     '''
-    print("task: config block...")
+    print("task: config block[%s] for %s..." % (marker, path))
     #self.onlyRemote()
 
     args = dict(cmd="configBlock", dic=g_dic,
