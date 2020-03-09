@@ -96,8 +96,10 @@ class CoSsh:
       print(ss, end="")	
     self._run(cmd, doOutput, None)
 
-  # return: result
   def runOutput(self, cmd):
+    '''
+    return: stdout result
+    '''
     out = ['']
     def doOutput(isStdout, ss, arg):
       if isStdout:
@@ -110,6 +112,9 @@ class CoSsh:
     return out[0]
 
   def runOutputAll(self, cmd):
+    '''
+    return: stdout + stderr result
+    '''
     out = ['']
     def doOutput(isStdout, ss, arg):
       arg[0] += ss
@@ -120,7 +125,7 @@ class CoSsh:
 
   # sftp 상에 경로를 생성한다.
   # remote 경로가 directory이면, is_dir에 True를 전달한다.
-  def mkdir_p(self, remote, isFolder=False):
+  def mkdirs(self, remote, isFolder=False):
     dirs = []
     if isFolder:
       pp = remote
@@ -162,7 +167,7 @@ class CoSsh:
       print(" ** exclude file - %s" % srcPath)
       return
 
-    self.mkdir_p(destPath)
+    self.mkdirs(destPath)
     try:
       self.sftp.put(srcPath, destPath)
     except Exception as e:
@@ -180,7 +185,7 @@ class CoSsh:
       print(" ** exclude folder - %s" % srcPath)
       return
 
-    self.mkdir_p(destPath, True)
+    self.mkdirs(destPath, True)
 
     for folder, dirs, files in os.walk(srcPath):
       try:
