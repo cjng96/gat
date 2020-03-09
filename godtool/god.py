@@ -826,11 +826,11 @@ class Main():
 
           else:
             src = pp["src"]
-            target = pp["target"]
+            dest = pp["dest"]
 
             for folder, dirs, files in os.walk(src):
               for ff in files:
-                _zipAdd(os.path.join(folder, ff), os.path.join(target, cutpath(src, folder), ff))
+                _zipAdd(os.path.join(folder, ff), os.path.join(dest, cutpath(src, folder), ff))
 
       env.uploadFile(zipPath, "/tmp/godUploadPkg.zip")	# we don't include it by default
       env.run("cd %s/releases/%s " % (deployRoot, todayName) +
