@@ -231,8 +231,9 @@ class Tasks():
     else:
       return "%s[%s]" % (self.dkName, self.server.host)
 
-  def run(self, cmd, expandVars=True):
-    print("execute on %s[%s].." % (self._serverName(), cmd))
+  def run(self, cmd, expandVars=True, printLog=True):
+    if printLog:
+      print("execute on %s[%s].." % (self._serverName(), cmd))
 
     if expandVars:
       cmd = strExpand(cmd, g_dic)
@@ -242,7 +243,7 @@ class Tasks():
       dkRunUser = '-u %s' % self.dkId if self.dkId is not None else ''
       cmd = str2arg(cmd)
       cmd = 'sudo docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
-      print('cmd - %s' % cmd)
+      #print('cmd - %s' % cmd)
       return self.dkTunnel.ssh.run(cmd)
     elif self.ssh is not None:
         return self.ssh.run(cmd)
@@ -434,7 +435,7 @@ class Tasks():
     ss = json.dumps(args, cls=ObjectEncoder)
     ss2 = zlib.compress(ss.encode()) # 1/3이나 절반
     ss = base64.b64encode(ss2).decode()
-    self.run("%spython3 %s runBin \"%s\"" % ('sudo ' if sudo else '', pp2, ss), expandVars=False)
+    self.run("%spython3 %s runBin \"%s\"" % ('sudo ' if sudo else '', pp2, ss), expandVars=False, printLog=False)
 
   """ use myutil.makeUser
   def userNew(self, name, existOk=False, sshKey=False):
@@ -447,7 +448,7 @@ class Tasks():
   """
 
   def strLoad(self, path):
-    print("task: strLoad...")
+    print("task: strLoad from[%s]..." % path)
     self.onlyLocal()
 
     path = os.path.expanduser(path)
@@ -455,7 +456,7 @@ class Tasks():
       return fp.read()
 
   def strEnsure(self, path, str, sudo=False):
-    print("task: strEnsure[%s] for %s..." % (str, path))
+    print("task[%s]: strEnsure[%s] for %s..." % (self._serverName(), str, path))
     self.onlyRemote()
 
     args = dict(cmd="strEnsure", dic=g_dic,
@@ -475,7 +476,7 @@ class Tasks():
     self._helperRun(args, sudo)
 
   def configLine(self, path, regexp, line, items=None, sudo=False, append=False):
-    print("task: config line...")
+    print("task: config line[%s] for %s..." % (line, path))
     #self.onlyRemote()
 
     args = dict(cmd="configLine", dic=g_dic,
@@ -1149,11 +1150,14 @@ def main():
     #g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
     target = sys.argv[2] if cnt > 2 else None
     if target is None:
-      ss = ''
-      for it in g_config.servers:
-        ss += it['name'] + '|'
-      print("Please specify server name.[%s]" % ss[:-1])
-      return
+      if len(g_config.servers) == 1:
+        target = g_config.servers[0]['name']
+      else:
+        ss = ''
+        for it in g_config.servers:
+          ss += it['name'] + '|'
+        print("Please specify server name.[%s]" % ss[:-1])
+        return
 
     server = g_config.configServerGet(target)
     if server is None:
