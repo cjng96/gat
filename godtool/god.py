@@ -561,12 +561,18 @@ class Main():
   def runTask(self, mygod):
     #self.onlyLocal()
 
-    if hasattr(mygod, "runTask"):
-      cmd = mygod.runTask(util=g_util, local=g_local, remote=g_remote)
+    if hasattr(mygod, "getRunCmd"):
+      cmd = mygod.getRunCmd(util=g_util, local=g_local, remote=g_remote)
       if type(cmd) != list:
         raise Exception("the return value of runTask function should be list type.")
     else:
-      cmd = ["./"+g_config.name]
+      if not hasattr(g_config, 'cmd'):
+        g_config.cmd = './' + g_config.name
+
+      if isinstance(g_config.cmd, str):
+        g_config.cmd = [g_config.cmd]
+
+      cmd = g_config.cmd
 
     print("run: running the app[%s]..." % cmd)
     if subprocess.call("type unbuffer", shell=True) == 0:
@@ -694,7 +700,6 @@ class Main():
 
     if observer is not None:
       observer.join()
-
 
   def taskServe(self):
     observer = None

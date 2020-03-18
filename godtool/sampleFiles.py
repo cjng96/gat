@@ -1,8 +1,9 @@
 sampleApp = """
 # https://
 config='''
-name: sample
 type: app	# it's default
+name: sample
+#cmd: [ python3, sample.py ]
 
 serve:
   patterns: [ "*.go", "*.json", "*.graphql" ]
@@ -45,7 +46,7 @@ class myGod:
 		local.goBuild()
 
 	# it's default operation and you can override running cmd
-	#def runTask(self, util, local, **_):
+	#def getRunCmd(self, util, local, **_):
 	#	return [util.config.config.name]
 
 	def deployPreTask(self, util, remote, local, **_):
@@ -63,8 +64,8 @@ class myGod:
 sampleSys = """
 # https://
 config='''
-name: test	# hostname
 type: sys
+name: test	# hostname
 
 s3:
   key: ${aws_key}
