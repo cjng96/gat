@@ -35,7 +35,8 @@ from .coPath import cutpath
 from .sampleFiles import sampleApp, sampleSys
 from .godHelper import strExpand
 from .coS3 import CoS3
-from .myutil import NonBlockingStreamReader, str2arg, mergeDict, envExpand, Dict2, ObjectEncoder
+from .myutil import NonBlockingStreamReader, str2arg, envExpand, ObjectEncoder
+from .coCollection import dictMerge, Dict2
 
 g_cwd = ""
 g_scriptPath = ""
@@ -396,7 +397,7 @@ class Tasks():
 
     with open("./config/my.json") as f:
       cfg2 = json.load(f)
-      cfg = mergeDict(cfg, cfg2)
+      cfg = dictMerge(cfg, cfg2)
 
     print("run: ", cfg)
 
