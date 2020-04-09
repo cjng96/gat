@@ -407,16 +407,6 @@ class Tasks():
         "/home/cjng96/go/src/github.com/go-xorm/cmd/xorm/templates/goxorm"]
     self.run(cmd)
 
-  def pm2Register(self, useNvm=True):
-    print("task: pm2 register...")
-    self.onlyRemote()
-
-    cmd = ""
-    if useNvm:
-      cmd += ". ~/.nvm/nvm.sh && "
-    cmd += "cd %s/current && pm2 delete pm2.json && pm2 start pm2.json" % (self.server.deployRoot)
-    self.run(cmd)
-
   def _helperRun(self, args, sudo=False):
     pp2 = "/tmp/godHelper.py"
 
