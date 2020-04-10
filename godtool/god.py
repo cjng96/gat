@@ -42,20 +42,20 @@ g_cwd = ""
 g_scriptPath = ""
 
 class Error(Exception):
-	pass
+  pass
 
 class ExcProgramExit(Exception):
-	pass
+  pass
 
 class MyUtil():
-	def __init__(self):
-		#self.deployRoot = ""	# only for deployment -- 이거 그냥. g_remote.server.deployRoot쓰면 된다.
-		#self.deployOwner = None	# 그냥 server.id를 기본값으로 한다.
-		self.isRestart = True	# First start or modified source files
-		self.cfg = None	# config object(g_config)
+  def __init__(self):
+    #self.deployRoot = ""	# only for deployment -- 이거 그냥. g_remote.server.deployRoot쓰면 된다.
+    #self.deployOwner = None	# 그냥 server.id를 기본값으로 한다.
+    self.isRestart = True	# First start or modified source files
+    self.cfg = None	# config object(g_config)
 
-	def str2arg(self, ss):
-		return str2arg(ss)
+  def str2arg(self, ss):
+    return str2arg(ss)
 
 class Tasks():
   def __init__(self, server, dkTunnel=None, dkName=None, dkId=None):
@@ -510,41 +510,41 @@ class Tasks():
 
 # https://pythonhosted.org/watchdog/
 class MyHandler(PatternMatchingEventHandler):
-	def __init__(self, patterns=None, ignore_patterns=None,
-			ignore_directories=False, case_sensitive=False):
-		super(MyHandler, self).__init__(
-			patterns, ignore_patterns, ignore_directories, case_sensitive)
-		print("watching pattern - ", patterns)
+  def __init__(self, patterns=None, ignore_patterns=None,
+      ignore_directories=False, case_sensitive=False):
+    super(MyHandler, self).__init__(
+      patterns, ignore_patterns, ignore_directories, case_sensitive)
+    print("watching pattern - ", patterns)
 
-	def process(self, event):
-		"""
-		event.event_type - 'modified' | 'created' | 'moved' | 'deleted'
-		event.is_directory - True | False
-		event.src_path - path/to/observed/file
-		"""
-		if event.is_directory:
-			return
+  def process(self, event):
+    """
+    event.event_type - 'modified' | 'created' | 'moved' | 'deleted'
+    event.is_directory - True | False
+    event.src_path - path/to/observed/file
+    """
+    if event.is_directory:
+      return
 
-		if g_util.isRestart:
-			return
+    if g_util.isRestart:
+      return
 
-		print("observer: file - %s is %s" % (event.src_path, event.event_type))
-		g_util.isRestart = True
+    print("observer: file - %s is %s" % (event.src_path, event.event_type))
+    g_util.isRestart = True
 
-	def on_modified(self, event):
-		self.process(event)
+  def on_modified(self, event):
+    self.process(event)
 
-	def on_created(self, event):
-		self.process(event)
+  def on_created(self, event):
+    self.process(event)
 
 def dicInit(server):
-	global g_dic	# helper run할때 전달되는 기능
-	g_dic = deepcopy(g_config)
-	g_dic.dic['server'] = server
-	g_dic.dic['vars'] = deepcopy(server.vars)
-	g_dic.dic['data'] = deepcopy(g_data)
-	g_util.cfg = g_config
-	g_util.data = g_data
+  global g_dic	# helper run할때 전달되는 기능
+  g_dic = deepcopy(g_config)
+  g_dic.dic['server'] = server
+  g_dic.dic['vars'] = deepcopy(server.vars)
+  g_dic.dic['data'] = deepcopy(g_data)
+  g_util.cfg = g_config
+  g_util.data = g_data
 
 class Main():
 
@@ -988,28 +988,28 @@ class Config(Dict2):
     return server
 
 class Helper:
-	def __init__(self, config):
-		self.config = config
+  def __init__(self, config):
+    self.config = config
 
-	def configStr(self, cfgType, ss):
-		self.config.configStr(cfgType, ss)
+  def configStr(self, cfgType, ss):
+    self.config.configStr(cfgType, ss)
 
-	def configFile(self, cfgType, pp):
-		self.config.configFile(cfgType, pp)
+  def configFile(self, cfgType, pp):
+    self.config.configFile(cfgType, pp)
 
-	def configGet(self):
-		return self.config.configGet()
+  def configGet(self):
+    return self.config.configGet()
 
-	def loadData(self, pp):
-		if not os.path.exists(pp):
-			raise Exception('there is no data file[%s]' % pp)
+  def loadData(self, pp):
+    if not os.path.exists(pp):
+      raise Exception('there is no data file[%s]' % pp)
 
-		print('load data from %s...' % pp)
-		# TODO: encrypt with input key when changed
-		with open(pp, "r") as fp:
-			dd = Dict2(yaml.safe_load(fp.read()))
-			print('data - ', dd)
-			return dd
+    print('load data from %s...' % pp)
+    # TODO: encrypt with input key when changed
+    with open(pp, "r") as fp:
+      dd = Dict2(yaml.safe_load(fp.read()))
+      print('data - ', dd)
+      return dd
 
 
 #g_helper = Helper()
@@ -1028,8 +1028,8 @@ g_remote = None	# server, vars직접 접근 가능
 
 
 def help(target):
-	print("god-tool V%s" % (__version__))
-	print("""\
+  print("god-tool V%s" % (__version__))
+  print("""\
 Usage.
 god init app - Generates god_app.py file for application.
 god init sys SYSTEM_NAME - Generates the file for system.
@@ -1043,8 +1043,8 @@ god deploy SERVER_NAME - Deploy the application to the server.
 For system,
 god SYSTEM_NAME SERVER_NAME - Setup server defined in GOD_FILE.
 """)
-	if target is not None:
-		print("\nThere is no %s script file." % target)
+  if target is not None:
+    print("\nThere is no %s script file." % target)
 
 def main():
   global g_cwd, g_scriptPath, g_mygod
@@ -1219,4 +1219,4 @@ def main():
 
 
 if __name__ == "__main__":
-	main()
+  main()
