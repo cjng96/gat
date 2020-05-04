@@ -17,6 +17,7 @@ import pathlib
 import re
 import base64
 import inspect
+import fnmatch
 import traceback
 import importlib
 from copy import deepcopy
@@ -768,7 +769,15 @@ class Main():
 
     def _filterFunc(pp):
       pp = os.path.normpath(pp)
-      return pp in exclude
+      if pp in exclude:
+        return True
+
+      for item in exclude:
+        if '*' in item:
+          if fnmatch.fnmatch(pp, item):
+            return True
+
+      return False
 
     strategy = config.deploy.strategy
     if strategy == "zip":
