@@ -840,7 +840,7 @@ class Main():
 
       env.uploadFile(zipPath, "/tmp/godUploadPkg.zip")	# we don't include it by default
       env.run("cd %s/releases/%s " % (deployRoot, todayName) +
-        "&& %s unzip /tmp/godUploadPkg.zip && rm /tmp/godUploadPkg.zip" % sudoCmd
+        "&& %s unzip /tmp/godUploadPkg.zip && %s rm /tmp/godUploadPkg.zip" % (sudoCmd, sudoCmd)
         )
       os.remove(zipPath)
 
