@@ -36,7 +36,7 @@ from .coPath import cutpath
 from .sampleFiles import sampleApp, sampleSys
 from .godHelper import strExpand
 from .coS3 import CoS3
-from .myutil import NonBlockingStreamReader, str2arg, envExpand, ObjectEncoder
+from .myutil import NonBlockingStreamReader, str2arg, envExpand, ObjectEncoder, pathRemove, pathIsChild
 from .coCollection import dictMerge, Dict2
 
 g_cwd = ""
@@ -724,7 +724,7 @@ class Main():
     if "owner" in server:
       sudoCmd = "sudo"
 
-    name = config.name
+    #name = config.name
     deployRoot = server.deployRoot
     realTarget = env.runOutput('realpath %s' %  deployRoot)
     realTarget = realTarget.strip("\r\n")	# for sftp
@@ -767,12 +767,17 @@ class Main():
     exclude = config.get("deploy.exclude", [])
     sharedLinks = config.get("deploy.sharedLinks", [])
 
-    def _filterFunc(pp):
+    def _filterFunc(pp, _exclude):
       pp = os.path.normpath(pp)
-      if pp in exclude:
+      if pp in _exclude:
         return True
 
-      for item in exclude:
+      for item in _exclude:
+        # exclude에 /a/dump라면 pp가 /a/dump/test라도 필터링 되야한다.
+        if pathIsChild(pp, item):
+          return True
+
+        # /test/* 형태 지원
         if '*' in item:
           if fnmatch.fnmatch(pp, item):
             return True
@@ -784,7 +789,7 @@ class Main():
       zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
       with zipfile.ZipFile(zipPath, "w") as zipWork:
         def _zipAdd(srcP, targetP):
-          if _filterFunc(srcP):
+          if _filterFunc(srcP, exclude):
             print("deploy: skip - %s" % srcP)
             return
 
@@ -794,15 +799,19 @@ class Main():
           print("zipping %s -> %s" % (srcP, targetP))
           zipWork.write(srcP, targetP, compress_type=zipfile.ZIP_DEFLATED)
 
-        #zipWork.write(name, name, compress_type=zipfile.ZIP_DEFLATED)
+        dic = dict(name=config.name)
+        def _pathExpand(pp):
+          pp = os.path.expanduser(pp)
+          return strExpand(pp, dic)
+
+        #zipWork.write(config.name, config.name, compress_type=zipfile.ZIP_DEFLATED)
         for pp in include:
           if type(pp) == str:
             if pp == "*":
               pp = "."
             
             # daemon
-            dic = dict(name=name)
-            pp = strExpand(pp, dic)
+            pp = _pathExpand(pp)
               
             p = pathlib.Path(pp)
             if not p.exists():
@@ -810,7 +819,7 @@ class Main():
               continue
             
             if p.is_dir():
-              if _filterFunc(pp):
+              if _filterFunc(pp, exclude):
                 print("deploy: skip - %s" % pp)
                 continue
 
@@ -819,7 +828,7 @@ class Main():
                 dirs2 = []
                 for d in dirs:
                   dd = os.path.join(folder, d)
-                  if _filterFunc(dd):
+                  if _filterFunc(dd, exclude):
                     print("deploy: skip - %s" % dd)
                   else:
                     dirs2.append(d)
@@ -831,11 +840,22 @@ class Main():
               _zipAdd(pp, pp)
 
           else:
-            src = pp["src"]
+            src = pp['src']
+            src = _pathExpand(src)
             dest = pp["dest"]
+
+            exclude2 = []
+            if 'exclude' in pp:
+              exclude2 = pp['exclude']
 
             for folder, dirs, files in os.walk(src):
               for ff in files:
+                localPath = os.path.join(folder, ff)
+                localPath = pathRemove(localPath, src)
+                if _filterFunc(localPath, exclude2):
+                  print(f'deploy: skip - {os.path.join(folder, ff)}')
+                  continue
+
                 _zipAdd(os.path.join(folder, ff), os.path.join(dest, cutpath(src, folder), ff))
 
       env.uploadFile(zipPath, "/tmp/godUploadPkg.zip")	# we don't include it by default
@@ -846,8 +866,8 @@ class Main():
 
       """	no use copy strategy anymore
       elif strategy == "copy":
-        ssh.uploadFile(name, os.path.join(realTargetFull, name))	# we don't include it by default
-        ssh.run("chmod 755 %s/%s" % (realTargetFull, name))
+        ssh.uploadFile(config.name, os.path.join(realTargetFull, config.name))	# we don't include it by default
+        ssh.run("chmod 755 %s/%s" % (realTargetFull, config.name))
 
         ssh.uploadFilterFunc = _filterFunc
 
@@ -857,7 +877,7 @@ class Main():
               pp = "."
             
             # daemon
-            pp = pp.replace("${name}", name)
+            pp = pp.replace("${name}", config.name)
                         
             p = pathlib.Path(pp)
             if not p.exists():

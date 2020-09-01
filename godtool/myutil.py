@@ -29,6 +29,24 @@ def envExpand(ss):
 		v = os.getenv(name, "")
 		ss = ss[:m.start()] + str(v) + ss[m.end():]
 
+def pathRemove(pp, parent):
+  if parent[-1] != '/':
+    parent += '/'
+  
+  if not pp.startswith(parent):
+    return pp
+
+  return pp[len(parent):]
+
+def pathIsChild(pp, parent):
+  if parent[-1] != '/':
+    parent += '/'
+
+  return pp.startswith(parent)
+
+  
+  
+
 class NonBlockingStreamReader:
 	def __init__(self, stream):
 		'''
