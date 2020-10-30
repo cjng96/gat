@@ -145,3 +145,11 @@ class CoBucket:
 		self.bucket.download_file(key, target)
 		return target
 	
+  def deleteFile(self, bucketName, key):
+    obj = self.res.Object(bucketName, key)
+    obj.delete()
+
+  def deleteFolder(self, bucketName, key):
+    bucket = self.res.Bucket(bucketName)
+    bucket.objects.filter(Prefix=key+'/').delete()
+    
