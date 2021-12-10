@@ -178,13 +178,18 @@ class Tasks:
         finally:
             sys.path = sys.path[1:]
 
-    def makeFile(self, content, path, sudo=False, mode=755):
+    def makeFile(self, content, path, sudo=False, mode=755, makeFolder=False):
         # self.onlyRemote()
         # ss = content.replace('"', '\\"').replace('%', '\%').replace('$', '\$')
+        sudoCmd = "sudo" if sudo else ""
+
+        if makeFolder:
+            pp = os.path.dirname(path)
+            self.run(f"{sudoCmd} mkdir -p {pp}")
+
         content = str2arg(content)
 
-        sudoCmd = "sudo" if sudo else ""
-        self.run('echo "{1}" | {0} tee {2} > /dev/null && {0} chmod {3} {2}'.format(sudoCmd, content, path, mode))
+        self.run(f'echo "{content}" | {sudoCmd} tee {path} > /dev/null && {sudoCmd} chmod {mode} {path}')
 
     def runOutput(self, cmd, expandVars=True):
         """
