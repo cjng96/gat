@@ -103,23 +103,25 @@ class Tasks:
             self.ssh.close()
             self.ssh = None
 
-    def dockerConn(self, name, dkId=None):
-        if self.dkTunnel is not None:
-            raise Exception("dockerConn can be called only on remote connection.")
-
-        dk = Tasks(self.server, self, name, dkId)
-        return dk
-
     def parentConn(self):
         if self.dkTunnel is None:
             raise Exception("This connection is not docker connection.")
         return self.dkTunnel
 
-    def otherDockerConn(self, name, dkId=None):
-        if self.dkTunnel is None:
-            raise Exception("otherDockerConn can be called on docker connection only.")
+    def dockerConn(self, name, dkId=None):
+        if self.dkTunnel is not None:
+            # raise Exception("dockerConn can be called only on remote connection.")
+            return self.dkTunnel.dockerConn(name, dkId)
 
-        return self.dkTunnel.dockerConn(name, dkId)
+        dk = Tasks(self.server, self, name, dkId)
+        return dk
+
+    def otherDockerConn(self, name, dkId=None):
+        # if self.dkTunnel is None:
+        #     raise Exception("otherDockerConn can be called on docker connection only.")
+
+        # return self.dkTunnel.dockerConn(name, dkId)
+        return self.dockerConn(name, dkId)
 
     def remoteConn(self, host, port, id, dkName=None, dkId=None):
         """
