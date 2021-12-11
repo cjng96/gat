@@ -558,7 +558,8 @@ def dicInit(server):
     g_dic.dic["server"] = server
     g_dic.dic["vars"] = deepcopy(server.vars)
     g_dic.dic["data"] = deepcopy(g_data)
-    g_util.cfg = g_config
+    # g_util.cfg = g_config
+    g_util.cfg = g_dic
     g_util.data = g_data
 
 
