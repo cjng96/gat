@@ -1229,7 +1229,7 @@ def main():
 
     elif cmd == "setup":
         runImage = False
-        if sys.argv[2] == "run":
+        if cnt >= 3 and sys.argv[2] == "run":
             cnt -= 1
             del sys.argv[2]
             runImage = True
