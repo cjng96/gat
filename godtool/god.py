@@ -200,8 +200,8 @@ class Tasks:
         """
         print("executeOutput on %s[%s].." % (self._serverName(), cmd))
 
-        if expandVars:
-            cmd = strExpand(cmd, g_dic)
+        # if expandVars:
+        #     cmd = strExpand(cmd, g_dic)
 
         if self.dkTunnel is not None:
             dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
@@ -226,8 +226,8 @@ class Tasks:
         """
         print("executeOutputAll on %s[%s].." % (self._serverName(), cmd))
 
-        if expandVars:
-            cmd = strExpand(cmd, g_dic)
+        # if expandVars:
+        #     cmd = strExpand(cmd, g_dic)
 
         if self.dkTunnel is not None:
             dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
@@ -251,8 +251,8 @@ class Tasks:
         if printLog:
             print("execute on %s[%s].." % (self._serverName(), cmd))
 
-        if expandVars:
-            cmd = strExpand(cmd, g_dic)
+        # if expandVars:
+        #     cmd = strExpand(cmd, g_dic)
 
         if self.dkTunnel is not None:
             # it하면 오류 난다
