@@ -362,7 +362,7 @@ class Tasks:
         # 이게 좀 웃긴데, mysql 통해서 실행하는거기 때문에 \\는 \\\\로 바꿔야한다.
         pw = pw.replace("\\\\", "\\\\\\\\")
         host = str2arg(host)
-        self.run('''sudo mysql -e "CREATE USER '%s'@'%s' IDENTIFIED BY '%s';"''' % (id, host, pw))
+        self.run(f'''sudo mysql -e "CREATE USER '{id}'@'{host}' IDENTIFIED BY '{pw}';"''')
 
         privList = priv.split("/")
         for priv in privList:
@@ -374,7 +374,7 @@ class Tasks:
                 lst.remove("GRANT")
                 oper = ",".join(lst)
                 grantOper = "WITH GRANT OPTION"
-            self.run('''sudo mysql -e "GRANT %s ON %s TO '%s'@'%s' %s;"''' % (oper, priv2, id, host, grantOper))
+            self.run(f'''sudo mysql -e "GRANT {oper} ON {priv2} TO '{id}'@'{host}' {grantOper};"''')
 
     def goBuild(self):
         print("task: goBuild as [%s]..." % g_config.name)
@@ -751,6 +751,8 @@ class Main:
         deployPath = os.path.join(realTarget, "releases", todayName)
         g_dic.dic["deployRoot"] = deployRoot
         g_dic.dic["deployPath"] = deployPath
+
+        env.server.deployPath = deployPath
         if hasattr(mygod, "deployPreTask"):
             mygod.deployPreTask(util=g_util, remote=env, local=g_local)
 
