@@ -259,9 +259,10 @@ class Tasks:
             dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
             cmd = str2arg(cmd)
             cmd = 'sudo docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
-            # print('cmd - %s' % cmd)
+            # print('run cmd(dk) - %s' % cmd)
             return self.dkTunnel.ssh.run(cmd)
         elif self.ssh is not None:
+            # print('run cmd(ssh) - %s' % cmd)
             return self.ssh.run(cmd)
         else:
             """
@@ -442,7 +443,7 @@ class Tasks:
 
         # ss = str2arg(json.dumps(args, cls=ObjectEncoder))
         ss = json.dumps(args, cls=ObjectEncoder)
-        ss2 = zlib.compress(ss.encode())  # 1/3이나 절반
+        ss2 = zlib.compress(ss.encode())  # 1/3이나 절반 - 사이즈가 문제가 아니라 escape때문에
         ss = base64.b64encode(ss2).decode()
         self.run('%spython3 %s runBin "%s"' % ("sudo " if sudo else "", pp2, ss), expandVars=False, printLog=False)
 
