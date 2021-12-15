@@ -356,7 +356,7 @@ class Tasks:
 
     # TODO: mysql, goBuild, gqlGen, dbXorm, pm2Register등은 기본 task에서 빼야할듯
     def mysqlUserDel(self, id, host):
-        hr = self.runOutput('''sudo mysql -e "SELECT 'exist' FROM mysql.user where user='%s';"''' % (id))
+        hr = self.runOutput(f"""sudo mysql -e "SELECT 'exist' FROM mysql.user where user='{id}' AND host='{host}'";""")
         if hr == "":
             return
 
