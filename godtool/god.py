@@ -178,6 +178,12 @@ class Tasks:
         finally:
             sys.path = sys.path[1:]
 
+    def copyFile(self, srcPath, targetPath, sudo=False, mode=755, makeFolder=False):
+        with open(srcPath, "r") as fp:
+            content = fp.read()
+
+        self.makeFile(content=content, path=targetPath, sudo=sudo, mode=mode, makeFolder=makeFolder)
+
     def makeFile(self, content, path, sudo=False, mode=755, makeFolder=False):
         # self.onlyRemote()
         # ss = content.replace('"', '\\"').replace('%', '\%').replace('$', '\$')
