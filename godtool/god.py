@@ -61,6 +61,13 @@ class MyUtil:
     def str2arg(self, ss):
         return str2arg(ss)
 
+    def deployFileListProd(self, func):
+        include = g_config.deploy.include
+        exclude = g_config.get("deploy.exclude", [])
+        followLinks = g_config.deploy.followLinks
+
+        g_main.targetFileListProd(include, exclude, func, followLinks=followLinks)
+
 
 class Tasks:
     def __init__(self, server, dkTunnel=None, dkName=None, dkId=None):
@@ -570,6 +577,32 @@ def dicInit(server):
     g_util.data = g_data
 
 
+def _excludeFilter(_exclude, pp):
+    pp = os.path.normpath(pp)
+    if pp in _exclude:
+        return True
+
+    for item in _exclude:
+        # exclude에 /a/dump라면 pp가 /a/dump/test라도 필터링 되야한다.
+        if pathIsChild(pp, item):
+            return True
+
+        # /test/* 형태 지원
+        if "*" in item:
+            if fnmatch.fnmatch(pp, item):
+                return True
+
+    return False
+
+
+def _pathExpand(pp2):
+    # 원래 deploy에서 아래처럼 {{name}}으로 확장하는게 있었는데.. 일단 보류
+    # dic = dict(name=config.name)
+    pp2 = os.path.expanduser(pp2)
+    # return strExpand(pp2, dic)
+    return pp2
+
+
 class Main:
 
     # runTask와 doServerStep등은 Task말고 별도로 빼자 remote.runTask를 호출할일은 없으니까
@@ -736,6 +769,74 @@ class Main:
         if observer is not None:
             observer.join()
 
+    def targetFileListProd(self, include, exclude, func, followLinks=True):
+        for pp in include:
+            if type(pp) == str:
+                if pp == "*":
+                    pp = "."
+
+                # daemon
+                pp = _pathExpand(pp)
+
+                p = pathlib.Path(pp)
+                if not p.exists():
+                    print(f"target: not exists - {pp}")
+                    continue
+
+                if p.is_dir():
+                    if _excludeFilter(exclude, pp):
+                        print(f"target: skip - {pp}")
+                        continue
+
+                    for folder, dirs, files in os.walk(pp, followlinks=followLinks):
+                        # filtering dirs too
+                        dirs2 = []
+                        for d in dirs:
+                            dd = os.path.join(folder, d)
+                            if _excludeFilter(exclude, dd):
+                                print(f"target: skip - {dd}")
+                                continue
+
+                            dirs2.append(d)
+
+                        dirs[:] = dirs2  # 이걸 변경하면 다음 files가 바뀌나?
+
+                        for ff in files:
+                            # _zipAdd(os.path.join(folder, ff), os.path.join(folder, ff))
+                            full = os.path.join(folder, ff)
+                            if _excludeFilter(exclude, full):
+                                print(f"target: skip - {full}")
+                                continue
+
+                            func(full, None)
+                else:
+                    # _zipAdd(pp, pp)
+                    if _excludeFilter(exclude, pp):
+                        print(f"target: skip - {pp}")
+                        continue
+
+                    func(pp, None)
+
+            else:
+                src = pp["src"]
+                src = _pathExpand(src)
+                dest = pp["dest"]
+
+                exclude2 = []
+                if "exclude" in pp:
+                    exclude2 = pp["exclude"]
+
+                for folder, dirs, files in os.walk(src):
+                    for ff in files:
+                        localPath = os.path.join(folder, ff)
+                        localPath = pathRemove(localPath, src)
+                        if _excludeFilter(exclude2, localPath):
+                            print(f"target: skip - {os.path.join(folder, ff)}")
+                            continue
+
+                        # _zipAdd(os.path.join(folder, ff), os.path.join(dest, cutpath(src, folder), ff))
+                        func(os.path.join(folder, ff), os.path.join(dest, cutpath(src, folder), ff))
+
     def taskDeploy(self, env, server, mygod, config):
         self.buildTask(mygod)
 
@@ -763,52 +864,34 @@ class Main:
             mygod.deployPreTask(util=g_util, remote=env, local=g_local)
 
         # prepare target folder
-        env.runOutput("{0} mkdir -p {1}/shared && {0} mkdir -p {1}/releases".format(sudoCmd, deployRoot))
+        env.runOutput(f"{sudoCmd} mkdir -p {deployRoot}/shared && {sudoCmd} mkdir -p {deployRoot}/releases")
         # ('&& sudo chown %s: %s %s/shared %s/releases' % (server.owner, deployRoot, deployRoot, deployRoot) if server.owner else '') +
 
-        res = env.runOutput("cd {0}/releases && ls -d *;echo".format(deployRoot))
+        res = env.runOutput(f"cd {deployRoot}/releases && ls -d *;echo")
         releases = list(filter(lambda x: re.match("\d{6}_\d{6}", x) is not None, res.split()))
         releases.sort()
 
         max = config.deploy.maxRelease - 1
         cnt = len(releases)
-        print("deploy: releases folders count is %d" % cnt)
+        print(f"deploy: releases folders count is {cnt}")
         if cnt > max:
-            print("deploy: remove old %d folders" % (cnt - max))
+            print(f"deploy: remove old {cnt - max} folders")
             removeList = releases[: cnt - max]
             for ff in removeList:
-                env.runOutput("%s rm -rf %s/releases/%s" % (sudoCmd, deployRoot, ff))
+                env.runOutput(f"{sudoCmd} rm -rf {deployRoot}/releases/{ff}")
 
         # if deploy / owner is defined,
         # create release folder as ssh user, upload, extract then change release folder to deploy / owner
         res = env.runOutput(
-            "cd %s/releases" % deployRoot
-            + "&& %s mkdir %s" % (sudoCmd, todayName)
-            + ("&& sudo chown %s: %s" % (server.owner, todayName) if "owner" in server else "")
+            f"cd {deployRoot}/releases"
+            + f"&& {sudoCmd} mkdir {todayName}"
+            + (f"&& sudo chown {server.owner}: {todayName}" if "owner" in server else "")
         )
 
         # upload files
-        include = []
         include = config.deploy.include
         exclude = config.get("deploy.exclude", [])
         sharedLinks = config.get("deploy.sharedLinks", [])
-
-        def _filterFunc(pp, _exclude):
-            pp = os.path.normpath(pp)
-            if pp in _exclude:
-                return True
-
-            for item in _exclude:
-                # exclude에 /a/dump라면 pp가 /a/dump/test라도 필터링 되야한다.
-                if pathIsChild(pp, item):
-                    return True
-
-                # /test/* 형태 지원
-                if "*" in item:
-                    if fnmatch.fnmatch(pp, item):
-                        return True
-
-            return False
 
         strategy = config.deploy.strategy
         if strategy == "zip":
@@ -816,80 +899,33 @@ class Main:
             with zipfile.ZipFile(zipPath, "w") as zipWork:
 
                 def _zipAdd(srcP, targetP):
-                    if _filterFunc(srcP, exclude):
-                        print("deploy: skip - %s" % srcP)
-                        return
+                    # if _filterFunc(srcP, exclude):
+                    #     print(f"deploy: skip - {srcP}")
+                    #     return
 
                     # make "./aaa" -> "aaa"
                     targetP = os.path.normpath(targetP)
 
-                    print("zipping %s -> %s" % (srcP, targetP))
+                    print(f"zipping {srcP} -> {targetP}")
                     zipWork.write(srcP, targetP, compress_type=zipfile.ZIP_DEFLATED)
 
-                dic = dict(name=config.name)
-
-                def _pathExpand(pp):
-                    pp = os.path.expanduser(pp)
-                    return strExpand(pp, dic)
+                # dic = dict(name=config.name)
+                # def _pathExpand(pp):
+                #     pp = os.path.expanduser(pp)
+                #     return strExpand(pp, dic)
 
                 # zipWork.write(config.name, config.name, compress_type=zipfile.ZIP_DEFLATED)
-                for pp in include:
-                    if type(pp) == str:
-                        if pp == "*":
-                            pp = "."
+                def fileProc(src, dest):
+                    if dest is None:
+                        dest = src
+                    _zipAdd(src, dest)
 
-                        # daemon
-                        pp = _pathExpand(pp)
-
-                        p = pathlib.Path(pp)
-                        if not p.exists():
-                            print("deploy: not exists - %s" % pp)
-                            continue
-
-                        if p.is_dir():
-                            if _filterFunc(pp, exclude):
-                                print("deploy: skip - %s" % pp)
-                                continue
-
-                            for folder, dirs, files in os.walk(pp, followlinks=config.deploy.followLinks):
-                                # filtering dirs too
-                                dirs2 = []
-                                for d in dirs:
-                                    dd = os.path.join(folder, d)
-                                    if _filterFunc(dd, exclude):
-                                        print("deploy: skip - %s" % dd)
-                                    else:
-                                        dirs2.append(d)
-                                dirs[:] = dirs2
-
-                                for ff in files:
-                                    _zipAdd(os.path.join(folder, ff), os.path.join(folder, ff))
-                        else:
-                            _zipAdd(pp, pp)
-
-                    else:
-                        src = pp["src"]
-                        src = _pathExpand(src)
-                        dest = pp["dest"]
-
-                        exclude2 = []
-                        if "exclude" in pp:
-                            exclude2 = pp["exclude"]
-
-                        for folder, dirs, files in os.walk(src):
-                            for ff in files:
-                                localPath = os.path.join(folder, ff)
-                                localPath = pathRemove(localPath, src)
-                                if _filterFunc(localPath, exclude2):
-                                    print(f"deploy: skip - {os.path.join(folder, ff)}")
-                                    continue
-
-                                _zipAdd(os.path.join(folder, ff), os.path.join(dest, cutpath(src, folder), ff))
+                self.targetFileListProd(include, exclude, fileProc, followLinks=config.deploy.followLinks)
 
             env.uploadFile(zipPath, "/tmp/godUploadPkg.zip")  # we don't include it by default
             env.run(
-                "cd %s/releases/%s " % (deployRoot, todayName)
-                + "&& %s unzip /tmp/godUploadPkg.zip && %s rm /tmp/godUploadPkg.zip" % (sudoCmd, sudoCmd)
+                f"cd {deployRoot}/releases/{todayName} "
+                + f"&& {sudoCmd} unzip /tmp/godUploadPkg.zip && {sudoCmd} rm /tmp/godUploadPkg.zip"
             )
             os.remove(zipPath)
 
@@ -925,13 +961,13 @@ class Main:
             ssh.uploadFolder(src, tt)
       """
         else:
-            raise Exception("unknown strategy[%s]" % strategy)
+            raise Exception(f"unknown strategy[{strategy}]")
 
         # shared links
         for pp in sharedLinks:
-            print("deploy: sharedLinks - %s" % pp)
+            print(f"deploy: sharedLinks - {pp}")
             if pp.endswith("/"):
-                env.run("cd %s && %s mkdir -p shared/%s " % (deployRoot, sudoCmd, pp))
+                env.run(f"cd {deployRoot} && {sudoCmd} mkdir -p shared/{pp} ")
                 pp = pp[:-1]
 
             env.run("%s ln -rsf %s/shared/%s %s/releases/%s/%s" % (sudoCmd, deployRoot, pp, deployRoot, todayName, pp))
@@ -939,14 +975,11 @@ class Main:
             # ssh user용으로 변경해놔야 post process에서 쉽게 접근 가능
             if "owner" in server:
                 env.run(
-                    "cd %s && sudo chown %s: releases/%s shared -R"
-                    % (deployRoot, server.get("dkId", server.id), todayName)
+                    f"cd {deployRoot} && sudo chown {server.get('dkId', server.id)}: releases/{todayName} shared -R"
                 )
 
         # update current - post전에 갱신되어 있어야 current에 있는거 실행한다
-        env.run(
-            "cd %s && %s rm -f current && %s ln -sf releases/%s current" % (deployRoot, sudoCmd, sudoCmd, todayName)
-        )
+        env.run(f"cd {deployRoot} && {sudoCmd} rm -f current && {sudoCmd} ln -sf releases/{todayName} current")
         # if "owner" in server:
         #  env.run("cd %s && %s chown %s: current" % (deployRoot, sudoCmd, server.owner))
 
@@ -956,8 +989,8 @@ class Main:
 
         # file owner - 이걸 post후에 해야 ssh user가 파일 접근이 가능하다
         if "owner" in server:
-            env.run("cd %s && sudo chown %s: shared releases/%s -R" % (deployRoot, server.owner, todayName))
-            env.run("cd %s && sudo chmod 775 shared releases/%s -R" % (deployRoot, todayName))
+            env.run(f"cd {deployRoot} && sudo chown {server.owner}: shared releases/{todayName} -R")
+            env.run(f"cd {deployRoot} && sudo chmod 775 shared releases/{todayName} -R")
 
         # TODO: postTask에서 오류 발생시 다시 돌려놔야
 
@@ -1069,9 +1102,9 @@ class Helper:
 
     def loadData(self, pp):
         if not os.path.exists(pp):
-            raise Exception("there is no data file[%s]" % pp)
+            raise Exception(f"there is no data file[{pp}]")
 
-        print("load data from %s..." % pp)
+        print(f"load data from {pp}...")
         # TODO: encrypt with input key when changed
         with open(pp, "r") as fp:
             dd = Dict2(yaml.safe_load(fp.read()))
@@ -1095,7 +1128,7 @@ g_remote = None  # server, vars직접 접근 가능
 
 
 def help(target):
-    print("god-tool V%s" % (__version__))
+    print(f"god-tool V{__version__}")
     print(
         """\
 Usage.
@@ -1113,7 +1146,7 @@ god SYSTEM_NAME SERVER_NAME - Setup server defined in GOD_FILE.
 """
     )
     if target is not None:
-        print("\nThere is no %s script file." % target)
+        print(f"\nThere is no {target} script file.")
 
 
 def main():
