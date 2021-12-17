@@ -700,7 +700,7 @@ class Main:
         else:
             print("You should override buildTask method.")
 
-    def taskSetup(self, target, serverName, runImage):
+    def taskSetup(self, target, serverName, runImageFlag):
         if not os.path.exists(target):
             print("There is no target file[%s]" % target)
             return
@@ -709,10 +709,13 @@ class Main:
         if server is None:
             return
 
-        server["runImage"] = runImage
+        # deprecated
+        # server["runImage"] = runImageFlag
 
         global g_remote, g_data
         g_remote = Tasks(server)
+        g_remote.runImageFlag = runImageFlag
+        
         if "dkName" in server.dic:
             g_remote = g_remote.dockerConn(server.dkName, dkId=server.get("dkId"))
 
@@ -1270,11 +1273,11 @@ def main():
         return
 
     elif cmd == "setup":
-        runImage = False
+        runImageFlag = False
         if cnt >= 3 and sys.argv[2] == "run":
             cnt -= 1
             del sys.argv[2]
-            runImage = True
+            runImageFlag = True
             print("Building image for container...")
 
         if cnt < 3 and len(g_config.servers) == 1:
@@ -1294,7 +1297,7 @@ def main():
 
             serverName = sys.argv[2]
 
-        g_main.taskSetup(target, serverName, runImage)
+        g_main.taskSetup(target, serverName, runImageFlag)
         return
 
     elif cmd == "test":
