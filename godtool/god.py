@@ -4,25 +4,29 @@ import os
 import sys
 import time
 import json
-import paramiko
-import platform
+
+# import paramiko
+# import platform
 import yaml
 import zlib
 import shutil
-import select
-import socket
+
+# import select
+# import socket
 import subprocess
 import datetime
 import pathlib
 import re
 import base64
-import inspect
+
+# import inspect
 import fnmatch
 import traceback
 import importlib
 from copy import deepcopy
-from io import StringIO
-from subprocess import Popen, PIPE
+
+# from io import StringIO
+from subprocess import Popen  # , PIPE
 
 import zipfile
 import tempfile
@@ -36,7 +40,7 @@ from .coPath import cutpath
 from .sampleFiles import sampleApp, sampleSys
 from .godHelper import strExpand
 from .coS3 import CoS3
-from .myutil import NonBlockingStreamReader, str2arg, envExpand, ObjectEncoder, pathRemove, pathIsChild
+from .myutil import str2arg, envExpand, ObjectEncoder, pathRemove, pathIsChild  # NonBlockingStreamReader,
 from .coCollection import dictMerge, Dict2
 
 g_cwd = ""
@@ -153,11 +157,14 @@ class Tasks:
             raise Exception("this method only can be used in remote service.")
 
     def deployApp(self, path, profile, serverOvr=None, varsOvr=None):
-        sys.path.insert(0, path)
+        dir = os.path.dirname(path)
+        fn = os.path.basename(path)
+        print(f"pp:{path}, dir:{dir}, fn:{fn}")
+        sys.path.insert(0, dir)
         try:
             config = Config()
             helper = Helper(config)
-            mymod = importlib.import_module("god_app")
+            mymod = importlib.import_module(fn)
             mygod = mymod.myGod(helper=helper)
 
             server = config.configServerGet(profile)
@@ -176,7 +183,7 @@ class Tasks:
                 remote = remote.dockerConn(server.dkName, dkId=server.get("dkId"))
 
             pp = os.path.abspath(os.curdir)
-            os.chdir(path)
+            os.chdir(dir)
             try:
                 g_main.taskDeploy(remote, server, mygod, config)
             finally:
@@ -339,8 +346,8 @@ class Tasks:
         self.onlyRemote()
         if self.dkTunnel is not None:
             self.dkTunnel.ssh.run("rm -rf /tmp/god_upload && mkdir /tmp/god_upload")
-            allDir = []
-            allFile = []
+            # allDir = []
+            # allFile = []
             src = src.rstrip("/") + "/"
             for pp, dirs, files in os.walk(src):
                 for dir in dirs:
@@ -639,7 +646,7 @@ class Main:
             self.buildTask(mygod)
         except Error as e:
             buildExc = e.args
-        except Exception as e:
+        except Exception:
             buildExc = traceback.format_exc()
 
         if buildExc is not None:
@@ -658,7 +665,7 @@ class Main:
                         ret = p.wait(0.1)
                         raise ExcProgramExit("run: the application has been terminated[ret:%d]" % ret)
 
-                    except subprocess.TimeoutExpired as e:
+                    except subprocess.TimeoutExpired:
                         pass
 
                     if g_util.isRestart:
@@ -679,7 +686,7 @@ class Main:
                     ret = p.wait(0.1)
                     raise ExcProgramExit("run: the application has been terminated[ret:%d]" % ret)
 
-                except subprocess.TimeoutExpired as e:
+                except subprocess.TimeoutExpired:
                     pass
 
                 except ExcProgramExit:
@@ -715,7 +722,7 @@ class Main:
         global g_remote, g_data
         g_remote = Tasks(server)
         g_remote.runImageFlag = runImageFlag
-        
+
         if "dkName" in server.dic:
             g_remote = g_remote.dockerConn(server.dkName, dkId=server.get("dkId"))
 
@@ -1178,11 +1185,11 @@ def main():
                 return
 
             if type == "app":
-                initSamples(type, target)
+                initSamples(type, "god_app.py")
 
             elif type == "sys":
                 if cnt < 4:
-                    print("Please specify SYSTEM_NAME to be generated.")
+                    print("Please specify Target file name to be generated.")
                     return
 
                 target = sys.argv[3]
@@ -1198,23 +1205,57 @@ def main():
         elif cmd == "test":
             pass
 
-        elif cmd == "deploy":
+        elif cmd == "serve":
             pass
 
+        # deploy도 아래 system 문법으로
+        # elif cmd == "deploy":
+        #     pass
+
         else:
-            # setup server system
-            cmd = "setup"
-            if cnt < 2:  # can skip SERVER_NAME
-                print("god SYSTEM_FILE [run] SERVER_NAME")
+            # 로칼에 god_app.py가 있으면 configName생략 모드
+            if not os.path.exists(target):
+                target = None
+
+            # setup server system or deploy
+            cmd = "system"
+            if cnt < 2:
+                # can skip SERVER_NAME(if there is only one target), cmd(default setup)
+                print("god [CONFIG_NAME] [SERVER_NAME] [run|deploy|init|SETUP]")
                 return
 
-            target = sys.argv[1]
-            if not target.endswith(".py"):
-                target += ".py"
+            p = 1
+            if target is None:
+                target = sys.argv[p]
+                if not target.endswith(".py"):
+                    target += ".py"
+                p += 1
+
+            runCmd = None
+            serverName = None
+            if cnt > p:
+                second = sys.argv[p]
+                # print(f"second:{second}")
+                if second in ["run", "deploy", "init", "setup"]:
+                    runCmd = second
+                else:
+                    # 아니면 Server이름
+                    serverName = second
+                p += 1
+
+                # print(f"cnt:{cnt}, p:{p}")
+                if cnt > p:
+                    if runCmd is not None:
+                        serverName = runCmd
+                    runCmd = sys.argv[p]
+                else:
+                    runCmd = "setup"
+
+            # print(f"serve:{serverName}, run:{runCmd}")
 
     else:
-        # app serve
-        cmd = "serve"
+        print("missing god command")
+        return
 
     # check first
     if not os.path.exists(target):  # or not os.path.exists("god.yml"):
@@ -1248,54 +1289,53 @@ def main():
             g_data = Dict2(yaml.safe_load(ss))
             print("data - ", g_data)
 
-    if cmd == "deploy":
-        # g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
-        target = sys.argv[2] if cnt > 2 else None
-        if target is None:
-            if len(g_config.servers) == 1:
-                target = g_config.servers[0]["name"]
-            else:
-                ss = ""
-                for it in g_config.servers:
-                    ss += it["name"] + "|"
-                print("Please specify server name.[%s]" % ss[:-1])
+    elif cmd == "system":
+        if runCmd == "deploy":
+            # g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
+            target = sys.argv[2] if cnt > 2 else None
+            if target is None:
+                if len(g_config.servers) == 1:
+                    target = g_config.servers[0]["name"]
+                else:
+                    ss = ""
+                    for it in g_config.servers:
+                        ss += it["name"] + "|"
+                    print("Please specify server name.[%s]" % ss[:-1])
+                    return
+
+            server = g_config.configServerGet(target)
+            if server is None:
                 return
 
-        server = g_config.configServerGet(target)
-        if server is None:
+            env = Tasks(server)
+            if "dkName" in server.dic:
+                env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
+
+            g_main.taskDeploy(env, server, g_mygod, g_config)
             return
 
-        env = Tasks(server)
-        if "dkName" in server.dic:
-            env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
-
-        g_main.taskDeploy(env, server, g_mygod, g_config)
-        return
-
-    elif cmd == "setup":
         runImageFlag = False
-        if cnt >= 3 and sys.argv[2] == "run":
-            cnt -= 1
-            del sys.argv[2]
+        if runCmd == "run":
             runImageFlag = True
-            print("Building image for container...")
 
-        if cnt < 3 and len(g_config.servers) == 1:
-            serverName = g_config.servers[0].name
-        else:
-            if cnt < 3:
-                ss = ""
-                for it in g_config.servers:
-                    ss += it["name"] + "|"
-
-                print("\nPlease specify SERVER_NAME...")
-                print("eg> god SYSTEM_NAME.py SERVER_NAME")
-                print(" ** you can use [%s] as SERVER_NAME" % ss[:-1])
+        if serverName is None:
+            if len(g_config.servers) == 0:
+                print("there is no server definition.")
                 return
 
-            # support empty server name?
+            serverName = g_config.servers[0].name
+        else:
+            serverFound = False
+            for it in g_config.servers:
+                if it.name == serverName:
+                    serverFound = True
+            if not serverFound:
+                ss = ""
+                for it in g_config.servers:
+                    ss += it.name + "|"
 
-            serverName = sys.argv[2]
+                print(f"There is no server[{serverName}] in {ss[:-1]}")
+                return
 
         g_main.taskSetup(target, serverName, runImageFlag)
         return
