@@ -101,6 +101,10 @@ class CoSsh:
 
     # return: nothing
     def run(self, cmd):
+        """
+        exception: output이 빈채로 온다
+        """
+
         def doOutput(isStdout, ss, arg):
             print(ss, end="")
 
@@ -109,6 +113,7 @@ class CoSsh:
     def runOutput(self, cmd):
         """
         return: stdout result
+        exception: output에 stdout만 포함
         """
         out = [""]
 
@@ -125,6 +130,7 @@ class CoSsh:
     def runOutputAll(self, cmd):
         """
         return: stdout + stderr result
+        exception: output에 stderr, stdout 모두 포함
         """
         out = [""]
 

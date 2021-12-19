@@ -226,11 +226,8 @@ class Tasks:
         if self.dkTunnel is not None:
             dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
             cmd = str2arg(cmd)
-            cmd = 'sudo docker exec -i %s %s bash -c "%s"' % (
-                dkRunUser,
-                self.dkName,
-                cmd,
-            )  # alias defined in .bashrc is working but -l should be used for something in /etc/profile.d.
+            cmd = f'sudo docker exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
+            # alias defined in .bashrc is working but -l should be used for something in /etc/profile.d.
             return self.dkTunnel.ssh.runOutput(cmd)
         elif self.ssh is not None:
             return self.ssh.runOutput(cmd)
@@ -241,7 +238,7 @@ class Tasks:
         """
         cmd: string or array
         expandVars:
-        return: stdout string
+        return: stdout and stderr string
         exception: subprocess.CalledProcessError(returncode, output)
         """
         print("executeOutputAll on %s[%s].." % (self._serverName(), cmd))
@@ -252,7 +249,7 @@ class Tasks:
         if self.dkTunnel is not None:
             dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
             cmd = str2arg(cmd)
-            cmd = 'sudo docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
+            cmd = f'sudo docker exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
             return self.dkTunnel.ssh.runOutputAll(cmd)
         elif self.ssh is not None:
             return self.ssh.runOutputAll(cmd)
@@ -1250,8 +1247,8 @@ def main():
                     runCmd = sys.argv[p]
                 else:
                     runCmd = "setup"
-
-            # print(f"serve:{serverName}, run:{runCmd}")
+            else:
+                runCmd = "setup"
 
     else:
         print("missing god command")
@@ -1289,7 +1286,7 @@ def main():
             g_data = Dict2(yaml.safe_load(ss))
             print("data - ", g_data)
 
-    elif cmd == "system":
+    if cmd == "system":
         if runCmd == "deploy":
             # g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
             target = sys.argv[2] if cnt > 2 else None
@@ -1337,6 +1334,7 @@ def main():
                 print(f"There is no server[{serverName}] in {ss[:-1]}")
                 return
 
+        print(f"systemSetup - target:{target}, server:{serverName}, run:{runCmd}")
         g_main.taskSetup(target, serverName, runImageFlag)
         return
 
