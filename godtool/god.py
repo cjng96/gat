@@ -1297,7 +1297,7 @@ def main():
                     ss = ""
                     for it in g_config.servers:
                         ss += it["name"] + "|"
-                    print("Please specify server name.[%s]" % ss[:-1])
+                    print(f"\nPlease specify server name.[{ss[:-1]}]")
                     return
 
             server = g_config.configServerGet(target)
@@ -1317,10 +1317,19 @@ def main():
 
         if serverName is None:
             if len(g_config.servers) == 0:
-                print("there is no server definition.")
+                print("\nThere is no server definition.")
                 return
 
-            serverName = g_config.servers[0].name
+            if len(g_config.servers) == 1:
+                serverName = g_config.servers[0].name
+
+            else:
+                ss = ""
+                for it in g_config.servers:
+                    ss += it["name"] + "|"
+                print(f"\nPlease specify the sever name is no server definition.[{ss[:-1]}]")
+                return
+
         else:
             serverFound = False
             for it in g_config.servers:
