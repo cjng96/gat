@@ -156,10 +156,16 @@ class Tasks:
         if self.dkTunnel is None and self.ssh is None:
             raise Exception("this method only can be used in remote service.")
 
-    def deployApp(self, path, profile, serverOvr=None, varsOvr=None):
+    def setupApp(self, path, profile, serverOvr=None, varsOvr=None, subCmd=""):
+        if path.endswith(".py"):
+            path = path[:-3]
+
+        if not os.path.exists(path + ".py"):
+            raise Exception(f"There is no target file[{path}] for deployApp")
+
         dir = os.path.dirname(path)
         fn = os.path.basename(path)
-        print(f"pp:{path}, dir:{dir}, fn:{fn}")
+        print(f"setupApp - pp:{path}, dir:{dir}, fn:{fn}")
         sys.path.insert(0, dir)
         try:
             config = Config()
@@ -178,14 +184,59 @@ class Tasks:
             if varsOvr is not None:
                 server.vars.fill(varsOvr)
 
-            remote = Tasks(server)
-            if "dkName" in server.dic:
-                remote = remote.dockerConn(server.dkName, dkId=server.get("dkId"))
+            # remote = Tasks(server)
+            # if "dkName" in server.dic:
+            #     remote = remote.dockerConn(server.dkName, dkId=server.get("dkId"))
 
             pp = os.path.abspath(os.curdir)
             os.chdir(dir)
             try:
-                g_main.taskDeploy(remote, server, mygod, config)
+                # g_main.taskDeploy(remote, server, mygod, config)
+                # g_main.taskSetup(remote, server, mygod, config)
+                g_main.taskSetup(server, subCmd, mygod, config)
+            finally:
+                os.chdir(pp)
+
+        finally:
+            sys.path = sys.path[1:]
+
+    def deployApp(self, path, profile, serverOvr=None, varsOvr=None):
+        if path.endswith(".py"):
+            path = path[:-3]
+
+        if not os.path.exists(path + ".py"):
+            raise Exception(f"There is no target file[{path}] for deployApp")
+
+        dir = os.path.dirname(path)
+        fn = os.path.basename(path)
+        print(f"deployApp - path:{path}, profile:{profile}")
+        sys.path.insert(0, dir)
+        try:
+            config = Config()
+            helper = Helper(config)
+            mymod = importlib.import_module(fn)
+            mygod = mymod.myGod(helper=helper)
+
+            server = config.configServerGet(profile)
+            if server is None:
+                return
+
+            # override configure
+            server = deepcopy(server)
+            if serverOvr is not None:
+                server.fill(serverOvr)
+            if varsOvr is not None:
+                server.vars.fill(varsOvr)
+
+            # remote = Tasks(server)
+            # if "dkName" in server.dic:
+            #     remote = remote.dockerConn(server.dkName, dkId=server.get("dkId"))
+
+            pp = os.path.abspath(os.curdir)
+            os.chdir(dir)
+            try:
+                # g_main.taskDeploy(remote, server, mygod, config)
+                g_main.taskDeploy(server, mygod, config)
             finally:
                 os.chdir(pp)
 
@@ -704,37 +755,56 @@ class Main:
         else:
             print("You should override buildTask method.")
 
-    def taskSetup(self, target, serverName, runImageFlag):
-        if not os.path.exists(target):
-            print("There is no target file[%s]" % target)
-            return
+    # def taskSetup(self, target, serverName, subCmd):
+    def taskSetup(self, server, subCmd, mygod, config):
+        # if not os.path.exists(target):
+        #     print("There is no target file[%s]" % target)
+        #     return
 
-        server = g_config.configServerGet(serverName)
-        if server is None:
-            return
+        # server = g_config.configServerGet(serverName)
+        # if server is None:
+        #     return
 
         # deprecated
         # server["runImage"] = runImageFlag
+        if subCmd not in ["run", "full", ""]:
+            raise Exception(f"Invalid sub command[{subCmd}] for setup task")
 
-        global g_remote, g_data
-        g_remote = Tasks(server)
-        g_remote.runImageFlag = runImageFlag
+        # global g_remote, g_data
+        # g_remote = Tasks(server)
+        # g_remote.runFlag = subCmd == "run"
+        # g_remote.runImageFlag = g_remote.runFlag  # deprecated
+        # g_remote.fullFlag = subCmd == "full"
+        # if "dkName" in server.dic:
+        #     g_remote = g_remote.dockerConn(server.dkName, dkId=server.get("dkId"))
 
+        env = Tasks(server)
         if "dkName" in server.dic:
-            g_remote = g_remote.dockerConn(server.dkName, dkId=server.get("dkId"))
+            env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
+
+        env.runFlag = subCmd == "run"
+        env.runImageFlag = env.runFlag  # deprecated
+        env.fullFlag = subCmd == "full"
 
         # g_remote.data = g_data
         # g_remote.util = g_util
         dicInit(server)
 
         # expand env and variables
-        expandVar(g_config)
+        expandVar(config)
 
-        if not hasattr(g_mygod, "setupTask"):
+        if not hasattr(mygod, "setupTask"):
             print("setup: You should override setupTask function in your myGod class")
             return
 
-        g_mygod.setupTask(util=g_util, remote=g_remote, local=g_local)
+        global g_config
+        oldConfig = g_config
+        try:
+            # 내부적으로 g_config에 액서스할때가 있어서 일단은..
+            g_config = config
+            mygod.setupTask(util=g_util, remote=env, local=g_local)
+        finally:
+            g_config = oldConfig
 
     def taskTest(self):
         observer = None
@@ -844,7 +914,12 @@ class Main:
                         # _zipAdd(os.path.join(folder, ff), os.path.join(dest, cutpath(src, folder), ff))
                         func(os.path.join(folder, ff), os.path.join(dest, cutpath(src, folder), ff))
 
-    def taskDeploy(self, env, server, mygod, config):
+    # def taskDeploy(self, env, server, mygod, config):
+    def taskDeploy(self, server, mygod, config):
+        env = Tasks(server)
+        if "dkName" in server.dic:
+            env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
+
         self.buildTask(mygod)
 
         dicInit(server)
@@ -1088,8 +1163,7 @@ class Config(Dict2):
                 break
 
         if server is None:
-            print("Not found server[%s]" % name)
-            return None
+            raise Exception(f"Not found server[{name}]")
 
         return server
 
@@ -1289,10 +1363,10 @@ def main():
     if cmd == "system":
         if runCmd == "deploy":
             # g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
-            target = sys.argv[2] if cnt > 2 else None
-            if target is None:
+            serverName = sys.argv[2] if cnt > 2 else None
+            if serverName is None:
                 if len(g_config.servers) == 1:
-                    target = g_config.servers[0]["name"]
+                    serverName = g_config.servers[0]["name"]
                 else:
                     ss = ""
                     for it in g_config.servers:
@@ -1300,20 +1374,21 @@ def main():
                     print(f"\nPlease specify server name.[{ss[:-1]}]")
                     return
 
-            server = g_config.configServerGet(target)
+            server = g_config.configServerGet(serverName)
             if server is None:
                 return
 
-            env = Tasks(server)
-            if "dkName" in server.dic:
-                env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
+            # env = Tasks(server)
+            # if "dkName" in server.dic:
+            #     env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
 
-            g_main.taskDeploy(env, server, g_mygod, g_config)
+            # g_main.taskDeploy(env, server, g_mygod, g_config)
+            g_main.taskDeploy(server, g_mygod, g_config)
             return
 
-        runImageFlag = False
-        if runCmd == "run":
-            runImageFlag = True
+        subCmd = ""
+        if runCmd == "run" or runCmd == "full":
+            subCmd = runCmd
 
         if serverName is None:
             if len(g_config.servers) == 0:
@@ -1343,8 +1418,10 @@ def main():
                 print(f"There is no server[{serverName}] in {ss[:-1]}")
                 return
 
-        print(f"systemSetup - target:{target}, server:{serverName}, run:{runCmd}")
-        g_main.taskSetup(target, serverName, runImageFlag)
+        print(f"systemSetup - target:{target}, server:{serverName}, subCmd:{subCmd}")
+        server = g_config.configServerGet(serverName)
+
+        g_main.taskSetup(server, subCmd, g_mygod, g_config)
         return
 
     elif cmd == "test":
