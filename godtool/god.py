@@ -60,27 +60,28 @@ class MyUtil:
         # self.deployRoot = ""	# only for deployment -- 이거 그냥. g_remote.server.deployRoot쓰면 된다.
         # self.deployOwner = None	# 그냥 server.id를 기본값으로 한다.
         self.isRestart = True  # First start or modified source files
-        self.cfg = None  # config object(g_config)
+        # self.config = None  # config object(g_config) -- 이건 전역 객체라 쓰면 안된다
 
     def str2arg(self, ss):
         return str2arg(ss)
 
-    def deployFileListProd(self, func):
-        include = g_config.deploy.include
-        exclude = g_config.get("deploy.exclude", [])
-        followLinks = g_config.deploy.followLinks
+    def deployFileListProd(self, env, func):
+        include = env.config.deploy.include
+        exclude = env.config.get("deploy.exclude", [])
+        followLinks = env.config.deploy.followLinks
 
         g_main.targetFileListProd(include, exclude, func, followLinks=followLinks)
 
 
 class Tasks:
-    def __init__(self, server, dkTunnel=None, dkName=None, dkId=None):
+    def __init__(self, server, config, dkTunnel=None, dkName=None, dkId=None):
         """ """
         self.proc = None
         self._uploadHelper = False
 
         self.server = server
         self.ssh = None
+        self.config = config
 
         # accessbility
         self.data = g_data
@@ -124,7 +125,8 @@ class Tasks:
             # raise Exception("dockerConn can be called only on remote connection.")
             return self.dkTunnel.dockerConn(name, dkId)
 
-        dk = Tasks(self.server, self, name, dkId)
+        # dk = Tasks(self.server, g_config, self, name, dkId)
+        dk = Tasks(self.server, self.config, self, name, dkId)
         return dk
 
     def otherDockerConn(self, name, dkId=None):
@@ -140,7 +142,8 @@ class Tasks:
         docker지정까지 가능하다. 이거 설정을 컨피그로 할수 있게 하자
         이건 util로 가는게 나을까
         """
-        dk = Tasks(Dict2(dict(name="remote", host=host, port=port, id=id)))  # no have owner
+        # dk = Tasks(Dict2(dict(name="remote", host=host, port=port, id=id)), g_config)  # no have owner
+        dk = Tasks(Dict2(dict(name="remote", host=host, port=port, id=id)), self.config)  # no have owner
         dk.initSsh(host, port, id)
 
         if dkName is not None:
@@ -444,17 +447,17 @@ class Tasks:
                 grantOper = "WITH GRANT OPTION"
             self.run(f'''sudo mysql -e "GRANT {oper} ON {priv2} TO '{id}'@'{host}' {grantOper};"''')
 
-    def goBuild(self):
-        print("task: goBuild as [%s]..." % g_config.name)
+    def goBuild(self, env):
+        print("task: goBuild as [%s]..." % env.config.name)
 
         self.onlyLocal()
 
-        cmd = ["go", "build", "-o", g_config.name]
+        cmd = ["go", "build", "-o", env.config.name]
         ret = subprocess.run(cmd)
         if ret.returncode != 0:
             raise Error("task.goBuild: build failed")
 
-    def gqlGen(self):
+    def gqlGen(self, env):
         print("task: gql gen...")
         self.onlyLocal()
 
@@ -558,19 +561,19 @@ class Tasks:
         args = dict(cmd="configLine", dic=g_dic, path=path, regexp=regexp, line=line, items=items, append=append)
         self._helperRun(args, sudo)
 
-    def s3List(self, bucket, prefix):
+    def s3List(self, env, bucket, prefix):
         print("task: s3 list[%s/%s]..." % (bucket, prefix))
         self.onlyLocal()
 
         if not prefix.endswith("/"):
             prefix += "/"
 
-        s3 = CoS3(g_config.get("s3.key", None), g_config.get("s3.secret", None))
+        s3 = CoS3(env.config.get("s3.key", None), env.config.get("s3.secret", None))
         bb = s3.bucketGet(bucket)
         lst = bb.fileList(prefix)
         return lst
 
-    def s3DownloadFiles(self, bucket, prefix, nameList, targetFolder):
+    def s3DownloadFiles(self, env, bucket, prefix, nameList, targetFolder):
         print("task: s3 download files[%s/%s]..." % (bucket, prefix))
         self.onlyLocal()
 
@@ -579,16 +582,16 @@ class Tasks:
         if not prefix.endswith("/"):
             prefix += "/"
 
-        s3 = CoS3(g_config.get("s3.key", None), g_config.get("s3.secret", None))
+        s3 = CoS3(env.config.get("s3.key", None), env.config.get("s3.secret", None))
         bb = s3.bucketGet(bucket)
         for name in nameList:
             bb.downloadFile(prefix + name, targetFolder + name)
 
-    def s3DownloadFile(self, bucket, key, dest=None):
+    def s3DownloadFile(self, env, bucket, key, dest=None):
         print("task: s3 download file[%s -> %s]..." % (key, dest))
         self.onlyLocal()
 
-        s3 = CoS3(g_config.get("s3.key", None), g_config.get("s3.secret", None))
+        s3 = CoS3(env.config.get("s3.key", None), env.config.get("s3.secret", None))
         bb = s3.bucketGet(bucket)
         return bb.downloadFile(key, dest)
 
@@ -628,7 +631,7 @@ def dicInit(server):
     g_dic.dic["vars"] = deepcopy(server.vars)
     g_dic.dic["data"] = deepcopy(g_data)
     # g_util.cfg = g_config
-    g_util.cfg = g_dic
+    # g_util.config = g_dic # 전역객체기 때문에 쓰면 안된다
     g_util.data = g_data
 
 
@@ -778,9 +781,13 @@ class Main:
         # if "dkName" in server.dic:
         #     g_remote = g_remote.dockerConn(server.dkName, dkId=server.get("dkId"))
 
-        env = Tasks(server)
+        env = Tasks(server, config)
         if "dkName" in server.dic:
             env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
+
+        # print("\n\n\n\nhahahaha")
+        # print(env.config)
+        # print("\n\n\n\n")
 
         env.runFlag = subCmd == "run"
         env.runImageFlag = env.runFlag  # deprecated
@@ -797,15 +804,15 @@ class Main:
             print("setup: You should override setupTask function in your myGod class")
             return
 
-        global g_config
-        oldConfig = g_config
-        try:
-            # 내부적으로 g_config에 액서스할때가 있어서 일단은..
-            # config접근을 env를 통해서 하게 할까...
-            g_config = config
-            mygod.setupTask(util=g_util, remote=env, local=g_local)
-        finally:
-            g_config = oldConfig
+        # global g_config
+        # oldConfig = g_config
+        # try:
+        # 내부적으로 g_config에 액서스할때가 있어서 일단은..
+        # config접근을 env를 통해서 하게 할까...
+        # g_config = config
+        mygod.setupTask(util=g_util, remote=env, local=g_local)
+        # finally:
+        # g_config = oldConfig
 
     def taskTest(self):
         observer = None
@@ -917,7 +924,7 @@ class Main:
 
     # def taskDeploy(self, env, server, mygod, config):
     def taskDeploy(self, server, mygod, config):
-        env = Tasks(server)
+        env = Tasks(server, config)
         if "dkName" in server.dic:
             env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
 
@@ -1164,6 +1171,7 @@ class Config(Dict2):
                 break
 
         if server is None:
+            print(self)
             raise Exception(f"Not found server[{name}]")
 
         return server
@@ -1347,7 +1355,7 @@ def main():
 
     print("** config[type:%s, name:%s]" % (type, name))
     global g_local
-    g_local = Tasks(None)
+    g_local = Tasks(None, g_config)
     # g_local.util = g_util
 
     # load secret
