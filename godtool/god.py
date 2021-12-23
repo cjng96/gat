@@ -1330,6 +1330,9 @@ def main():
                     runCmd = sys.argv[p]
                 else:
                     runCmd = "setup"
+
+                print(f"target2 -- {runCmd}, {serverName}")
+
             else:
                 runCmd = "setup"
 
@@ -1369,36 +1372,10 @@ def main():
             g_data = Dict2(yaml.safe_load(ss))
             print("data - ", g_data)
 
-    if cmd == "system":
-        if runCmd == "deploy":
-            # g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
-            serverName = sys.argv[2] if cnt > 2 else None
-            if serverName is None:
-                if len(g_config.servers) == 1:
-                    serverName = g_config.servers[0]["name"]
-                else:
-                    ss = ""
-                    for it in g_config.servers:
-                        ss += it["name"] + "|"
-                    print(f"\nPlease specify server name.[{ss[:-1]}]")
-                    return
-
-            server = g_config.configServerGet(serverName)
-            if server is None:
-                return
-
-            # env = Tasks(server)
-            # if "dkName" in server.dic:
-            #     env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
-
-            # g_main.taskDeploy(env, server, g_mygod, g_config)
-            g_main.taskDeploy(server, g_mygod, g_config)
-            return
-
-        subCmd = ""
-        if runCmd == "run" or runCmd == "full":
-            subCmd = runCmd
-
+    def checkServerName(serverName):
+        """
+        return: none(error), str(new serverName)
+        """
         if serverName is None:
             if len(g_config.servers) == 0:
                 print("\nThere is no server definition.")
@@ -1426,6 +1403,42 @@ def main():
 
                 print(f"There is no server[{serverName}] in {ss[:-1]}")
                 return
+        return serverName
+
+    if cmd == "system":
+        if runCmd == "deploy":
+            # g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
+            # serverName = sys.argv[2] if cnt > 2 else None
+            # if serverName is None:
+            #     if len(g_config.servers) == 1:
+            #         serverName = g_config.servers[0]["name"]
+            #     else:
+            #         ss = ""
+            #         for it in g_config.servers:
+            #             ss += it["name"] + "|"
+            #         print(f"\nPlease specify server name.[{ss[:-1]}]")
+            #         return
+            serverName = checkServerName(serverName)
+            if serverName is None:
+                return
+
+            server = g_config.configServerGet(serverName)
+
+            # env = Tasks(server)
+            # if "dkName" in server.dic:
+            #     env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
+
+            # g_main.taskDeploy(env, server, g_mygod, g_config)
+            g_main.taskDeploy(server, g_mygod, g_config)
+            return
+
+        subCmd = ""
+        if runCmd == "run" or runCmd == "full":
+            subCmd = runCmd
+
+        serverName = checkServerName(serverName)
+        if serverName is None:
+            return
 
         print(f"systemSetup - target:{target}, server:{serverName}, subCmd:{subCmd}")
         server = g_config.configServerGet(serverName)
