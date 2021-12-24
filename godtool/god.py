@@ -548,7 +548,7 @@ class Tasks:
         marker: ### {mark} TEST
         block: vv=1
         """
-        print("task: config block[%s] for %s..." % (marker, path))
+        print(f"task: config block[{marker}] for {path}...\n[{block}]\n")
         # self.onlyRemote()
 
         args = dict(cmd="configBlock", dic=g_dic, path=path, marker=marker, block=block, insertAfter=insertAfter)
@@ -770,7 +770,7 @@ class Main:
 
         # deprecated
         # server["runImage"] = runImageFlag
-        if subCmd not in ["run", "full", ""]:
+        if subCmd not in ["run", "full", "init", ""]:
             raise Exception(f"Invalid sub command[{subCmd}] for setup task")
 
         # global g_remote, g_data
@@ -792,6 +792,7 @@ class Main:
         env.runFlag = subCmd == "run"
         env.runImageFlag = env.runFlag  # deprecated
         env.fullFlag = subCmd == "full"
+        env.initFlag = subCmd == "init"
 
         # g_remote.data = g_data
         # g_remote.util = g_util
@@ -1433,7 +1434,7 @@ def main():
             return
 
         subCmd = ""
-        if runCmd == "run" or runCmd == "full":
+        if runCmd in ["run", "full", "init"]:
             subCmd = runCmd
 
         serverName = checkServerName(serverName)
