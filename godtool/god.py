@@ -23,6 +23,8 @@ import base64
 import fnmatch
 import traceback
 import importlib
+import importlib.util
+
 from copy import deepcopy
 
 # from io import StringIO
@@ -163,88 +165,112 @@ class Tasks:
         if path.endswith(".py"):
             path = path[:-3]
 
+        path = os.path.expanduser(path)
+        path = os.path.abspath(path)
+
         if not os.path.exists(path + ".py"):
             raise Exception(f"There is no target file[{path}] for deployApp")
 
+        print(f"\nsetupApp - path:{path}...")
         dir = os.path.dirname(path)
         fn = os.path.basename(path)
-        print(f"setupApp - pp:{path}, dir:{dir}, fn:{fn}")
-        sys.path.insert(0, dir)
+
+        config = Config()
+        helper = Helper(config)
+
+        # sys.path.insert(0, dir)
+        # sys.path = sys.path[1:]
+        # importlib.invalidate_caches()
+        # mymod = importlib.import_module(fn)
+
+        # import module은 sys.path바꿔도 이미 로드한 모듈이름은 캐시해버린다
+        spec = importlib.util.spec_from_file_location(fn, path + ".py")
+        mymod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mymod)
+
+        mygod = mymod.myGod(helper=helper)
+
+        server = config.configServerGet(profile)
+        if server is None:
+            return
+
+        # 위에서 이미 오버라이딩해놓은게 있을수 있으니 보존 - setupApp은 구조가 다르다
+        # idx = config.servers.index(server)
+        # server = deepcopy(env.server)
+        # config.servers[idx] = server
+
+        # override configure
+        server = deepcopy(server)
+        if serverOvr is not None:
+            server.fill(serverOvr)
+        if varsOvr is not None:
+            server.vars.fill(varsOvr)
+
+        # remote = Tasks(server)
+        # if "dkName" in server.dic:
+        #     remote = remote.dockerConn(server.dkName, dkId=server.get("dkId"))
+
+        pp = os.path.abspath(os.curdir)
+        os.chdir(dir)
         try:
-            config = Config()
-            helper = Helper(config)
-            mymod = importlib.import_module(fn)
-            mygod = mymod.myGod(helper=helper)
-
-            server = config.configServerGet(profile)
-            if server is None:
-                return
-
-            # override configure
-            server = deepcopy(server)
-            if serverOvr is not None:
-                server.fill(serverOvr)
-            if varsOvr is not None:
-                server.vars.fill(varsOvr)
-
-            # remote = Tasks(server)
-            # if "dkName" in server.dic:
-            #     remote = remote.dockerConn(server.dkName, dkId=server.get("dkId"))
-
-            pp = os.path.abspath(os.curdir)
-            os.chdir(dir)
-            try:
-                # g_main.taskDeploy(remote, server, mygod, config)
-                # g_main.taskSetup(remote, server, mygod, config)
-                g_main.taskSetup(server, subCmd, mygod, config)
-            finally:
-                os.chdir(pp)
-
+            # g_main.taskDeploy(remote, server, mygod, config)
+            # g_main.taskSetup(remote, server, mygod, config)
+            g_main.taskSetup(server, subCmd, mygod, config)
         finally:
-            sys.path = sys.path[1:]
+            os.chdir(pp)
 
     def deployApp(self, path, profile, serverOvr=None, varsOvr=None):
         if path.endswith(".py"):
             path = path[:-3]
 
+        path = os.path.expanduser(path)
+        path = os.path.abspath(path)
+
         if not os.path.exists(path + ".py"):
             raise Exception(f"There is no target file[{path}] for deployApp")
 
+        print(f"\ndeployApp - path:{path}, profile:{profile}")
         dir = os.path.dirname(path)
         fn = os.path.basename(path)
-        print(f"deployApp - path:{path}, profile:{profile}")
-        sys.path.insert(0, dir)
+
+        config = Config()
+        helper = Helper(config)
+        # mymod = importlib.import_module(fn)
+
+        # import module은 sys.path바꿔도 이미 로드한 모듈이름은 캐시해버린다
+        spec = importlib.util.spec_from_file_location(fn, path + ".py")
+        mymod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mymod)
+
+        mygod = mymod.myGod(helper=helper)
+
+        server = config.configServerGet(profile)
+        if server is None:
+            return
+
+        # 위에서 이미 오버라이딩해놓은게 있을수 있으니 보존
+        # idx = config.servers.index(server)
+        # server = deepcopy(env.server)
+        # config.servers[idx] = server
+
+        # override configure
+        server = deepcopy(server)
+        if serverOvr is not None:
+            server.fill(serverOvr)
+        if varsOvr is not None:
+            server.vars.fill(varsOvr)
+
+        # remote = Tasks(server)
+        # if "dkName" in server.dic:
+        #     remote = remote.dockerConn(server.dkName, dkId=server.get("dkId"))
+
+        pp = os.path.abspath(os.curdir)
+        os.chdir(dir)
         try:
-            config = Config()
-            helper = Helper(config)
-            mymod = importlib.import_module(fn)
-            mygod = mymod.myGod(helper=helper)
-
-            server = config.configServerGet(profile)
-            if server is None:
-                return
-
-            # override configure
-            server = deepcopy(server)
-            if serverOvr is not None:
-                server.fill(serverOvr)
-            if varsOvr is not None:
-                server.vars.fill(varsOvr)
-
-            # remote = Tasks(server)
-            # if "dkName" in server.dic:
-            #     remote = remote.dockerConn(server.dkName, dkId=server.get("dkId"))
-
-            pp = os.path.abspath(os.curdir)
-            os.chdir(dir)
-            try:
-                # g_main.taskDeploy(remote, server, mygod, config)
-                g_main.taskDeploy(server, mygod, config)
-            finally:
-                os.chdir(pp)
-
+            # g_main.taskDeploy(remote, server, mygod, config)
+            g_main.taskDeploy(server, mygod, config)
         finally:
-            sys.path = sys.path[1:]
+            os.chdir(pp)
 
     def copyFile(self, srcPath, targetPath, sudo=False, mode=755, makeFolder=False):
         with open(srcPath, "r") as fp:
