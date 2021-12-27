@@ -796,7 +796,7 @@ class Main:
 
         # deprecated
         # server["runImage"] = runImageFlag
-        if subCmd not in ["dev", "prod", "full", "init", ""]:
+        if subCmd not in ["run", "dev", "prod", "full", "init", ""]:
             raise Exception(f"Invalid sub command[{subCmd}] for setup task")
 
         # global g_remote, g_data
@@ -815,12 +815,12 @@ class Main:
         # print(env.config)
         # print("\n\n\n\n")
 
-        if subCmd in ["dev", "prod"]:
+        env.runFlag = False
+        env.runProfile = None
+        if subCmd in ["dev", "prod", "run"]:
             env.runFlag = True
-            env.runProfile = subCmd
-        else:
-            env.runFlag = False
-            env.runProfile = None
+            if subCmd != 'run':
+                env.runProfile = subCmd
 
         # env.runImageFlag = env.runFlag  # deprecated
 
