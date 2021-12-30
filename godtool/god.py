@@ -819,7 +819,7 @@ class Main:
         env.runProfile = None
         if subCmd in ["dev", "prod", "run"]:
             env.runFlag = True
-            if subCmd != 'run':
+            if subCmd != "run":
                 env.runProfile = subCmd
 
         # env.runImageFlag = env.runFlag  # deprecated
@@ -1232,7 +1232,7 @@ class Helper:
         # TODO: encrypt with input key when changed
         with open(pp, "r") as fp:
             dd = Dict2(yaml.safe_load(fp.read()))
-            print("data - ", dd)
+            print("data -", dd)
             return dd
 
 
@@ -1391,20 +1391,25 @@ def main():
     type = g_config.get("type", "app")
 
     print("** config[type:%s, name:%s]" % (type, name))
+
+    # load secret - 이걸 mygod init하는데서 수동으로 하게해놨는데..
+    # 무조건 로드하게하고 추가 로드를 할수 있게할까? - 좀 애매하다
+    global g_data
+    # secretPath = os.path.join(g_cwd, ".data.yml")
+    # if os.path.exists(secretPath):
+    #     print("load data...")
+    #     # TODO: encrypt with input key when changed
+    #     with open(secretPath, "r") as fp:
+    #         ss = fp.read()
+    #         g_data = Dict2(yaml.safe_load(ss))
+    #         print("data - ", g_data)
+    if g_mygod.data is not None:
+        g_data = g_mygod.data
+    print("g_data", g_data)
+
     global g_local
     g_local = Tasks(None, g_config)
     # g_local.util = g_util
-
-    # load secret
-    global g_data
-    secretPath = os.path.join(g_cwd, ".data.yml")
-    if os.path.exists(secretPath):
-        print("load data...")
-        # TODO: encrypt with input key when changed
-        with open(secretPath, "r") as fp:
-            ss = fp.read()
-            g_data = Dict2(yaml.safe_load(ss))
-            print("data - ", g_data)
 
     def checkServerName(serverName):
         """
