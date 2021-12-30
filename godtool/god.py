@@ -1405,7 +1405,6 @@ def main():
     #         print("data - ", g_data)
     if g_mygod.data is not None:
         g_data = g_mygod.data
-    print("g_data", g_data)
 
     global g_local
     g_local = Tasks(None, g_config)
