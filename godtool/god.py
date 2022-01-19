@@ -117,6 +117,9 @@ class Tasks:
             self.ssh.close()
             self.ssh = None
 
+    def str2arg(self, ss):
+        return str2arg(ss)
+
     def parentConn(self):
         if self.dkTunnel is None:
             raise Exception("This connection is not docker connection.")
@@ -444,84 +447,6 @@ class Tasks:
     def uploadFolderTo(self, src, dest):
         self.onlyRemote()
         self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
-
-    # TODO: mysql, goBuild, gqlGen, dbXorm, pm2Register등은 기본 task에서 빼야할듯
-    def mysqlUserDel(self, id, host):
-        hr = self.runOutput(f"""sudo mysql -e "SELECT 'exist' FROM mysql.user where user='{id}' AND host='{host}'";""")
-        if hr == "":
-            return
-
-        self.run('''sudo mysql -e "DROP USER '%s'@'%s';"''' % (id, host))
-
-    def mysqlUserGen(self, id, pw, host, priv):
-        # pw = str2arg(pw).replace(';', '\\;').replace('`', '``').replace("'", "\\'")
-        pw = str2arg(pw).replace("'", "''")
-        # 이게 좀 웃긴데, mysql 통해서 실행하는거기 때문에 \\는 \\\\로 바꿔야한다.
-        pw = pw.replace("\\\\", "\\\\\\\\")
-        host = str2arg(host)
-        self.run(f'''sudo mysql -e "CREATE USER '{id}'@'{host}' IDENTIFIED BY '{pw}';"''')
-
-        privList = priv.split("/")
-        for priv in privList:
-            priv2, oper = priv.split(":")
-
-            grantOper = ""
-            lst = list(map(lambda x: x.strip().upper(), oper.split(",")))
-            if "GRANT" in lst:
-                lst.remove("GRANT")
-                oper = ",".join(lst)
-                grantOper = "WITH GRANT OPTION"
-            self.run(f'''sudo mysql -e "GRANT {oper} ON {priv2} TO '{id}'@'{host}' {grantOper};"''')
-
-    def goBuild(self, env):
-        print("task: goBuild as [%s]..." % env.config.name)
-
-        self.onlyLocal()
-
-        cmd = ["go", "build", "-o", env.config.name]
-        ret = subprocess.run(cmd)
-        if ret.returncode != 0:
-            raise Error("task.goBuild: build failed")
-
-    def gqlGen(self, env):
-        print("task: gql gen...")
-        self.onlyLocal()
-
-        # run only it's changed
-        t1 = os.path.getmtime("schema.graphql")
-        t2 = 0
-        if os.path.exists("models_gen.go"):
-            t2 = os.path.getmtime("models_gen.go")
-
-        if t1 != t2:
-            print("task: gql - graphql schema is updated... re-generate it.")
-            cmd = ["go", "run", "github.com/99designs/gqlgen"]
-            ret = subprocess.run(cmd)
-            if ret.returncode != 0:
-                raise Exception("task.gqlGen: failed to build graphql")
-
-            os.utime("models_gen.go", (t1, t1))
-        else:
-            print("task: gql - skip because of no modification.")
-
-    def dbXormReverse(self):
-        print("task: xorm reverse...")
-        self.onlyLocal()
-
-        # load from config
-        with open("./config/base.json") as f:
-            cfg = json.load(f)
-
-        with open("./config/my.json") as f:
-            cfg2 = json.load(f)
-            cfg = dictMerge(cfg, cfg2)
-
-        print("run: ", cfg)
-
-        db = cfg["db"]
-        uri = "%s:%s@tcp(%s:%d)/%s?charset=utf8" % (db["id"], db["pw"], db["host"], db["port"], db["name"])
-        cmd = ["xorm", "reverse", "mysql", uri, "/home/cjng96/go/src/github.com/go-xorm/cmd/xorm/templates/goxorm"]
-        self.run(cmd)
 
     def _helperRun(self, args, sudo=False):
         pp2 = "/tmp/godHelper.py"
