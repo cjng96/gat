@@ -310,7 +310,7 @@ class Tasks:
             dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
             cmd = str2arg(cmd)
             cmd = f'sudo docker exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
-            # alias defined in .bashrc is working but -l should be used for something in /etc/profile.d.
+            # alias defined in .bashrc is working but -l should be used for something in /etc/profile.d and .profile
             return self.dkTunnel.ssh.runOutput(cmd)
         elif self.ssh is not None:
             return self.ssh.runOutput(cmd)
