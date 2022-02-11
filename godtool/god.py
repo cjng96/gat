@@ -276,6 +276,8 @@ class Tasks:
             os.chdir(pp)
 
     def copyFile(self, srcPath, targetPath, sudo=False, mode=755, makeFolder=False):
+        srcPath = os.path.expanduser(srcPath)
+        srcPath = os.path.abspath(srcPath)
         with open(srcPath, "r") as fp:
             content = fp.read()
 
