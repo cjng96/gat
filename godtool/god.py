@@ -43,7 +43,7 @@ from .sampleFiles import sampleApp, sampleSys
 from .godHelper import strExpand
 from .coS3 import CoS3
 from .myutil import str2arg, envExpand, ObjectEncoder, pathRemove, pathIsChild  # NonBlockingStreamReader,
-from .coCollection import dictMerge, Dict2
+from .coCollection import dictMerge, Dict2, dictMerge2
 
 g_cwd = ""
 g_scriptPath = ""
@@ -1102,10 +1102,11 @@ class Config(Dict2):
 
                 if "defaultVars" in self:
                     for server in self.servers:
-                        vars2 = Dict2()
-                        vars2.fill(self.defaultVars)
-                        vars2.fill(server.vars)
-                        server.vars = vars2
+                        # vars2 = Dict2()
+                        # vars2.fill(self.defaultVars)
+                        # vars2.fill(server.vars)
+                        # server.vars = vars2
+                        server.vars = dictMerge2(self.defaultVars, server.vars)
 
                 if self.type == "app":
                     if "followLinks" not in self.deploy:
