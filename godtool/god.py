@@ -77,7 +77,9 @@ class MyUtil:
 
 class Tasks:
     def __init__(self, server, config, dkTunnel=None, dkName=None, dkId=None):
-        """ """
+        """
+        config = {name, host, port, id, pw}
+        """
         self.proc = None
         self._uploadHelper = False
 
@@ -141,14 +143,14 @@ class Tasks:
         # return self.dkTunnel.dockerConn(name, dkId)
         return self.dockerConn(name, dkId)
 
-    def remoteConn(self, host, port, id, dkName=None, dkId=None):
+    def remoteConn(self, host, port, id, pw=None, dkName=None, dkId=None):
         """
         지정해서 커넥션을 만들어낸다.
         docker지정까지 가능하다. 이거 설정을 컨피그로 할수 있게 하자
         이건 util로 가는게 나을까
         """
         # dk = Tasks(Dict2(dict(name="remote", host=host, port=port, id=id)), g_config)  # no have owner
-        dk = Tasks(Dict2(dict(name="remote", host=host, port=port, id=id)), self.config)  # no have owner
+        dk = Tasks(Dict2(dict(name="remote", host=host, port=port, id=id, pw=pw)), self.config)  # no have owner
         dk.initSsh(host, port, id)
 
         if dkName is not None:
@@ -282,6 +284,11 @@ class Tasks:
             content = fp.read()
 
         self.makeFile(content=content, path=targetPath, sudo=sudo, mode=mode, makeFolder=makeFolder)
+
+    def loadFile(self, path, sudo=False):
+        sudoCmd = "sudo" if sudo else ""
+        ss = self.runOutput(f"{sudoCmd} cat {path}")
+        return ss
 
     def makeFile(self, content, path, sudo=False, mode=755, makeFolder=False):
         # self.onlyRemote()

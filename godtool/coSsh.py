@@ -46,11 +46,11 @@ class CoSsh:
     def __init__(self):
         pass
 
-    def init(self, host, port, id):
+    def init(self, host, port, id, pw=None):
         self.ssh = paramiko.SSHClient()
         # ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.ssh.set_missing_host_key_policy(SshAllowAllKeys())
-        self.ssh.connect(host, port=port, username=id)  # , password='lol')
+        self.ssh.connect(host, port=port, username=id, password=pw)  # , password='lol')
 
         self.sftp = paramiko.SFTPClient.from_transport(self.ssh.get_transport())
 
