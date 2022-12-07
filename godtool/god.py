@@ -1198,10 +1198,13 @@ god init sys SYSTEM_NAME - Generates the file for system.
 For application(There should be god_app.py file.),
 god - Serves application.
 god test - running automatic test.
-god deploy SERVER_NAME - Deploy the application to the server.
+god deploy PROFILE_NAME - Deploy the application to the server.
+
+god setup PROFILE_NAME - Setup task.
+god run PROFILE_NAME - Run system.
 
 For system,
-god SYSTEM_NAME SERVER_NAME - Setup server defined in GOD_FILE.
+god SYSTEM_NAME PROFILE_NAME - Setup server defined in GOD_FILE.
 """
     )
     if target is not None:
@@ -1219,7 +1222,7 @@ def main():
     if cnt > 1:
         cmd = sys.argv[1]
 
-        if cmd == "--help":
+        if cmd == "help" or cmd == '--help':
             help(None)
             return
 
