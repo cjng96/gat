@@ -352,13 +352,13 @@ class Tasks:
         if self.server is None:
             return "local"
         elif self.dkTunnel is None:
-            return self.server.host
+            return f'{self.server.host}:{self.server.port}'
         else:
-            return "%s[%s]" % (self.dkName, self.server.host)
+            return f"{self.dkName}[{self.server.host}:{self.server.port}]"
 
     def run(self, cmd, expandVars=True, printLog=True):
         if printLog:
-            print("execute on %s[%s].." % (self._serverName(), cmd))
+            print(f"execute on {self._serverName()}[{cmd}]..")
 
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
