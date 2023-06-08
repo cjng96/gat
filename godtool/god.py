@@ -42,7 +42,13 @@ from .coPath import cutpath
 from .sampleFiles import sampleApp, sampleSys
 from .godHelper import strExpand
 from .coS3 import CoS3
-from .myutil import str2arg, envExpand, ObjectEncoder, pathRemove, pathIsChild  # NonBlockingStreamReader,
+from .myutil import (
+    str2arg,
+    envExpand,
+    ObjectEncoder,
+    pathRemove,
+    pathIsChild,
+)  # NonBlockingStreamReader,
 from .coCollection import dictMerge, Dict2, dictMerge2
 
 g_cwd = ""
@@ -150,7 +156,9 @@ class Tasks:
         이건 util로 가는게 나을까
         """
         # dk = Tasks(Dict2(dict(name="remote", host=host, port=port, id=id)), g_config)  # no have owner
-        dk = Tasks(Dict2(dict(name="remote", host=host, port=port, id=id, pw=pw)), self.config)  # no have owner
+        dk = Tasks(
+            Dict2(dict(name="remote", host=host, port=port, id=id, pw=pw)), self.config
+        )  # no have owner
         dk.initSsh(host, port, id)
 
         if dkName is not None:
@@ -283,7 +291,13 @@ class Tasks:
         with open(srcPath, "r") as fp:
             content = fp.read()
 
-        self.makeFile(content=content, path=targetPath, sudo=sudo, mode=mode, makeFolder=makeFolder)
+        self.makeFile(
+            content=content,
+            path=targetPath,
+            sudo=sudo,
+            mode=mode,
+            makeFolder=makeFolder,
+        )
 
     def loadFile(self, path, sudo=False):
         sudoCmd = "sudo" if sudo else ""
@@ -301,7 +315,9 @@ class Tasks:
 
         content = str2arg(content)
 
-        self.run(f'echo "{content}" | {sudoCmd} tee {path} > /dev/null && {sudoCmd} chmod {mode} {path}')
+        self.run(
+            f'echo "{content}" | {sudoCmd} tee {path} > /dev/null && {sudoCmd} chmod {mode} {path}'
+        )
 
     def runOutput(self, cmd, expandVars=True):
         """
@@ -324,7 +340,9 @@ class Tasks:
         elif self.ssh is not None:
             return self.ssh.runOutput(cmd)
         else:
-            return subprocess.check_output(cmd, shell=True, executable="/bin/bash").decode()
+            return subprocess.check_output(
+                cmd, shell=True, executable="/bin/bash"
+            ).decode()
 
     def runOutputAll(self, cmd, expandVars=True):
         """
@@ -346,13 +364,15 @@ class Tasks:
         elif self.ssh is not None:
             return self.ssh.runOutputAll(cmd)
         else:
-            return subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, executable="/bin/bash")
+            return subprocess.check_output(
+                cmd, shell=True, stderr=subprocess.STDOUT, executable="/bin/bash"
+            )
 
     def _serverName(self):
         if self.server is None:
             return "local"
         elif self.dkTunnel is None:
-            return f'{self.server.host}:{self.server.port}'
+            return f"{self.server.host}:{self.server.port}"
         else:
             return f"{self.dkName}[{self.server.host}:{self.server.port}]"
 
@@ -367,7 +387,11 @@ class Tasks:
             # it하면 오류 난다
             dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
             cmd = str2arg(cmd)
-            cmd = 'sudo docker exec -i %s %s bash -c "%s"' % (dkRunUser, self.dkName, cmd)
+            cmd = 'sudo docker exec -i %s %s bash -c "%s"' % (
+                dkRunUser,
+                self.dkName,
+                cmd,
+            )
             # print('run cmd(dk) - %s' % cmd)
             return self.dkTunnel.ssh.run(cmd)
         elif self.ssh is not None:
@@ -420,7 +444,9 @@ class Tasks:
         dest = os.path.expanduser(dest)
         if self.dkTunnel is not None:
             self.dkTunnel.ssh.uploadFile(src, "/tmp/upload.tmp")
-            self.dkTunnel.ssh.run("sudo docker cp /tmp/upload.tmp %s:%s" % (self.dkName, dest))
+            self.dkTunnel.ssh.run(
+                "sudo docker cp /tmp/upload.tmp %s:%s" % (self.dkName, dest)
+            )
         else:
             self.ssh.uploadFile(src, dest)
 
@@ -440,15 +466,19 @@ class Tasks:
             src = src.rstrip("/") + "/"
             for pp, dirs, files in os.walk(src):
                 for dir in dirs:
-                    self.dkTunnel.ssh.run("mkdir " + os.path.join("/tmp/god_upload", pp, dir))
+                    self.dkTunnel.ssh.run(
+                        "mkdir " + os.path.join("/tmp/god_upload", pp, dir)
+                    )
                 for file in files:
                     self.dkTunnel.ssh.uploadFile(
-                        os.path.join(src, pp, file), os.path.join("/tmp/god_upload", pp[len(src) :], file)
+                        os.path.join(src, pp, file),
+                        os.path.join("/tmp/god_upload", pp[len(src) :], file),
                     )
 
             self.run("rm -rf %s" % dest)
             self.dkTunnel.ssh.run(
-                "sudo docker cp /tmp/god_upload %s:%s && rm -rf /tmp/god_upload" % (self.dkName, dest)
+                "sudo docker cp /tmp/god_upload %s:%s && rm -rf /tmp/god_upload"
+                % (self.dkName, dest)
             )
         else:
             self.ssh.uploadFolder(src, dest)
@@ -465,8 +495,13 @@ class Tasks:
         else:
             if not self._uploadHelper:
                 if self.dkTunnel is not None:
-                    self.dkTunnel.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
-                    self.dkTunnel.ssh.run("sudo docker cp /tmp/godHelper.py %s:/tmp/godHelper.py" % self.dkName)
+                    self.dkTunnel.uploadFile(
+                        os.path.join(g_scriptPath, "godHelper.py"), pp2
+                    )
+                    self.dkTunnel.ssh.run(
+                        "sudo docker cp /tmp/godHelper.py %s:/tmp/godHelper.py"
+                        % self.dkName
+                    )
                 else:
                     self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
 
@@ -476,7 +511,11 @@ class Tasks:
         ss = json.dumps(args, cls=ObjectEncoder)
         ss2 = zlib.compress(ss.encode())  # 1/3이나 절반 - 사이즈가 문제가 아니라 escape때문에
         ss = base64.b64encode(ss2).decode()
-        self.run('%spython3 %s runBin "%s"' % ("sudo " if sudo else "", pp2, ss), expandVars=False, printLog=False)
+        self.run(
+            '%spython3 %s runBin "%s"' % ("sudo " if sudo else "", pp2, ss),
+            expandVars=False,
+            printLog=False,
+        )
 
     """ use myutil.makeUser
   def userNew(self, name, existOk=False, sshKey=False):
@@ -497,6 +536,9 @@ class Tasks:
             return fp.read()
 
     def strEnsure(self, path, str, sudo=False):
+        """
+        str이 없으면 추가한다
+        """
         print("task[%s]: strEnsure[%s] for %s..." % (self._serverName(), str, path))
         self.onlyRemote()
 
@@ -505,20 +547,39 @@ class Tasks:
 
     def configBlock(self, path, marker, block, insertAfter=None, sudo=False):
         """
+        block이 보존한다(필요시 수정도)
         marker: ### {mark} TEST
         block: vv=1
         """
         print(f"task: config block[{marker}] for {path}...\n[{block}]\n")
         # self.onlyRemote()
 
-        args = dict(cmd="configBlock", dic=g_dic, path=path, marker=marker, block=block, insertAfter=insertAfter)
+        args = dict(
+            cmd="configBlock",
+            dic=g_dic,
+            path=path,
+            marker=marker,
+            block=block,
+            insertAfter=insertAfter,
+        )
         self._helperRun(args, sudo)
 
     def configLine(self, path, regexp, line, items=None, sudo=False, append=False):
+        """
+        regexp에 부합되는 라인이 있을 경우 변경한다
+        """
         print("task: config line[%s] for %s..." % (line, path))
         # self.onlyRemote()
 
-        args = dict(cmd="configLine", dic=g_dic, path=path, regexp=regexp, line=line, items=items, append=append)
+        args = dict(
+            cmd="configLine",
+            dic=g_dic,
+            path=path,
+            regexp=regexp,
+            line=line,
+            items=items,
+            append=append,
+        )
         self._helperRun(args, sudo)
 
     def s3List(self, env, bucket, prefix):
@@ -558,8 +619,16 @@ class Tasks:
 
 # https://pythonhosted.org/watchdog/
 class MyHandler(PatternMatchingEventHandler):
-    def __init__(self, patterns=None, ignore_patterns=None, ignore_directories=False, case_sensitive=False):
-        super(MyHandler, self).__init__(patterns, ignore_patterns, ignore_directories, case_sensitive)
+    def __init__(
+        self,
+        patterns=None,
+        ignore_patterns=None,
+        ignore_directories=False,
+        case_sensitive=False,
+    ):
+        super(MyHandler, self).__init__(
+            patterns, ignore_patterns, ignore_directories, case_sensitive
+        )
         print("watching pattern - ", patterns)
 
     def process(self, event):
@@ -622,7 +691,6 @@ def _pathExpand(pp2):
 
 
 class Main:
-
     # runTask와 doServerStep등은 Task말고 별도로 빼자 remote.runTask를 호출할일은 없으니까
     def runTask(self, mygod):
         # self.onlyLocal()
@@ -630,7 +698,9 @@ class Main:
         if hasattr(mygod, "getRunCmd"):
             cmd = mygod.getRunCmd(util=g_util, local=g_local, remote=g_remote)
             if type(cmd) != list:
-                raise Exception("the return value of runTask function should be list type.")
+                raise Exception(
+                    "the return value of runTask function should be list type."
+                )
         else:
             if not hasattr(g_config, "cmd"):
                 g_config.cmd = "./" + g_config.name
@@ -674,7 +744,9 @@ class Main:
                 while True:
                     try:
                         ret = p.wait(0.1)
-                        raise ExcProgramExit("run: the application has been terminated[ret:%d]" % ret)
+                        raise ExcProgramExit(
+                            "run: the application has been terminated[ret:%d]" % ret
+                        )
 
                     except subprocess.TimeoutExpired:
                         pass
@@ -695,7 +767,9 @@ class Main:
             while True:
                 try:
                     ret = p.wait(0.1)
-                    raise ExcProgramExit("run: the application has been terminated[ret:%d]" % ret)
+                    raise ExcProgramExit(
+                        "run: the application has been terminated[ret:%d]" % ret
+                    )
 
                 except subprocess.TimeoutExpired:
                     pass
@@ -786,7 +860,9 @@ class Main:
         observer = None
         if len(g_config.test.patterns) > 0:
             observer = Observer()
-            observer.schedule(MyHandler(g_config.test.patterns), path=".", recursive=True)
+            observer.schedule(
+                MyHandler(g_config.test.patterns), path=".", recursive=True
+            )
             observer.start()
 
         try:
@@ -806,7 +882,9 @@ class Main:
         observer = None
         if len(g_config.serve.patterns) > 0:
             observer = Observer()
-            observer.schedule(MyHandler(g_config.serve.patterns), path=".", recursive=True)
+            observer.schedule(
+                MyHandler(g_config.serve.patterns), path=".", recursive=True
+            )
             observer.start()
 
         try:
@@ -888,7 +966,10 @@ class Main:
                             continue
 
                         # _zipAdd(os.path.join(folder, ff), os.path.join(dest, cutpath(src, folder), ff))
-                        func(os.path.join(folder, ff), os.path.join(dest, cutpath(src, folder), ff))
+                        func(
+                            os.path.join(folder, ff),
+                            os.path.join(dest, cutpath(src, folder), ff),
+                        )
 
     # def taskDeploy(self, env, server, mygod, config):
     def taskDeploy(self, server, mygod, config):
@@ -922,11 +1003,15 @@ class Main:
             mygod.deployPreTask(util=g_util, remote=env, local=g_local)
 
         # prepare target folder
-        env.runOutput(f"{sudoCmd} mkdir -p {deployRoot}/shared && {sudoCmd} mkdir -p {deployRoot}/releases")
+        env.runOutput(
+            f"{sudoCmd} mkdir -p {deployRoot}/shared && {sudoCmd} mkdir -p {deployRoot}/releases"
+        )
         # ('&& sudo chown %s: %s %s/shared %s/releases' % (server.owner, deployRoot, deployRoot, deployRoot) if server.owner else '') +
 
         res = env.runOutput(f"cd {deployRoot}/releases && ls -d *;echo")
-        releases = list(filter(lambda x: re.match("\d{6}_\d{6}", x) is not None, res.split()))
+        releases = list(
+            filter(lambda x: re.match("\d{6}_\d{6}", x) is not None, res.split())
+        )
         releases.sort()
 
         max = config.deploy.maxRelease - 1
@@ -943,7 +1028,11 @@ class Main:
         res = env.runOutput(
             f"cd {deployRoot}/releases"
             + f"&& {sudoCmd} mkdir {todayName}"
-            + (f"&& sudo chown {server.owner}: {todayName}" if "owner" in server else "")
+            + (
+                f"&& sudo chown {server.owner}: {todayName}"
+                if "owner" in server
+                else ""
+            )
         )
 
         # upload files
@@ -978,9 +1067,13 @@ class Main:
                         dest = src
                     _zipAdd(src, dest)
 
-                self.targetFileListProd(include, exclude, fileProc, followLinks=config.deploy.followLinks)
+                self.targetFileListProd(
+                    include, exclude, fileProc, followLinks=config.deploy.followLinks
+                )
 
-            env.uploadFile(zipPath, "/tmp/godUploadPkg.zip")  # we don't include it by default
+            env.uploadFile(
+                zipPath, "/tmp/godUploadPkg.zip"
+            )  # we don't include it by default
             env.run(
                 f"cd {deployRoot}/releases/{todayName} "
                 + f"&& {sudoCmd} unzip /tmp/godUploadPkg.zip && {sudoCmd} rm /tmp/godUploadPkg.zip"
@@ -1028,7 +1121,10 @@ class Main:
                 env.run(f"cd {deployRoot} && {sudoCmd} mkdir -p shared/{pp} ")
                 pp = pp[:-1]
 
-            env.run("%s ln -rsf %s/shared/%s %s/releases/%s/%s" % (sudoCmd, deployRoot, pp, deployRoot, todayName, pp))
+            env.run(
+                "%s ln -rsf %s/shared/%s %s/releases/%s/%s"
+                % (sudoCmd, deployRoot, pp, deployRoot, todayName, pp)
+            )
 
             # ssh user용으로 변경해놔야 post process에서 쉽게 접근 가능
             if "owner" in server:
@@ -1037,7 +1133,9 @@ class Main:
                 )
 
         # update current - post전에 갱신되어 있어야 current에 있는거 실행한다
-        env.run(f"cd {deployRoot} && {sudoCmd} rm -f current && {sudoCmd} ln -sf releases/{todayName} current")
+        env.run(
+            f"cd {deployRoot} && {sudoCmd} rm -f current && {sudoCmd} ln -sf releases/{todayName} current"
+        )
         # if "owner" in server:
         #  env.run("cd %s && %s chown %s: current" % (deployRoot, sudoCmd, server.owner))
 
@@ -1047,7 +1145,9 @@ class Main:
 
         # file owner - 이걸 post후에 해야 ssh user가 파일 접근이 가능하다
         if "owner" in server:
-            env.run(f"cd {deployRoot} && sudo chown {server.owner}: shared releases/{todayName} -R")
+            env.run(
+                f"cd {deployRoot} && sudo chown {server.owner}: shared releases/{todayName} -R"
+            )
             env.run(f"cd {deployRoot} && sudo chmod 775 shared releases/{todayName} -R")
 
         # TODO: postTask에서 오류 발생시 다시 돌려놔야
@@ -1061,7 +1161,8 @@ def initSamples(type, fn):
             fp.write(sampleSys)
 
     print(
-        "init: %s file generated. You should modify that file for your environment before service or deployment." % (fn)
+        "init: %s file generated. You should modify that file for your environment before service or deployment."
+        % (fn)
     )
 
 
@@ -1222,7 +1323,7 @@ def main():
     if cnt > 1:
         cmd = sys.argv[1]
 
-        if cmd == "help" or cmd == '--help':
+        if cmd == "help" or cmd == "--help":
             help(None)
             return
 
@@ -1364,7 +1465,9 @@ def main():
                 ss = ""
                 for it in g_config.servers:
                     ss += it["name"] + "|"
-                print(f"\nPlease specify the sever name is no server definition.[{ss[:-1]}]")
+                print(
+                    f"\nPlease specify the sever name is no server definition.[{ss[:-1]}]"
+                )
                 return
 
         else:
