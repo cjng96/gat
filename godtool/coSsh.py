@@ -20,9 +20,15 @@ class MyCalledProcessError(subprocess.CalledProcessError):
     def __str__(self):
         if self.returncode and self.returncode < 0:
             try:
-                return "Command '%s' died with %r." % (self.cmd, signal.Signals(-self.returncode))
+                return "Command '%s' died with %r." % (
+                    self.cmd,
+                    signal.Signals(-self.returncode),
+                )
             except ValueError:
-                return "Command '%s' died with unknown signal %d." % (self.cmd, -self.returncode)
+                return "Command '%s' died with unknown signal %d." % (
+                    self.cmd,
+                    -self.returncode,
+                )
         else:
             return "Command '%s' returned non-zero exit status %d.%s" % (
                 self.cmd,
@@ -40,17 +46,21 @@ def falseFunc(pp):
 
 # TODO: use invoke_shell
 
+
 # https://gist.github.com/kdheepak/c18f030494fea16ffd92d95c93a6d40d
 # https://stackoverflow.com/questions/760978/long-running-ssh-commands-in-python-paramiko-module-and-how-to-end-them
 class CoSsh:
     def __init__(self):
         pass
 
-    def init(self, host, port, id, pw=None):
+    def init(self, host, port, id, pw=None, keyFile=None):
         self.ssh = paramiko.SSHClient()
         # ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.ssh.set_missing_host_key_policy(SshAllowAllKeys())
-        self.ssh.connect(host, port=port, username=id, password=pw)  # , password='lol')
+        self.ssh.connect(
+            host, port=port, username=id, password=pw, key_filename=keyFile
+        )
+        # , password='lol')
 
         self.sftp = paramiko.SFTPClient.from_transport(self.ssh.get_transport())
 

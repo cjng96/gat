@@ -100,7 +100,9 @@ class Tasks:
         if server is not None:
             if dkTunnel is None:
                 port = server.get("port", 22)
-                self.initSsh(server.host, port, server.id)
+                self.initSsh(
+                    server.host, port, server.id, keyFile=server.get("keyFile")
+                )
 
             if "vars" not in server:
                 server.vars = {}
@@ -115,10 +117,13 @@ class Tasks:
             dkId = strExpand(dkId, g_dic)
         self.dkId = dkId
 
-    def initSsh(self, host, port, id):
+    def initSsh(self, host, port, id, keyFile=None):
         self.ssh = CoSsh()
-        print("ssh: connecting to the server[%s:%d] with ID:%s" % (host, port, id))
-        self.ssh.init(host, port, id)
+        print(f"ssh: connecting to the server[{id}@{host}:{port}] with key:{keyFile}")
+        if keyFile is not None:
+            with open(keyFile) as fp:
+                print("key - " + fp.read())
+        self.ssh.init(host, port, id, keyFile=keyFile)
 
     def __del__(self):
         if self.ssh is not None:
@@ -149,17 +154,22 @@ class Tasks:
         # return self.dkTunnel.dockerConn(name, dkId)
         return self.dockerConn(name, dkId)
 
-    def remoteConn(self, host, port, id, pw=None, dkName=None, dkId=None):
+    def remoteConn(self, host, port, id, pw=None, dkName=None, dkId=None, keyFile=None):
         """
         지정해서 커넥션을 만들어낸다.
         docker지정까지 가능하다. 이거 설정을 컨피그로 할수 있게 하자
         이건 util로 가는게 나을까
         """
         # dk = Tasks(Dict2(dict(name="remote", host=host, port=port, id=id)), g_config)  # no have owner
-        dk = Tasks(
-            Dict2(dict(name="remote", host=host, port=port, id=id, pw=pw)), self.config
-        )  # no have owner
-        dk.initSsh(host, port, id)
+        serverCfg = Dict2(
+            dict(name="remote", host=host, port=port, id=id, pw=pw, keyFile=keyFile)
+        )
+
+        dk = Tasks(serverCfg, self.config)
+        # no have owner
+
+        # Tasks 생성자에서 접속하는듯...
+        # dk.initSsh(host, port, id, keyFile=keyFile)
 
         if dkName is not None:
             dk = dk.dockerConn(dkName, dkId)
