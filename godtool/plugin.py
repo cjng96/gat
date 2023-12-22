@@ -983,6 +983,7 @@ def makeRsshUser(env, id, rootPath, authPubs):
 
 
 def registerAuthPubs(env, authPubs, id=None):
+    print(f">> [{env.name}] registerAuthPubs - id:{id} pubs:{authPubs}")
     if id is None:
         home = "~"
     else:
@@ -991,6 +992,7 @@ def registerAuthPubs(env, authPubs, id=None):
             raise Exception(f"registerAuthPubs: failed to get home folder for {id}")
 
     for key in authPubs:
+        print(f"home - {home}")
         env.strEnsure(f"{home}/.ssh/authorized_keys", key, sudo=True)
 
 
@@ -1001,6 +1003,10 @@ def registerAuthPub(env, pub, id=None):
 def makeUser(
     env, id, home=None, shell=None, genSshKey=True, grantSudo=False, authPubs=None
 ):
+    print(
+        f">> [{env.name}] makeUser - id:{id} home:{home} shell:{shell} genKey:{genSshKey} grantSudo:{grantSudo} authPubs:{authPubs}"
+    )
+
     # if env.runSafe('cat /etc/passwd | grep -e "^%s:"' % id):
     if env.runSafe(f'grep -c "^{id}:" /etc/passwd'):
         # 이 경우도 등록은 갱신한다.
@@ -1608,6 +1614,7 @@ CMD ["/start"]
 
 
 def writeRunScript(env, cmd):
+    print(f">> [{env.name}] writeRunScript: {cmd}")
     env.makeFile(
         f"""\
 #!/bin/sh
@@ -1622,6 +1629,8 @@ def writeRunScript(env, cmd):
 
 
 def writeSvHelper(env):
+    print(f">> [{env.name}] writeSvHelper")
+
     help = "shortcuts - c(app),s(status),r(run),d(stop),re(restart),e(exit)"
     env.configBlock(
         path="~/.bashrc",

@@ -84,6 +84,7 @@ class MyUtil:
 class Tasks:
     def __init__(self, server, config, dkTunnel=None, dkName=None, dkId=None):
         """
+        server: can be none
         config = {name, host, port, id, pw}
         """
         self.proc = None
@@ -96,6 +97,9 @@ class Tasks:
         # accessbility
         self.data = g_data
         self.util = g_util
+
+        # for log
+        self.name = "local" if server is None else server.host
 
         if server is not None:
             if dkTunnel is None:
@@ -397,11 +401,7 @@ class Tasks:
             # it하면 오류 난다
             dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
             cmd = str2arg(cmd)
-            cmd = 'sudo docker exec -i %s %s bash -c "%s"' % (
-                dkRunUser,
-                self.dkName,
-                cmd,
-            )
+            cmd = f'sudo docker exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
             # print('run cmd(dk) - %s' % cmd)
             return self.dkTunnel.ssh.run(cmd)
         elif self.ssh is not None:
@@ -452,11 +452,10 @@ class Tasks:
         self.onlyRemote()
         src = os.path.expanduser(src)
         dest = os.path.expanduser(dest)
+        pp = f"/tmp/upload-{g_main.uid}.tmp"
         if self.dkTunnel is not None:
-            self.dkTunnel.ssh.uploadFile(src, "/tmp/upload.tmp")
-            self.dkTunnel.ssh.run(
-                "sudo docker cp /tmp/upload.tmp %s:%s" % (self.dkName, dest)
-            )
+            self.dkTunnel.ssh.uploadFile(src, pp)
+            self.dkTunnel.ssh.run(f"sudo docker cp {pp} {self.dkName}:{dest}")
         else:
             self.ssh.uploadFile(src, dest)
 
@@ -498,22 +497,18 @@ class Tasks:
         self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
 
     def _helperRun(self, args, sudo=False):
-        pp2 = "/tmp/godHelper.py"
+        pp2 = f"/tmp/godHelper-{g_main.uid}.py"
+        src = os.path.join(g_scriptPath, "godHelper.py")
 
         if self.dkTunnel is None and self.ssh is None:
-            shutil.copyfile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
+            shutil.copyfile(src, pp2)
         else:
             if not self._uploadHelper:
                 if self.dkTunnel is not None:
-                    self.dkTunnel.uploadFile(
-                        os.path.join(g_scriptPath, "godHelper.py"), pp2
-                    )
-                    self.dkTunnel.ssh.run(
-                        "sudo docker cp /tmp/godHelper.py %s:/tmp/godHelper.py"
-                        % self.dkName
-                    )
+                    self.dkTunnel.uploadFile(src, pp2)
+                    self.dkTunnel.ssh.run(f"sudo docker cp {pp2} {self.dkName}:{pp2}")
                 else:
-                    self.uploadFile(os.path.join(g_scriptPath, "godHelper.py"), pp2)
+                    self.uploadFile(src, pp2)
 
                 self._uploadHelper = True
 
@@ -700,7 +695,13 @@ def _pathExpand(pp2):
     return pp2
 
 
+import socket
+
+
 class Main:
+    def __init__(self):
+        self.uid = socket.gethostname() + "-" + str(os.getpid())
+
     # runTask와 doServerStep등은 Task말고 별도로 빼자 remote.runTask를 호출할일은 없으니까
     def runTask(self, mygod):
         # self.onlyLocal()
