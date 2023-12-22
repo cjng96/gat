@@ -1452,7 +1452,8 @@ def main():
     #         ss = fp.read()
     #         g_data = Dict2(yaml.safe_load(ss))
     #         print("data - ", g_data)
-    if g_mygod.data is not None:
+    # if g_mygod.data is not None:
+    if hasattr(g_mygod, "data"):
         g_data = g_mygod.data
 
     global g_local

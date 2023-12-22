@@ -6,7 +6,9 @@ import yaml
 import hashlib
 import datetime
 import subprocess
-import godtool.coSsh as coSsh
+
+# import godtool.coSsh as coSsh
+# from .coS3 import CoS3
 
 
 def loadFile(pp):
