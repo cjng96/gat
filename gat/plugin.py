@@ -7,7 +7,7 @@ import hashlib
 import datetime
 import subprocess
 
-# import godtool.coSsh as coSsh
+# import gattool.coSsh as coSsh
 # from .coS3 import CoS3
 
 
@@ -1376,7 +1376,7 @@ def dockerBaseImage(env):
         """\
 # FROM phusion/baseimage:focal-1.0.0
 FROM phusion/baseimage:jammy-1.0.1
-LABEL title="godtool"
+LABEL title="gattool"
 CMD ["/sbin/my_init"]
 RUN mkdir -p /data && mkdir -p /work
 RUN apt update && \\
@@ -1420,7 +1420,7 @@ def dockerImageForSupervisor(env, name, version, userId, func):
         """\
 FROM ubuntu:20.04
 #LABEL maintainer="cjng96@gmail.com"
-LABEL title="godtool"
+LABEL title="gattool"
 RUN echo "#!/bin/bash\\\\nexec /bin/bash" > /start && chmod 755 /start
 RUN mkdir -p /data && mkdir -p /work/log && ln -sf /work/log /var/log
 CMD ["/start"]

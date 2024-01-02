@@ -38,9 +38,9 @@ servers:
     gitBranch: <your remote repo branch>
 '''
 
-class myGod:
+class myGat:
 	def __init__(self, helper, **_):
-		helper.configStr("yaml", config)	# helper.configFile("yaml", "god.yaml")
+		helper.configStr("yaml", config)	# helper.configFile("yaml", "gat.yaml")
 
 	def buildTask(self, util, local, **_):
 		#local.gqlGen()
@@ -82,9 +82,9 @@ servers:
 	  hello: test
 '''
 
-class myGod:
+class myGat:
 	def __init__(self, helper, **_):
-		helper.configStr("yaml", config)	# helper.configFile("yaml", "god.yaml")
+		helper.configStr("yaml", config)	# helper.configFile("yaml", "gat.yaml")
 
 	def setupTask(self, util, local, remote, **_):
 		#remote.pm2Register():

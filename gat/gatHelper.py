@@ -252,7 +252,7 @@ def strExpand(ss, dic):
 
 def main():
     if len(sys.argv) <= 2:
-        raise Exception("godHelper.py runFile configPath")
+        raise Exception("gatHelper.py runFile configPath")
     cmd = sys.argv[1]
     pp = sys.argv[2]
 
@@ -275,7 +275,7 @@ def main():
     del cfg["dic"]
 
     func = cfg["cmd"]
-    # print('godHelper - %s - %s' % (func, g_dic))
+    # print('gatHelper - %s - %s' % (func, g_dic))
     del cfg["cmd"]
     if func == "configBlock":
         configBlock(**cfg)

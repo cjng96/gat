@@ -41,7 +41,7 @@ from . import __version__
 from .coSsh import CoSsh
 from .coPath import cutpath
 from .sampleFiles import sampleApp, sampleSys
-from .godHelper import strExpand
+from .gatHelper import strExpand
 from .coS3 import CoS3
 from .myutil import (
     cloneRepo,
@@ -217,7 +217,7 @@ class Tasks:
         mymod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mymod)
 
-        mygod = mymod.myGod(helper=helper)
+        mygat = mymod.myGat(helper=helper)
 
         server = config.configServerGet(profile)
         if server is None:
@@ -242,9 +242,9 @@ class Tasks:
         pp = os.path.abspath(os.curdir)
         os.chdir(dir)
         try:
-            # g_main.taskDeploy(remote, server, mygod, config)
-            # g_main.taskSetup(remote, server, mygod, config)
-            g_main.taskSetup(server, subCmd, mygod, config)
+            # g_main.taskDeploy(remote, server, mygat, config)
+            # g_main.taskSetup(remote, server, mygat, config)
+            g_main.taskSetup(server, subCmd, mygat, config)
         finally:
             os.chdir(pp)
 
@@ -271,7 +271,7 @@ class Tasks:
         mymod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mymod)
 
-        mygod = mymod.myGod(helper=helper)
+        mygat = mymod.myGat(helper=helper)
 
         server = config.configServerGet(profile)
         if server is None:
@@ -296,8 +296,8 @@ class Tasks:
         pp = os.path.abspath(os.curdir)
         os.chdir(dir)
         try:
-            # g_main.taskDeploy(remote, server, mygod, config)
-            g_main.taskDeploy(server, mygod, config)
+            # g_main.taskDeploy(remote, server, mygat, config)
+            g_main.taskDeploy(server, mygat, config)
         finally:
             os.chdir(pp)
 
@@ -471,24 +471,24 @@ class Tasks:
     def uploadFolder(self, src, dest):
         self.onlyRemote()
         if self.dkTunnel is not None:
-            self.dkTunnel.ssh.run("rm -rf /tmp/god_upload && mkdir /tmp/god_upload")
+            self.dkTunnel.ssh.run("rm -rf /tmp/gat_upload && mkdir /tmp/gat_upload")
             # allDir = []
             # allFile = []
             src = src.rstrip("/") + "/"
             for pp, dirs, files in os.walk(src):
                 for dir in dirs:
                     self.dkTunnel.ssh.run(
-                        "mkdir " + os.path.join("/tmp/god_upload", pp, dir)
+                        "mkdir " + os.path.join("/tmp/gat_upload", pp, dir)
                     )
                 for file in files:
                     self.dkTunnel.ssh.uploadFile(
                         os.path.join(src, pp, file),
-                        os.path.join("/tmp/god_upload", pp[len(src) :], file),
+                        os.path.join("/tmp/gat_upload", pp[len(src) :], file),
                     )
 
             self.run("rm -rf %s" % dest)
             self.dkTunnel.ssh.run(
-                "sudo docker cp /tmp/god_upload %s:%s && rm -rf /tmp/god_upload"
+                "sudo docker cp /tmp/gat_upload %s:%s && rm -rf /tmp/gat_upload"
                 % (self.dkName, dest)
             )
         else:
@@ -499,8 +499,8 @@ class Tasks:
         self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
 
     def _helperRun(self, args, sudo=False):
-        pp2 = f"/tmp/godHelper-{g_main.uid}.py"
-        src = os.path.join(g_scriptPath, "godHelper.py")
+        pp2 = f"/tmp/gatHelper-{g_main.uid}.py"
+        src = os.path.join(g_scriptPath, "gatHelper.py")
 
         if self.dkTunnel is None and self.ssh is None:
             shutil.copyfile(src, pp2)
@@ -705,11 +705,11 @@ class Main:
         self.uid = socket.gethostname() + "-" + str(os.getpid())
 
     # runTask와 doServerStep등은 Task말고 별도로 빼자 remote.runTask를 호출할일은 없으니까
-    def runTask(self, mygod):
+    def runTask(self, mygat):
         # self.onlyLocal()
 
-        if hasattr(mygod, "getRunCmd"):
-            cmd = mygod.getRunCmd(util=g_util, local=g_local, remote=g_remote)
+        if hasattr(mygat, "getRunCmd"):
+            cmd = mygat.getRunCmd(util=g_util, local=g_local, remote=g_remote)
             if type(cmd) != list:
                 raise Exception(
                     "the return value of runTask function should be list type."
@@ -730,14 +730,14 @@ class Main:
 
         return cmd
 
-    def doServeStep(self, mygod):
-        # if hasattr(g_mygod, "doServeStep"):
-        # 	return g_mygod.doServeStep()
+    def doServeStep(self, mygat):
+        # if hasattr(g_mygat, "doServeStep"):
+        # 	return g_mygat.doServeStep()
         print("\n\n\n")
 
         buildExc = None
         try:
-            self.buildTask(mygod)
+            self.buildTask(mygat)
         except Error as e:
             buildExc = e.args
         except Exception:
@@ -751,7 +751,7 @@ class Main:
 
                 time.sleep(0.1)
         else:
-            cmd = self.runTask(mygod)
+            cmd = self.runTask(mygat)
 
             with subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr) as p:
                 while True:
@@ -769,7 +769,7 @@ class Main:
                         p.terminate()
                         break
 
-    def doTestStep(self, mygod):
+    def doTestStep(self, mygat):
         print("\n\n\n")
 
         cmd = g_config.test.cmd
@@ -798,15 +798,15 @@ class Main:
                     p.terminate()
                     break
 
-    def buildTask(self, mygod):
+    def buildTask(self, mygat):
         print("run: building the app")
-        if hasattr(mygod, "buildTask"):
-            return mygod.buildTask(util=g_util, local=g_local, remote=g_remote)
+        if hasattr(mygat, "buildTask"):
+            return mygat.buildTask(util=g_util, local=g_local, remote=g_remote)
         else:
             print("You should override buildTask method.")
 
     # def taskSetup(self, target, serverName, subCmd):
-    def taskSetup(self, server, subCmd, mygod, config):
+    def taskSetup(self, server, subCmd, mygat, config):
         # if not os.path.exists(target):
         #     print("There is no target file[%s]" % target)
         #     return
@@ -814,7 +814,6 @@ class Main:
         # server = g_config.configServerGet(serverName)
         # if server is None:
         #     return
-
 
         # deprecated
         # server["runImage"] = runImageFlag
@@ -856,8 +855,8 @@ class Main:
         # expand env and variables
         expandVar(config)
 
-        if not hasattr(mygod, "setupTask"):
-            print("setup: You should override setupTask function in your myGod class")
+        if not hasattr(mygat, "setupTask"):
+            print("setup: You should override setupTask function in your myGat class")
             return
 
         # 1. 원격 repo에서 특정 브렌치의 최신 커밋 받기
@@ -874,7 +873,7 @@ class Main:
         # 내부적으로 g_config에 액서스할때가 있어서 일단은..
         # config접근을 env를 통해서 하게 할까...
         # g_config = config
-        mygod.setupTask(util=g_util, remote=env, local=g_local)
+        mygat.setupTask(util=g_util, remote=env, local=g_local)
         # finally:
         # g_config = oldConfig
 
@@ -891,7 +890,7 @@ class Main:
             while True:
                 time.sleep(0.01)
                 g_util.isRestart = False
-                self.doTestStep(g_mygod)
+                self.doTestStep(g_mygat)
 
         except KeyboardInterrupt:
             if observer is not None:
@@ -913,7 +912,7 @@ class Main:
             while True:
                 time.sleep(0.01)
                 g_util.isRestart = False
-                self.doServeStep(g_mygod)
+                self.doServeStep(g_mygat)
 
         except KeyboardInterrupt:
             if observer is not None:
@@ -923,7 +922,9 @@ class Main:
             observer.join()
 
     # localSrcPath 를 뒤에 둔 이유는 기본 값이 필요해서 + 이 함수를 사용하는 다른 곳에서 인자 위치로 인한 에러
-    def targetFileListProd(self, include, exclude, func, localSrcPath="", followLinks=True):
+    def targetFileListProd(
+        self, include, exclude, func, localSrcPath="", followLinks=True
+    ):
         for pp in include:
             if type(pp) == str:
                 if pp == "*":
@@ -994,13 +995,13 @@ class Main:
                             os.path.join(dest, cutpath(src, folder), ff),
                         )
 
-    # def taskDeploy(self, env, server, mygod, config):
-    def taskDeploy(self, server, mygod, config):
+    # def taskDeploy(self, env, server, mygat, config):
+    def taskDeploy(self, server, mygat, config):
         env = Tasks(server, config)
         if "dkName" in server.dic:
             env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
 
-        self.buildTask(mygod)
+        self.buildTask(mygat)
 
         dicInit(server)
         # expand env and variables
@@ -1022,8 +1023,8 @@ class Main:
         g_dic.dic["deployPath"] = deployPath
 
         env.server.deployPath = deployPath
-        if hasattr(mygod, "deployPreTask"):
-            mygod.deployPreTask(util=g_util, remote=env, local=g_local)
+        if hasattr(mygat, "deployPreTask"):
+            mygat.deployPreTask(util=g_util, remote=env, local=g_local)
 
         # prepare target folder
         env.runOutput(
@@ -1089,21 +1090,22 @@ class Main:
                         dest = src
                     _zipAdd(src, dest)
 
-
                 self.targetFileListProd(
-                    include, exclude, fileProc, localSrcPath=localSrcPath, followLinks=config.deploy.followLinks,
+                    include,
+                    exclude,
+                    fileProc,
+                    localSrcPath=localSrcPath,
+                    followLinks=config.deploy.followLinks,
                 )
 
-
             env.uploadFile(
-                zipPath, "/tmp/godUploadPkg.zip"
+                zipPath, "/tmp/gatUploadPkg.zip"
             )  # we don't include it by default
             env.run(
                 f"cd {deployRoot}/releases/{todayName} "
-                + f"&& {sudoCmd} unzip /tmp/godUploadPkg.zip && {sudoCmd} rm /tmp/godUploadPkg.zip"
+                + f"&& {sudoCmd} unzip /tmp/gatUploadPkg.zip && {sudoCmd} rm /tmp/gatUploadPkg.zip"
             )
             os.remove(zipPath)
-            
 
         strategy = g_config.deploy.strategy
         if strategy == "zip":
@@ -1117,7 +1119,6 @@ class Main:
 
             zipProcess(env, include, exclude, path)
 
-            
             """	no use copy strategy anymore
       elif strategy == "copy":
         ssh.uploadFile(config.name, os.path.join(realTargetFull, config.name))	# we don't include it by default
@@ -1178,8 +1179,8 @@ class Main:
         #  env.run("cd %s && %s chown %s: current" % (deployRoot, sudoCmd, server.owner))
 
         # post process
-        if hasattr(mygod, "deployPostTask"):
-            mygod.deployPostTask(util=g_util, remote=env, local=g_local)
+        if hasattr(mygat, "deployPostTask"):
+            mygat.deployPostTask(util=g_util, remote=env, local=g_local)
 
         # file owner - 이걸 post후에 해야 ssh user가 파일 접근이 가능하다
         if "owner" in server:
@@ -1270,7 +1271,6 @@ class Config(Dict2):
         with open(pp, "r") as fp:
             self.configStr(cfgType, fp.read())
 
-
     def configServerGet(self, name):
         server = None
         for it in self.servers:
@@ -1319,7 +1319,7 @@ g_dic = None  # helper실행할때 씀, server, vars까지 설정
 g_data = None  # .data.yml
 # config, server, vars(of server)
 # deployRoot, deployPath
-g_mygod = None
+g_mygat = None
 
 g_util = MyUtil()
 g_local = None
@@ -1327,24 +1327,24 @@ g_remote = None  # server, vars직접 접근 가능
 
 
 def help(target):
-    print(f"god-tool V{__version__}")
+    print(f"gat V{__version__}")
     print(
         """\
 Usage.
-god init app - Generates god_app.py file for application.
-god init sys SYSTEM_NAME - Generates the file for system.
+gat init app - Generates gat_app.py file for application.
+gat init sys SYSTEM_NAME - Generates the file for system.
   the SYSTEM_NAME.py file will be generated.
 
-For application(There should be god_app.py file.),
-god - Serves application.
-god test - running automatic test.
-god PROFILE_NAME deploy - Deploy the application to the server.
+For application(There should be gat_app.py file.),
+gat - Serves application.
+gat test - running automatic test.
+gat PROFILE_NAME deploy - Deploy the application to the server.
 
-god PROFILE_NAME setup - Setup task.
-god PROFILE_NAME run - Run system.
+gat PROFILE_NAME setup - Setup task.
+gat PROFILE_NAME run - Run system.
 
 For system,
-god SYSTEM_NAME PROFILE_NAME - Setup server defined in GOD_FILE.
+gat SYSTEM_NAME PROFILE_NAME - Setup server defined in GAT_FILE.
 """
     )
     if target is not None:
@@ -1352,10 +1352,10 @@ god SYSTEM_NAME PROFILE_NAME - Setup server defined in GOD_FILE.
 
 
 def main():
-    global g_cwd, g_scriptPath, g_mygod
+    global g_cwd, g_scriptPath, g_mygat
     g_cwd = os.getcwd()
     g_scriptPath = os.path.dirname(os.path.realpath(__file__))
-    target = "god_app.py"
+    target = "gat_app.py"
 
     cnt = len(sys.argv)
     cmd = None
@@ -1370,16 +1370,16 @@ def main():
 
         elif cmd == "init":
             if cnt < 3:
-                print("god init app OR god init sys NAME.")
+                print("gat init app OR gat init sys NAME.")
                 return
 
             type = sys.argv[2]
             if type != "app" and type != "sys":
-                print("app or sys can be used for god init command.")
+                print("app or sys can be used for gat init command.")
                 return
 
             if type == "app":
-                initSamples(type, "god_app.py")
+                initSamples(type, "gat_app.py")
 
             elif type == "sys":
                 if cnt < 4:
@@ -1407,7 +1407,7 @@ def main():
         #     pass
 
         else:
-            # 로칼에 god_app.py가 있으면 configName생략 모드
+            # 로칼에 gat_app.py가 있으면 configName생략 모드
             if not os.path.exists(target):
                 target = None
 
@@ -1415,7 +1415,7 @@ def main():
             cmd = "system"
             if cnt < 2:
                 # can skip SERVER_NAME(if there is only one target), cmd(default setup)
-                print("god [CONFIG_NAME] [SERVER_NAME] [run|deploy|init|SETUP]")
+                print("gat [CONFIG_NAME] [SERVER_NAME] [run|deploy|init|SETUP]")
                 return
 
             p = 1
@@ -1452,24 +1452,23 @@ def main():
 
             # strategy 분기
             p += 1
-            if((runCmd == "setup" or runCmd == "run") and cnt - 1 == p):
+            if (runCmd == "setup" or runCmd == "run") and cnt - 1 == p:
                 print(f"========== 명령어 확인 : {sys.argv[p]} ==========")
-                if(sys.argv[p] == "--git"):
+                if sys.argv[p] == "--git":
                     manualStrategyValue = "git"
                     # g_config.deploy.strategy = argv
-                elif(sys.argv[p] == "--zip"):
+                elif sys.argv[p] == "--zip":
                     manualStrategyValue = "zip"
                     # g_config.deploy.strategy = argv
                 else:
                     raise Exception(f"{manualStrategyValue}는 올바르지 않은 명령어입니다.")
-                
-                
+
     else:
-        print("missing god command")
+        print("missing gat command")
         return
 
     # check first
-    if not os.path.exists(target):  # or not os.path.exists("god.yml"):
+    if not os.path.exists(target):  # or not os.path.exists("gat.yml"):
         help(target)
         return
 
@@ -1479,16 +1478,16 @@ def main():
     mymod = __import__(target[:-3], fromlist=[""])
     g_mygod = mymod.myGod(helper=helper)
     # g_config 객체 생성 지점 -> 여기부터 설정 객체 사용 가능
-    if(manualStrategyValue is not None):
+    if manualStrategyValue is not None:
         g_config.deploy.strategy = manualStrategyValue
 
-    print("god-tool V%s" % __version__)
+    print("gat-tool V%s" % __version__)
     name = g_config.name
     type = g_config.get("type", "app")
 
     print("** config[type:%s, name:%s]" % (type, name))
 
-    # load secret - 이걸 mygod init하는데서 수동으로 하게해놨는데..
+    # load secret - 이걸 mygat init하는데서 수동으로 하게해놨는데..
     # 무조건 로드하게하고 추가 로드를 할수 있게할까? - 좀 애매하다
     global g_data
     # secretPath = os.path.join(g_cwd, ".data.yml")
@@ -1499,9 +1498,9 @@ def main():
     #         ss = fp.read()
     #         g_data = Dict2(yaml.safe_load(ss))
     #         print("data - ", g_data)
-    # if g_mygod.data is not None:
-    if hasattr(g_mygod, "data"):
-        g_data = g_mygod.data
+    # if g_mygat.data is not None:
+    if hasattr(g_mygat, "data"):
+        g_data = g_mygat.data
 
     global g_local
     g_local = Tasks(None, g_config)
@@ -1565,8 +1564,8 @@ def main():
             # if "dkName" in server.dic:
             #     env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
 
-            # g_main.taskDeploy(env, server, g_mygod, g_config)
-            g_main.taskDeploy(server, g_mygod, g_config)
+            # g_main.taskDeploy(env, server, g_mygat, g_config)
+            g_main.taskDeploy(server, g_mygat, g_config)
             return
 
         subCmd = ""
@@ -1577,17 +1576,16 @@ def main():
         if serverName is None:
             return
 
-
         print(f"systemSetup - target:{target}, server:{serverName}, subCmd:{subCmd}")
         server = g_config.configServerGet(serverName)
 
-        g_main.taskSetup(server, subCmd, g_mygod, g_config)
+        g_main.taskSetup(server, subCmd, g_mygat, g_config)
         return
 
     elif cmd == "test":
         # serve
         if type != "app":
-            print("just god command can be used for application type only.")
+            print("just gat command can be used for application type only.")
             return
 
         g_main.taskTest()
@@ -1595,7 +1593,7 @@ def main():
     elif cmd == "serve":
         # serve
         if type != "app":
-            print("just god command can be used for application type only.")
+            print("just gat command can be used for application type only.")
             return
 
         g_main.taskServe()
