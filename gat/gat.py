@@ -1344,6 +1344,8 @@ def main():
 
     cnt = len(sys.argv)
     cmd = None
+    # setup or run의 argv를 받기 위한 변수
+    argv = None
     if cnt > 1:
         cmd = sys.argv[1]
 
@@ -1433,6 +1435,18 @@ def main():
             else:
                 runCmd = "setup"
 
+            # strategy 분기
+            p += 1
+            if(runCmd == "setup" and cnt - 1 == p):
+                print(f"========== 명령어 확인 : {sys.argv[p]} ==========")
+                if(sys.argv[p] == "--git"):
+                    argv = "git"
+                elif(sys.argv[p] == "--zip"):
+                    argv = "zip"
+                else:
+                    raise Exception(f"{argv}는 올바르지 않은 명령어입니다.")
+                
+                
     else:
         print("missing god command")
         return
@@ -1548,7 +1562,7 @@ def main():
         print(f"systemSetup - target:{target}, server:{serverName}, subCmd:{subCmd}")
         server = g_config.configServerGet(serverName)
 
-        g_main.taskSetup(server, subCmd, g_mygod, g_config)
+        g_main.taskSetup(server, subCmd, g_mygod, g_config, argv)
         return
 
     elif cmd == "test":
