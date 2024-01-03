@@ -299,7 +299,6 @@ class Tasks:
         os.chdir(dir)
         try:
             # g_main.taskDeploy(remote, server, mygod, config)
-            print(f"========= before taskDeploy config cechk : {config} ======================")
             g_main.taskDeploy(server, mygod, config)
         finally:
             os.chdir(pp)
@@ -865,11 +864,11 @@ class Main:
 
         # 1. 원격 repo에서 특정 브렌치의 최신 커밋 받기
         # 2. 기존 clone 이 최신인지 판단하고 최신이 아니면 삭제후 다시 클론
-        recentCommit = getRemoteRecentCommit(config=config)
-        directory = os.getcwd() + "/clone"
-        print(directory)
-        if(isRecentlyCommit(directory=directory, recentlyCommit=recentCommit)):
-            cloneRepo(config.bitbucket[3].cloneUrl, config.bitbucket[4].branch)
+        # recentCommit = getRemoteRecentCommit(config=config)
+        # directory = os.getcwd() + "/clone"
+        # print(directory)
+        # if(isRecentlyCommit(directory=directory, recentlyCommit=recentCommit)):
+        #     cloneRepo(config.bitbucket[3].cloneUrl, config.bitbucket[4].branch)
 
         # global g_config
         # oldConfig = g_config
@@ -877,7 +876,6 @@ class Main:
         # 내부적으로 g_config에 액서스할때가 있어서 일단은..
         # config접근을 env를 통해서 하게 할까...
         # g_config = config
-        print(f"====================== g_local check : {g_local} ======================")
         mygod.setupTask(util=g_util, remote=env, local=g_local, env=env)
         # finally:
         # g_config = oldConfig
@@ -999,7 +997,6 @@ class Main:
 
     # def taskDeploy(self, env, server, mygod, config):
     def taskDeploy(self, server, mygod, config):
-        print(f"=================== start taskDeploy : {sys.argv[3]} ===========================")
         env = Tasks(server, config)
         if "dkName" in server.dic:
             env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
@@ -1067,8 +1064,7 @@ class Main:
         exclude = config.get("deploy.exclude", [])
         sharedLinks = config.get("deploy.sharedLinks", [])
 
-        strategy = config.deploy.strategy
-        print(f"================ check strategy : {strategy} ================")
+        strategy = g_config.deploy.strategy
         if strategy == "zip":
             zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
             with zipfile.ZipFile(zipPath, "w") as zipWork:
@@ -1107,7 +1103,64 @@ class Main:
                 + f"&& {sudoCmd} unzip /tmp/godUploadPkg.zip && {sudoCmd} rm /tmp/godUploadPkg.zip"
             )
             os.remove(zipPath)
+        elif strategy == "git":
+            cloneRepo(g_config.deploy.gitRepo, g_config.servers[0].gitBranch)
+            zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
+            with zipfile.ZipFile(zipPath, "w") as zipWork:
 
+                def _zipAdd(srcP, targetP):
+                    # if _filterFunc(srcP, exclude):
+                    #     print(f"deploy: skip - {srcP}")
+                    #     return
+
+                    # make "./aaa" -> "aaa"
+                    targetP = os.path.normpath(targetP)
+                    
+                    print(f"zipping {srcP} -> {targetP}")
+                    zipWork.write(srcP, targetP, compress_type=zipfile.ZIP_DEFLATED)
+
+                # dic = dict(name=config.name)
+                # def _pathExpand(pp):
+                #     pp = os.path.expanduser(pp)
+                #     return strExpand(pp, dic)
+
+                # zipWork.write(config.name, config.name, compress_type=zipfile.ZIP_DEFLATED)
+                def fileProc(src, dest):
+                    if dest is None:
+                        dest = src
+                    _zipAdd(src, dest)
+
+                print(f"===== --git include : {include} ======")
+                print(f"===== --git exclude : {exclude} ======")
+
+                modifiedInclude = []
+                for filename in include:
+                    if filename == "*":
+                        modifiedInclude.append("./clone")
+                    else:
+                        modifiedInclude.append("./clone/" + filename)
+
+                modifiedExclude = []
+                for filename in exclude:
+                    if filename == "*":
+                        modifiedExclude.append("./clone")
+                    else:
+                        modifiedExclude.append("./clone/" + filename)
+
+                self.targetFileListProd(
+                    modifiedInclude, modifiedExclude, fileProc, followLinks=config.deploy.followLinks
+                )
+
+            env.uploadFile(
+                zipPath, "/tmp/godUploadPkg.zip"
+            )  # we don't include it by default
+            env.run(
+                f"cd {deployRoot}/releases/{todayName} "
+                + f"&& {sudoCmd} unzip /tmp/godUploadPkg.zip && {sudoCmd} rm /tmp/godUploadPkg.zip"
+            )
+            os.remove(zipPath)
+
+            
             """	no use copy strategy anymore
       elif strategy == "copy":
         ssh.uploadFile(config.name, os.path.join(realTargetFull, config.name))	# we don't include it by default
@@ -1224,7 +1277,6 @@ def expandVar(dic):
 
 class Config(Dict2):
     def __init__(self):
-        # print(f"================ Config __init__ argv : {sys.argv[3]} =================")
         super().__init__()
 
     def configStr(self, cfgType, ss):
@@ -1352,7 +1404,6 @@ def main():
     cmd = None
     # setup or run의 argv를 받기 위한 변수
     argv = None
-
     if cnt > 1:
         cmd = sys.argv[1]
 
@@ -1469,7 +1520,6 @@ def main():
     helper = Helper(g_config)
     sys.path.append(g_cwd)
     mymod = __import__(target[:-3], fromlist=[""])
-    
     g_mygod = mymod.myGod(helper=helper)
     # g_config 객체 생성 지점 -> 여기부터 설정 객체 사용 가능
     g_config.deploy.strategy = argv
@@ -1477,7 +1527,6 @@ def main():
     print("god-tool V%s" % __version__)
     name = g_config.name
     type = g_config.get("type", "app")
-
 
     print("** config[type:%s, name:%s]" % (type, name))
 
