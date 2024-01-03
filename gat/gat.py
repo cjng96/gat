@@ -861,6 +861,14 @@ class Main:
             print("setup: You should override setupTask function in your myGod class")
             return
 
+        # 1. 원격 repo에서 특정 브렌치의 최신 커밋 받기
+        # 2. 기존 clone 이 최신인지 판단하고 최신이 아니면 삭제후 다시 클론
+        recentCommit = getRemoteRecentCommit(config=config)
+        directory = os.getcwd() + "/clone"
+        print(directory)
+        if(isRecentlyCommit(directory=directory, recentlyCommit=recentCommit)):
+            cloneRepo(config.bitbucket[3].cloneUrl, config.bitbucket[4].branch)
+
         # global g_config
         # oldConfig = g_config
         # try:
