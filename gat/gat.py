@@ -45,8 +45,6 @@ from .godHelper import strExpand
 from .coS3 import CoS3
 from .myutil import (
     cloneRepo,
-    getRemoteRecentCommit,
-    isRecentlyCommit,
     str2arg,
     envExpand,
     ObjectEncoder,
