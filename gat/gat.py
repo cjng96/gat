@@ -299,6 +299,7 @@ class Tasks:
         os.chdir(dir)
         try:
             # g_main.taskDeploy(remote, server, mygod, config)
+            print(f"========= before taskDeploy config cechk : {config} ======================")
             g_main.taskDeploy(server, mygod, config)
         finally:
             os.chdir(pp)
@@ -808,7 +809,7 @@ class Main:
             print("You should override buildTask method.")
 
     # def taskSetup(self, target, serverName, subCmd):
-    def taskSetup(self, server, subCmd, mygod, config, argv=None):
+    def taskSetup(self, server, subCmd, mygod, config):
         # if not os.path.exists(target):
         #     print("There is no target file[%s]" % target)
         #     return
@@ -817,8 +818,6 @@ class Main:
         # if server is None:
         #     return
 
-        if argv is not None:
-            config.deploy.strategy = argv
 
         # deprecated
         # server["runImage"] = runImageFlag
@@ -878,6 +877,7 @@ class Main:
         # 내부적으로 g_config에 액서스할때가 있어서 일단은..
         # config접근을 env를 통해서 하게 할까...
         # g_config = config
+        print(f"====================== g_local check : {g_local} ======================")
         mygod.setupTask(util=g_util, remote=env, local=g_local, env=env)
         # finally:
         # g_config = oldConfig
@@ -999,6 +999,7 @@ class Main:
 
     # def taskDeploy(self, env, server, mygod, config):
     def taskDeploy(self, server, mygod, config):
+        print(f"=================== start taskDeploy : {sys.argv[3]} ===========================")
         env = Tasks(server, config)
         if "dkName" in server.dic:
             env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
@@ -1067,6 +1068,7 @@ class Main:
         sharedLinks = config.get("deploy.sharedLinks", [])
 
         strategy = config.deploy.strategy
+        print(f"================ check strategy : {strategy} ================")
         if strategy == "zip":
             zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
             with zipfile.ZipFile(zipPath, "w") as zipWork:
@@ -1222,6 +1224,7 @@ def expandVar(dic):
 
 class Config(Dict2):
     def __init__(self):
+        # print(f"================ Config __init__ argv : {sys.argv[3]} =================")
         super().__init__()
 
     def configStr(self, cfgType, ss):
@@ -1349,6 +1352,7 @@ def main():
     cmd = None
     # setup or run의 argv를 받기 위한 변수
     argv = None
+
     if cnt > 1:
         cmd = sys.argv[1]
 
@@ -1444,8 +1448,10 @@ def main():
                 print(f"========== 명령어 확인 : {sys.argv[p]} ==========")
                 if(sys.argv[p] == "--git"):
                     argv = "git"
+                    # g_config.deploy.strategy = argv
                 elif(sys.argv[p] == "--zip"):
                     argv = "zip"
+                    # g_config.deploy.strategy = argv
                 else:
                     raise Exception(f"{argv}는 올바르지 않은 명령어입니다.")
                 
@@ -1461,14 +1467,17 @@ def main():
 
     global g_config
     helper = Helper(g_config)
-
     sys.path.append(g_cwd)
     mymod = __import__(target[:-3], fromlist=[""])
+    
     g_mygod = mymod.myGod(helper=helper)
+    # g_config 객체 생성 지점 -> 여기부터 설정 객체 사용 가능
+    g_config.deploy.strategy = argv
 
     print("god-tool V%s" % __version__)
     name = g_config.name
     type = g_config.get("type", "app")
+
 
     print("** config[type:%s, name:%s]" % (type, name))
 
@@ -1565,7 +1574,7 @@ def main():
         print(f"systemSetup - target:{target}, server:{serverName}, subCmd:{subCmd}")
         server = g_config.configServerGet(serverName)
 
-        g_main.taskSetup(server, subCmd, g_mygod, g_config, argv=argv)
+        g_main.taskSetup(server, subCmd, g_mygod, g_config)
         return
 
     elif cmd == "test":
