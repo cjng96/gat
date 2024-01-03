@@ -1440,7 +1440,7 @@ def main():
 
             # strategy 분기
             p += 1
-            if(runCmd == "setup" and cnt - 1 == p):
+            if((runCmd == "setup" or runCmd == "run") and cnt - 1 == p):
                 print(f"========== 명령어 확인 : {sys.argv[p]} ==========")
                 if(sys.argv[p] == "--git"):
                     argv = "git"
