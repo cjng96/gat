@@ -22,6 +22,7 @@ deploy:
     - config/my.json
   sharedLinks:
     - config/my.json
+  gitRepo: <your remote repo>
 
 servers:
   - name: test
@@ -34,7 +35,7 @@ servers:
       # you don't need sudo right if it's not specified.
       # if you need the operation needed sudo right, should specify it.
     deployRoot: ~/test  # deployment target path
-
+    gitBranch: <your remote repo branch>
 '''
 
 class myGod:
