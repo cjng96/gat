@@ -45,8 +45,6 @@ from .godHelper import strExpand
 from .coS3 import CoS3
 from .myutil import (
     cloneRepo,
-    getRemoteRecentCommit,
-    isRecentlyCommit,
     str2arg,
     envExpand,
     ObjectEncoder,
@@ -817,6 +815,7 @@ class Main:
         # if server is None:
         #     return
 
+
         # deprecated
         # server["runImage"] = runImageFlag
         if subCmd not in ["run", "dev", "prod", "full", "init", ""]:
@@ -860,6 +859,14 @@ class Main:
         if not hasattr(mygod, "setupTask"):
             print("setup: You should override setupTask function in your myGod class")
             return
+
+        # 1. 원격 repo에서 특정 브렌치의 최신 커밋 받기
+        # 2. 기존 clone 이 최신인지 판단하고 최신이 아니면 삭제후 다시 클론
+        # recentCommit = getRemoteRecentCommit(config=config)
+        # directory = os.getcwd() + "/clone"
+        # print(directory)
+        # if(isRecentlyCommit(directory=directory, recentlyCommit=recentCommit)):
+        #     cloneRepo(config.bitbucket[3].cloneUrl, config.bitbucket[4].branch)
 
         # global g_config
         # oldConfig = g_config
@@ -1055,7 +1062,7 @@ class Main:
         exclude = config.get("deploy.exclude", [])
         sharedLinks = config.get("deploy.sharedLinks", [])
 
-        strategy = config.deploy.strategy
+        strategy = g_config.deploy.strategy
         if strategy == "zip":
             zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
             with zipfile.ZipFile(zipPath, "w") as zipWork:
@@ -1094,7 +1101,64 @@ class Main:
                 + f"&& {sudoCmd} unzip /tmp/godUploadPkg.zip && {sudoCmd} rm /tmp/godUploadPkg.zip"
             )
             os.remove(zipPath)
+        elif strategy == "git":
+            cloneRepo(g_config.deploy.gitRepo, g_config.servers[0].gitBranch)
+            zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
+            with zipfile.ZipFile(zipPath, "w") as zipWork:
 
+                def _zipAdd(srcP, targetP):
+                    # if _filterFunc(srcP, exclude):
+                    #     print(f"deploy: skip - {srcP}")
+                    #     return
+
+                    # make "./aaa" -> "aaa"
+                    targetP = os.path.normpath(targetP)
+                    
+                    print(f"zipping {srcP} -> {targetP}")
+                    zipWork.write(srcP, targetP, compress_type=zipfile.ZIP_DEFLATED)
+
+                # dic = dict(name=config.name)
+                # def _pathExpand(pp):
+                #     pp = os.path.expanduser(pp)
+                #     return strExpand(pp, dic)
+
+                # zipWork.write(config.name, config.name, compress_type=zipfile.ZIP_DEFLATED)
+                def fileProc(src, dest):
+                    if dest is None:
+                        dest = src
+                    _zipAdd(src, dest)
+
+                print(f"===== --git include : {include} ======")
+                print(f"===== --git exclude : {exclude} ======")
+
+                modifiedInclude = []
+                for filename in include:
+                    if filename == "*":
+                        modifiedInclude.append("./clone")
+                    else:
+                        modifiedInclude.append("./clone/" + filename)
+
+                modifiedExclude = []
+                for filename in exclude:
+                    if filename == "*":
+                        modifiedExclude.append("./clone")
+                    else:
+                        modifiedExclude.append("./clone/" + filename)
+
+                self.targetFileListProd(
+                    modifiedInclude, modifiedExclude, fileProc, followLinks=config.deploy.followLinks
+                )
+
+            env.uploadFile(
+                zipPath, "/tmp/godUploadPkg.zip"
+            )  # we don't include it by default
+            env.run(
+                f"cd {deployRoot}/releases/{todayName} "
+                + f"&& {sudoCmd} unzip /tmp/godUploadPkg.zip && {sudoCmd} rm /tmp/godUploadPkg.zip"
+            )
+            os.remove(zipPath)
+
+            
             """	no use copy strategy anymore
       elif strategy == "copy":
         ssh.uploadFile(config.name, os.path.join(realTargetFull, config.name))	# we don't include it by default
@@ -1429,6 +1493,7 @@ def main():
 
             # strategy 분기
             p += 1
+
             if(runCmd == "setup" and cnt - 1 == p):
                 print(f"========== 명령어 확인 : {sys.argv[p]} ==========")
                 if(sys.argv[p] == "--git"):
@@ -1450,10 +1515,11 @@ def main():
 
     global g_config
     helper = Helper(g_config)
-
     sys.path.append(g_cwd)
     mymod = __import__(target[:-3], fromlist=[""])
     g_mygod = mymod.myGod(helper=helper)
+    # g_config 객체 생성 지점 -> 여기부터 설정 객체 사용 가능
+    g_config.deploy.strategy = argv
 
     print("god-tool V%s" % __version__)
     name = g_config.name

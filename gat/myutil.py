@@ -50,33 +50,32 @@ def pathIsChild(pp, parent):
 
 # input : gop_app.py에 설정한 config의 객체
 # output : 원격 저장소의 최신 커밋의 해시값(str)
-def getRemoteRecentCommit(config):
-	subprocess.run("pwd")
+# def getRemoteRecentCommit(config):
+# 	subprocess.run("pwd")
 
-	url = f"https://api.bitbucket.org/2.0/repositories/{config.bitbucket[0].workspace}/{config.bitbucket[1].repoSlug}/commits/{config.bitbucket[4].branch}"
-	headers = {
-        "Accept": "application/json",
-        "Authorization": f"Bearer {config.bitbucket[2].token}"
-    }
+# 	url = f"https://api.bitbucket.org/2.0/repositories/{config.bitbucket[0].workspace}/{config.bitbucket[1].repoSlug}/commits/{config.bitbucket[4].branch}"
+# 	headers = {
+#         "Accept": "application/json",
+#         "Authorization": f"Bearer {config.bitbucket[2].token}"
+#     }
 
-	print(f"url : {url}. headers : {headers} 로 요청을 보내는 중입니다.")
+# 	print(f"url : {url}. headers : {headers} 로 요청을 보내는 중입니다.")
 
-	try:
-		response = requests.request(
-			"GET",
-			url,
-			headers=headers
-		)
-		response.raise_for_status()
-		return response.json()["values"][0]["hash"]
-	except requests.HTTPError as err:
-		print(f"HTTP 오류 방생 - 상태 코드 : {err.response.status_code}")
-		return "0"
-	except requests.RequestException as err:
-		print(f"요청 시도 중 오류 발생")
-		return "0"
+# 	try:
+# 		response = requests.request(
+# 			"GET",
+# 			url,
+# 			headers=headers
+# 		)
+# 		response.raise_for_status()
+# 		return response.json()["values"][0]["hash"]
+# 	except requests.HTTPError as err:
+# 		print(f"HTTP 오류 발생 - 상태 코드 : {err.response.status_code}")
+# 		raise 
+# 	except requests.RequestException as err:
+# 		print(f"요청 시도 중 오류 발생")
+# 		raise 
 
-	# print(f"=========== api status {response.status_code} ===========")
 
 
 # input
@@ -95,16 +94,16 @@ def cloneRepo(cloneUrl, branch):
 # - recentlyCommit : 원격 저장소의 최신 커밋
 # output
 # - 원격 저장소의 최신 커밋과 동일하면 true, 아니면 false
-def isRecentlyCommit(directory, recentlyCommit):
-	try:
-		commitHash = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=directory)
-		if commitHash != recentlyCommit:
-			return True
-		else:
-			return False
-	# clone 파일이 없는 경우 만들어주기 위해서	
-	except:
-		return True
+# def isRecentlyCommit(directory, recentlyCommit):
+# 	try:
+# 		commitHash = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=directory)
+# 		if commitHash != recentlyCommit:
+# 			return True
+# 		else:
+# 			return False
+# 	# clone 파일이 없는 경우 만들어주기 위해서	
+# 	except:
+# 		return True
 
 
 class NonBlockingStreamReader:
@@ -123,7 +122,7 @@ class NonBlockingStreamReader:
 			while True:
 				line = stream.readline()
 				queue.put(line)	# line can be "" for broken stream
-				if line is b"":
+				if line == b"":
 					return
 
 		self.thread = Thread(target=_populateQueue, args=(self.stream, self.queue))
@@ -162,3 +161,8 @@ class ObjectEncoder(json.JSONEncoder):
 			)
 			return self.default(d)
 		return obj
+
+
+class HttpError(Exception):
+	def __init__(self, status_code, message):
+		super().__init__(*args)
