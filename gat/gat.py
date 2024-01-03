@@ -808,7 +808,7 @@ class Main:
             print("You should override buildTask method.")
 
     # def taskSetup(self, target, serverName, subCmd):
-    def taskSetup(self, server, subCmd, mygod, config):
+    def taskSetup(self, server, subCmd, mygod, config, argv):
         # if not os.path.exists(target):
         #     print("There is no target file[%s]" % target)
         #     return
@@ -816,7 +816,11 @@ class Main:
         # server = g_config.configServerGet(serverName)
         # if server is None:
         #     return
-
+        print(f"============ config 확인 ================")
+        #print(config)
+        if argv is not None:
+            config.deploy.strategy = argv
+            print(config.deploy.strategy)
         # deprecated
         # server["runImage"] = runImageFlag
         if subCmd not in ["run", "dev", "prod", "full", "init", ""]:
