@@ -81,12 +81,12 @@ def pathIsChild(pp, parent):
 # input
 # - directory : 이전 버전의 clone 폴더 이름
 # - cloneUrl : clone url
-def cloneRepo(cloneUrl, branch):
+def cloneRepo(cloneUrl, branch, clonePath):
     # subprocess.run("pwd")
-    print(f"clone을 진행하겠습니다.")
-    subprocess.run(["rm", "-rf", "./clone"])
-    subprocess.run(["git", "clone", "-b", branch, cloneUrl, "clone"])
-    print(f"clone 완료")
+    print(f"Start proceeding with git clone")
+    subprocess.run(["rm", "-rf", clonePath])
+    subprocess.run(["git", "clone", "-b", branch, cloneUrl, clonePath])
+    print(f"Success git clone")
 
 
 # input
