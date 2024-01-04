@@ -922,7 +922,8 @@ class Main:
         if observer is not None:
             observer.join()
 
-    def targetFileListProd(self, include, exclude, func, followLinks=True):
+    # localSrcPath 를 뒤에 둔 이유는 기본 값이 필요해서 + 이 함수를 사용하는 다른 곳에서 인자 위치로 인한 에러
+    def targetFileListProd(self, include, exclude, func, localSrcPath="", followLinks=True):
         for pp in include:
             if type(pp) == str:
                 if pp == "*":
@@ -931,7 +932,7 @@ class Main:
                 # daemon
                 pp = _pathExpand(pp)
 
-                p = pathlib.Path(pp)
+                p = pathlib.Path(os.path.join(localSrcPath, pp))
                 if not p.exists():
                     print(f"target: not exists - {pp}")
                     continue
@@ -1062,101 +1063,59 @@ class Main:
         exclude = config.get("deploy.exclude", [])
         sharedLinks = config.get("deploy.sharedLinks", [])
 
+        def zipProcess(env, include, exclude, localSrcPath=None):
+            zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
+            with zipfile.ZipFile(zipPath, "w") as zipWork:
+
+                def _zipAdd(srcP, targetP):
+                    # if _filterFunc(srcP, exclude):
+                    #     print(f"deploy: skip - {srcP}")
+                    #     return
+
+                    # make "./aaa" -> "aaa"
+                    targetP = os.path.normpath(targetP)
+
+                    print(f"zipping {srcP} -> {targetP}")
+                    zipWork.write(srcP, targetP, compress_type=zipfile.ZIP_DEFLATED)
+
+                # dic = dict(name=config.name)
+                # def _pathExpand(pp):
+                #     pp = os.path.expanduser(pp)
+                #     return strExpand(pp, dic)
+
+                # zipWork.write(config.name, config.name, compress_type=zipfile.ZIP_DEFLATED)
+                def fileProc(src, dest):
+                    if dest is None:
+                        dest = src
+                    _zipAdd(src, dest)
+
+
+                self.targetFileListProd(
+                    include, exclude, fileProc, localSrcPath=localSrcPath, followLinks=config.deploy.followLinks,
+                )
+
+
+            env.uploadFile(
+                zipPath, "/tmp/godUploadPkg.zip"
+            )  # we don't include it by default
+            env.run(
+                f"cd {deployRoot}/releases/{todayName} "
+                + f"&& {sudoCmd} unzip /tmp/godUploadPkg.zip && {sudoCmd} rm /tmp/godUploadPkg.zip"
+            )
+            os.remove(zipPath)
+            
+
         strategy = g_config.deploy.strategy
         if strategy == "zip":
-            zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
-            with zipfile.ZipFile(zipPath, "w") as zipWork:
+            zipProcess(env, include, exclude, strategy)
 
-                def _zipAdd(srcP, targetP):
-                    # if _filterFunc(srcP, exclude):
-                    #     print(f"deploy: skip - {srcP}")
-                    #     return
-
-                    # make "./aaa" -> "aaa"
-                    targetP = os.path.normpath(targetP)
-
-                    print(f"zipping {srcP} -> {targetP}")
-                    zipWork.write(srcP, targetP, compress_type=zipfile.ZIP_DEFLATED)
-
-                # dic = dict(name=config.name)
-                # def _pathExpand(pp):
-                #     pp = os.path.expanduser(pp)
-                #     return strExpand(pp, dic)
-
-                # zipWork.write(config.name, config.name, compress_type=zipfile.ZIP_DEFLATED)
-                def fileProc(src, dest):
-                    if dest is None:
-                        dest = src
-                    _zipAdd(src, dest)
-
-                self.targetFileListProd(
-                    include, exclude, fileProc, followLinks=config.deploy.followLinks
-                )
-
-            env.uploadFile(
-                zipPath, "/tmp/godUploadPkg.zip"
-            )  # we don't include it by default
-            env.run(
-                f"cd {deployRoot}/releases/{todayName} "
-                + f"&& {sudoCmd} unzip /tmp/godUploadPkg.zip && {sudoCmd} rm /tmp/godUploadPkg.zip"
-            )
-            os.remove(zipPath)
         elif strategy == "git":
-            cloneRepo(g_config.deploy.gitRepo, server.gitBranch, "./clone")
-            zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
-            with zipfile.ZipFile(zipPath, "w") as zipWork:
+            # 여기 path는 git clone을 받을 주소
+            # 나중에 따로 god_app.py에서 설정하도록 하면 코드가 더욱 좋아질거라 예상
+            path = "./clone"
+            cloneRepo(g_config.deploy.gitRepo, server.gitBranch, path)
 
-                def _zipAdd(srcP, targetP):
-                    # if _filterFunc(srcP, exclude):
-                    #     print(f"deploy: skip - {srcP}")
-                    #     return
-
-                    # make "./aaa" -> "aaa"
-                    targetP = os.path.normpath(targetP)
-                    
-                    print(f"zipping {srcP} -> {targetP}")
-                    zipWork.write(srcP, targetP, compress_type=zipfile.ZIP_DEFLATED)
-
-                # dic = dict(name=config.name)
-                # def _pathExpand(pp):
-                #     pp = os.path.expanduser(pp)
-                #     return strExpand(pp, dic)
-
-                # zipWork.write(config.name, config.name, compress_type=zipfile.ZIP_DEFLATED)
-                def fileProc(src, dest):
-                    if dest is None:
-                        dest = src
-                    _zipAdd(src, dest)
-
-                print(f"===== --git include : {include} ======")
-                print(f"===== --git exclude : {exclude} ======")
-
-                modifiedInclude = []
-                for filename in include:
-                    if filename == "*":
-                        modifiedInclude.append("./clone")
-                    else:
-                        modifiedInclude.append("./clone/" + filename)
-
-                modifiedExclude = []
-                for filename in exclude:
-                    if filename == "*":
-                        modifiedExclude.append("./clone")
-                    else:
-                        modifiedExclude.append("./clone/" + filename)
-
-                self.targetFileListProd(
-                    modifiedInclude, modifiedExclude, fileProc, followLinks=config.deploy.followLinks
-                )
-
-            env.uploadFile(
-                zipPath, "/tmp/godUploadPkg.zip"
-            )  # we don't include it by default
-            env.run(
-                f"cd {deployRoot}/releases/{todayName} "
-                + f"&& {sudoCmd} unzip /tmp/godUploadPkg.zip && {sudoCmd} rm /tmp/godUploadPkg.zip"
-            )
-            os.remove(zipPath)
+            zipProcess(env, include, exclude, path)
 
             
             """	no use copy strategy anymore
