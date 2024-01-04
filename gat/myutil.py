@@ -84,7 +84,7 @@ def pathIsChild(pp, parent):
 def cloneRepo(cloneUrl, branch):
     # subprocess.run("pwd")
     print(f"clone을 진행하겠습니다.")
-    subprocess.run(["rm", "-rf", "/clone"])
+    subprocess.run(["rm", "-rf", "./clone"])
     subprocess.run(["git", "clone", "-b", branch, cloneUrl, "clone"])
     print(f"clone 완료")
 
