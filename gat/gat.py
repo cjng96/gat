@@ -1401,7 +1401,7 @@ def main():
     cnt = len(sys.argv)
     cmd = None
     # setup or run의 argv를 받기 위한 변수
-    argv = None
+    manualStrategyValue = None
     if cnt > 1:
         cmd = sys.argv[1]
 
@@ -1496,13 +1496,13 @@ def main():
             if((runCmd == "setup" or runCmd == "run") and cnt - 1 == p):
                 print(f"========== 명령어 확인 : {sys.argv[p]} ==========")
                 if(sys.argv[p] == "--git"):
-                    argv = "git"
+                    manualStrategyValue = "git"
                     # g_config.deploy.strategy = argv
                 elif(sys.argv[p] == "--zip"):
-                    argv = "zip"
+                    manualStrategyValue = "zip"
                     # g_config.deploy.strategy = argv
                 else:
-                    raise Exception(f"{argv}는 올바르지 않은 명령어입니다.")
+                    raise Exception(f"{manualStrategyValue}는 올바르지 않은 명령어입니다.")
                 
                 
     else:
@@ -1520,7 +1520,8 @@ def main():
     mymod = __import__(target[:-3], fromlist=[""])
     g_mygod = mymod.myGod(helper=helper)
     # g_config 객체 생성 지점 -> 여기부터 설정 객체 사용 가능
-    g_config.deploy.strategy = argv
+    if(manualStrategyValue is not None):
+        g_config.deploy.strategy = manualStrategyValue
 
     print("god-tool V%s" % __version__)
     name = g_config.name
