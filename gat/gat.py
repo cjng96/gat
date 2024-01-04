@@ -817,8 +817,6 @@ class Main:
         # server = g_config.configServerGet(serverName)
         # if server is None:
         #     return
-
-
         # deprecated
         # server["runImage"] = runImageFlag
         if subCmd not in ["run", "dev", "prod", "full", "init", ""]:
