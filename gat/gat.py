@@ -874,7 +874,7 @@ class Main:
         # 내부적으로 g_config에 액서스할때가 있어서 일단은..
         # config접근을 env를 통해서 하게 할까...
         # g_config = config
-        mygod.setupTask(util=g_util, remote=env, local=g_local, env=env)
+        mygod.setupTask(util=g_util, remote=env, local=g_local)
         # finally:
         # g_config = oldConfig
 
