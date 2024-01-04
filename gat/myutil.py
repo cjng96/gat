@@ -122,7 +122,7 @@ class NonBlockingStreamReader:
 			while True:
 				line = stream.readline()
 				queue.put(line)	# line can be "" for broken stream
-				if line == b"":
+				if line is b"":
 					return
 
 		self.thread = Thread(target=_populateQueue, args=(self.stream, self.queue))
