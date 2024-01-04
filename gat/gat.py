@@ -1102,7 +1102,7 @@ class Main:
             )
             os.remove(zipPath)
         elif strategy == "git":
-            cloneRepo(g_config.deploy.gitRepo, g_config.servers[0].gitBranch)
+            cloneRepo(g_config.deploy.gitRepo, server.gitBranch, "./clone")
             zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
             with zipfile.ZipFile(zipPath, "w") as zipWork:
 
