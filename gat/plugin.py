@@ -215,8 +215,9 @@ KNOCKD_OPTS="-i eth0"
         env.run("sudo systemctl enable knockd")
     env.run("sudo systemctl restart knockd")
 
-
-# 어디서 호출되는지 확인 X -> 명확하지 않기 때문에 일단 수정 (수정해도 돌아가기 때문)
+# 기능 : 사진 관리 애플리케이션을 도커 컨테이너로 실행
+# 어디서 호출되는지 확인 X
+# centOS 변경 필요 : X
 def dockerPhotoprism(
     env, url, srcPath, adminPw, dbHost, dbName, dbId, dbPw, name="photo"
 ):
@@ -469,7 +470,7 @@ server {{
 
 # Nextcloud FPM 이미지를 사용하여 Nextcloud 인스턴스를 도커로 실행
 # 호출 위치 파악 X
-# 기능상으론 centOS 작업을 진행하는게 좋을듯
+# centOS 작업 필요 X
 def dockerNextcloudFpm(
     env,
     srcPath,
@@ -552,7 +553,7 @@ sudo docker run -d --name {name}Cron \
 
 # 기능 : 도커로 NextCLoud 컨테이너 실행
 # 호출 위치 파악 : X
-# centOS 변경 : O
+# centOS 변경 : X
 def dockerNextcloud(
     env,
     domain,
@@ -792,7 +793,7 @@ def installDart(치env, ver="latest"):
 
 # 기능 : rclone 설치
 # 호출 위치 파악 : O
-# centOS 변경 : 스토리지로 데이터 전송 솔루션 -> 이걸 바꿔야할까 말까
+# centOS 변경 : 스토리지로 데이터 전송 솔루션 -> 이걸 바꿔야할까 말까 -> X
 def setupRclone(env, name, type, host, port, user, id=None, keyFile=None):
     """
     sftp용임
@@ -848,7 +849,7 @@ sha1sum_command = sha1sum
 
 # 기능 : runit 설치
 # 호출 위치 파악 : X
-# centOS 변경 : O
+# centOS 변경 : X
 def setupRunitService(env, name, cmd):
     env.run(f"mkdir -p /var/log/{name}")
     env.run(f"sudo mkdir -p /etc/service/{name}/log")
@@ -899,7 +900,7 @@ Match Group sftponly
 
 # 기능 : sftp를 사용할 수 있는 유저 생성
 # 호출 위치 파악 : O
-# centOS 변경 : O
+# centOS 변경 : X
 def makeSftpUser(env, id, rootPath="/home", dataFolderName="data", authPubs=None):
     home = f"{rootPath}/{id}"
     makeUser(
@@ -922,7 +923,7 @@ sudo chown {id}: {home}/{dataFolderName}"
 
 # 기능 : 한 폴더를 다른 폴더로 마운트
 # 호출 위치 파악 : X
-# centOS 변경 : 애매 -> O
+# centOS 변경 : 애매 -> X
 def mountFolder(env, src, dest):
     env.run("sudo mkdir -p {0}".format(dest))
     if not env.runSafe(f"mountpoint -q {dest}".format()):
@@ -947,11 +948,17 @@ def installRssh(env, home, useChroot=True):
     또 문제가, internal-sftp는 /media/ssd1/users/b_test2를 쓰려고 하면 /media/ssd1..등의 부모 폴더도
     다 root owned and 755여야 한다. mount bind할수 있지만 치명적
     """
+
+    os = _getOS()
+    if os == 'null':
+        raise Exception('non-check OS')
+    installCommand = "apt install --no-install-recommends -y" if os == 'ubuntu' else "yum install -y"
+
     # https://www.cyberciti.biz/tips/howto-linux-unix-rssh-chroot-jail-setup.html"
     if env.runSafe(f"test -f {home}/ok"):
         return
 
-    env.run("sudo apt install --no-install-recommends -y rssh")
+    env.run(f"sudo {installCommand} rssh")
     env.run(f"mkdir -p {home}/{{dev,etc,lib,usr,bin}}")
     env.run(f"mkdir -p {home}/usr/bin")
     # env.run(f'mkdir -p {home}/usr/libexec/openssh'.format(home))
@@ -3746,3 +3753,20 @@ time zstd -d $fn -c | docker import --change 'CMD ["/start"]' - $image
         targetPath="/etc/sa.yml",
         sudo=True,
     )
+
+
+# 설치가 진행될 컴퓨터의 OS를 알려줌
+# return : String : 'ubuntu' | 'centos' | 'null'
+def _getOS():
+    try:
+        with open('/etc/os-release') as file:
+            for line in file:
+                os_name = line.strip().split('=')[1].replace('"', '')
+                if 'ubuntu' in os_name.lower():
+                    return 'ubuntu'
+                elif 'centos' in os_name.lower():
+                    return 'centos'
+    except Exception as e:
+        raise e
+    
+    return 'null'
