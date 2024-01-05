@@ -1074,7 +1074,7 @@ def registerAuthPub(env, pub, id=None):
 
 # 기능 : 사용자 계정 생성 및 선택적으로 SSH 키 생성, sudo 권한 부여, 공개 ssh키 등록의 기능
 # 호출 위치 파악 : O
-# centOS 변경 : X
+# centOS 변경 : O
 def makeUser(
     env, id, home=None, shell=None, genSshKey=True, grantSudo=False, authPubs=None
 ):
@@ -1105,7 +1105,7 @@ def makeUser(
 
     if grantSudo:
         env.run(
-            f'sudo adduser {id} sudo && \
+            f'sudo {createUserComm} {id} sudo && \
       sudo echo "{id} ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers.d/{id} && \
       sudo chmod 0440 /etc/sudoers.d/{id}'
         )
@@ -1120,14 +1120,20 @@ def makeUser(
 
 # 기능 : ssh 키 생성 및 선택적으로 키 등록
 # 호출 위치 파악 : O
-# centOS 변경 : O
+# centOS 변경 : O -> 완료
 def sshKeyGen(env, id, authPubs=None):
+    os = _getOS()
+    _checkNotNullOS(osName=os)
+
+    updateComm = _getUpdateCommand(osName=os)
+    installComm = _getInstallCommand(osName=os)
+
     home = env.runOutput(f"echo ~{id}").strip()
 
     # 자기파일이라 sudo가 필요없어야하는데, 이미 존재했을 경우 위에서 chown을 해주는데도 안되는 경우가 있음
     if not env.runSafe(f"sudo test -e {home}/.ssh/id_rsa"):
-        env.run("sudo apt update")  # openssh-client설치에서 404오류 나는 경우가
-        env.run("sudo apt install --no-install-recommends -y openssh-client")
+        env.run(updateComm)  # openssh-client설치에서 404오류 나는 경우가
+        env.run(f"{installComm} openssh-client")
         env.run(
             f'sudo -u {id} ssh-keygen -b 2048 -q -t ed25519 -N "" -f {home}/.ssh/id_rsa'
         )
@@ -3788,9 +3794,9 @@ def _getInstallCommand(osName):
 # os별 업데이트
 def _getUpdateCommand(osName):
     if osName == 'ubuntu':
-        return 'sudo apt install --no-install-recommends -y'
+        return 'sudo apt update'
     elif osName == 'centos':
-        return 'sudo yum install -y'
+        return 'sudo yum -y update'
     
 # os별 유저 생성 명령어
 def _createUserCommand(osName):
