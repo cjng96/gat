@@ -56,6 +56,9 @@ from .coCollection import dictMerge, Dict2, dictMerge2
 g_cwd = ""
 g_scriptPath = ""
 
+g_libraryMap = map()
+
+# def lbRegister()
 
 class Error(Exception):
     pass
@@ -623,6 +626,49 @@ class Tasks:
         bb = s3.bucketGet(bucket)
         return bb.downloadFile(key, dest)
 
+    def compIsn(self, options=[], packages=[]):
+        os = self._getOS()
+
+        cmd = ""
+
+        optionStr = ""
+        for option in options:
+            optionStr += option
+
+        packages = ""
+        for package in packages:
+            pass
+
+        if os == 'unbuntu':
+            pass
+        elif os == 'centos':
+            pass
+
+
+    def updateComponet(self, options=[]):
+        pass
+
+    def createUserComponent(self, cmd=[]):
+        pass
+
+    # Tasks 초기화는 보통 로컬에서 진행 -> 전역으로 두면 에러
+    # 매번 호출해주는게 바람직할듯
+    def _getOS(self):
+        try:
+            with open('/etc/os-release') as file:
+                for line in file:
+                    if line.startswith('NAME='):
+                        os_name = line.strip().split('=')[1].replace('"', '')
+                        if 'ubuntu' in os_name.lower():
+                            return 'ubuntu'
+                        elif 'centos' in os_name.lower():
+                            return 'centos'
+                        else:
+                            raise Exception('Unkonwn OS')
+        except Exception as e:
+            print(f"Error detecting OS: {e}")
+    
+
 
 # https://pythonhosted.org/watchdog/
 class MyHandler(PatternMatchingEventHandler):
@@ -855,6 +901,8 @@ class Main:
 
         # expand env and variables
         expandVar(config)
+
+        # pkgEnvInit()
 
         if not hasattr(mygod, "setupTask"):
             print("setup: You should override setupTask function in your myGod class")
