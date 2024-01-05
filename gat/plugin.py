@@ -16,6 +16,8 @@ def loadFile(pp):
         return fp.read()
 
 
+# 프로세스 관리를 위한 Supervisor 실행
+# 도커 이미지 내에서 실행 -> 수정 필요 X
 def installSupervisor(env):
     """
     It's replace start script
@@ -76,6 +78,7 @@ files = /etc/supervisor/conf.d/*.conf
     return True
 
 
+# 도커 내에서 실행 -> 수정 필요 X
 def installRunit(env):
     """
     It's replace start script
@@ -103,6 +106,8 @@ fi
     )
 
 
+# 도커 내에서 실행되는 듯? -> 수정 X
+# 어디서 호출되는지 확인 X
 def installHomebrew(env):
     if not env.runSafe(". ~/.zshrc && command -v brew"):
         env.run(
@@ -110,6 +115,8 @@ def installHomebrew(env):
         )
 
 
+# 도커 내에서 실행되는 듯? -> 수정 X
+# 어디서 호출되는지 확인 X
 def installSshfsMount(env, name, src, target, port=22, id=None):
     """
     installSshfsMount(remote, 'test', 'account@server.com:', '/tmp/mnt', port=7022)
@@ -158,6 +165,8 @@ TimeoutSec=60
     )
 
 
+# 도커 내에서 실행되는 듯? -> 수정 X
+# 어디서 호출되는지 확인 X
 def installSamba(env):
     if env.runSafe("command -v samba"):
         return
@@ -166,6 +175,8 @@ def installSamba(env):
     # env.run("sudo smbpasswd -a cjng96")
 
 
+# 도커 내에서 실행되는 듯? -> 수정 X
+# 어디서 호출되는지 확인 X
 def installKnock(env, sequence, timeout=10):
     """
     https://linux.die.net/man/1/knockd
@@ -205,6 +216,7 @@ KNOCKD_OPTS="-i eth0"
     env.run("sudo systemctl restart knockd")
 
 
+# 어디서 호출되는지 확인 X -> 명확하지 않기 때문에 일단 수정 (수정해도 돌아가기 때문)
 def dockerPhotoprism(
     env, url, srcPath, adminPw, dbHost, dbName, dbId, dbPw, name="photo"
 ):
@@ -250,6 +262,7 @@ sudo docker run -d --name {name} \
     env.run(f"docker network connect net {name}")
 
 
+# 호출 위치 판단 X, but centOS에 종속적인 명령어 X
 def dockerSeafile(env):
     # 이거 안된다
     ret = env.runOutput('. ~/.profile && docker ps -qf name="^%s$"' % "seafile")
@@ -280,6 +293,8 @@ docker run -d --name seafile \
     env.run("docker network connect net seafile")
 
 
+# nginX 설정파일 생성
+# 이 부분에서는 centOS 변환 필요 X
 def nginxSeafile(env, name):
     env.makeFile(
         """\
@@ -349,6 +364,9 @@ server {{
     certbotSetup(env, "sea.mmx.kr", "cjng96@gmail.com")
 
 
+# nginx 서버 구성 및 생성
+# pass
+# 호출 위치 파악 X
 def nginxNextcloud(
     env,
     domain,
@@ -449,6 +467,9 @@ server {{
         )
 
 
+# Nextcloud FPM 이미지를 사용하여 Nextcloud 인스턴스를 도커로 실행
+# 호출 위치 파악 X
+# 기능상으론 centOS 작업을 진행하는게 좋을듯
 def dockerNextcloudFpm(
     env,
     srcPath,
@@ -529,6 +550,9 @@ sudo docker run -d --name {name}Cron \
     env.run(f"docker network connect net {name}Cron")
 
 
+# 기능 : 도커로 NextCLoud 컨테이너 실행
+# 호출 위치 파악 : X
+# centOS 변경 : O
 def dockerNextcloud(
     env,
     domain,
@@ -597,6 +621,9 @@ server {{
         certbotSetup(web, domainStr=domain, email="cjng96@gmail.com", name=name)
 
 
+# 기능 : rclone 설치
+# 호출 위치 파악 : O
+# centOS 변경 : X
 def installRclone(env):
     if env.runSafe("command -v rclone"):
         return
@@ -604,6 +631,9 @@ def installRclone(env):
     env.run("rclone config touch")
 
 
+# 기능 : rclone을 이용해서 원격 스토리지로 파일 시스템 마운트 + systemd 서비스 등록 및 시작
+# 호출 위치 파악 : X
+# centOS 변경 : X
 def installRcloneMount(env, name, target, src=None, rclone="/usr/bin/rclone"):
     """
     installRcloneMount(remote, 'n2', src='n2:data', target='/n2', rclone='/usr/local/bin/rclone')
@@ -656,6 +686,9 @@ WantedBy=default.target
     )
 
 
+# 기능 : 레디스 설치 스크립트
+# 호출 위치 파악 : X
+# centOS 변경 : 기본적으로 설치 스크립트는 도커 내에서 실행된다고 판단 -> 변경 X
 def installRedis(env, memSize="1G", memPolicy="allkeys-lru", port=None):
     """
     memSize: 1G, 512M
@@ -686,6 +719,9 @@ def installRedis(env, memSize="1G", memPolicy="allkeys-lru", port=None):
     env.run("sudo service redis-server start")
 
 
+# 기능 : mq 설치 스크립트
+# 호출 위치 파악 : X
+# centOS 변경 : 기본적으로 설치 스크립트는 도커 내에서 실행된다고 판단 -> 변경 X
 def installRabbitMq(env, account="admin", pw=""):
     """
     localhost:15672
@@ -702,7 +738,10 @@ def installRabbitMq(env, account="admin", pw=""):
     env.run("sudo service rabbitmq-server restart")
 
 
-def installDart(env, ver="latest"):
+# 기능 : 다트 설치
+# 호출 위치 파악 : O
+# centOS 변경 : 기본적으로 설치 스크립트는 도커 내에서 실행된다고 판단 -> 변경 X
+def installDart(치env, ver="latest"):
     """
     version: lastest, 3.0.7...
     dart sdk: 400MB
@@ -751,6 +790,9 @@ def installDart(env, ver="latest"):
         raise Exception(f"unknown arch[{arch}]")
 
 
+# 기능 : rclone 설치
+# 호출 위치 파악 : O
+# centOS 변경 : 스토리지로 데이터 전송 솔루션 -> 이걸 바꿔야할까 말까
 def setupRclone(env, name, type, host, port, user, id=None, keyFile=None):
     """
     sftp용임
@@ -804,6 +846,9 @@ sha1sum_command = sha1sum
     )
 
 
+# 기능 : runit 설치
+# 호출 위치 파악 : X
+# centOS 변경 : O
 def setupRunitService(env, name, cmd):
     env.run(f"mkdir -p /var/log/{name}")
     env.run(f"sudo mkdir -p /etc/service/{name}/log")
@@ -828,6 +873,9 @@ exec chpst -u root:adm svlogd -t /var/log/{name}
     )
 
 
+# 기능 :  리눅스 시스템의 SSH 서버 설정을 변경하여 내부 SFTP(SSH File Transfer Protocol) 서버를 설정하는 스크립트
+# 호출 위치 파악 : X
+# centOS 변경 : X
 def setupInternalSftp(env):
     env.configLine(
         path="/etc/ssh/sshd_config",
@@ -849,6 +897,9 @@ Match Group sftponly
     )
 
 
+# 기능 : sftp를 사용할 수 있는 유저 생성
+# 호출 위치 파악 : O
+# centOS 변경 : O
 def makeSftpUser(env, id, rootPath="/home", dataFolderName="data", authPubs=None):
     home = f"{rootPath}/{id}"
     makeUser(
@@ -869,6 +920,9 @@ sudo chown {id}: {home}/{dataFolderName}"
     )
 
 
+# 기능 : 한 폴더를 다른 폴더로 마운트
+# 호출 위치 파악 : X
+# centOS 변경 : 애매 -> O
 def mountFolder(env, src, dest):
     env.run("sudo mkdir -p {0}".format(dest))
     if not env.runSafe(f"mountpoint -q {dest}".format()):
@@ -878,6 +932,9 @@ def mountFolder(env, src, dest):
     )
 
 
+# 기능 : rssh 설치 및 chroot 환경 설정
+# 호출 위치 파악 : X
+# centOS 변경 : O
 def installRssh(env, home, useChroot=True):
     """
     rssh이용해서 rsyn를 쓸수 있게.
@@ -978,10 +1035,16 @@ def installRssh(env, home, useChroot=True):
     env.run(f"echo ok > {home}/ok2")
 
 
+# 기능 : Rssh 사용 가능한 유저 만들기
+# 호출 위치 파악 : X
+# centOS 변경 : X
 def makeRsshUser(env, id, rootPath, authPubs):
     makeUser(env, id, home=f"{rootPath}/{id}", shell="/usr/bin/rssh", authPubs=authPubs)
 
 
+# 기능 : ssh 공개키를 사용자의 파일에 등록하는 과정 자동화
+# 호출 위치 파악 : O
+# centOS 변경 : X
 def registerAuthPubs(env, authPubs, id=None):
     print(f">> [{env.name}] registerAuthPubs - id:{id} pubs:{authPubs}")
     if id is None:
@@ -996,10 +1059,16 @@ def registerAuthPubs(env, authPubs, id=None):
         env.strEnsure(f"{home}/.ssh/authorized_keys", key, sudo=True)
 
 
+# 기능 : ssh 공개키를 사용자의 파일에 등록하는 과정 자동화
+# 호출 위치 파악 : O
+# centOS 변경 : X
 def registerAuthPub(env, pub, id=None):
     registerAuthPubs(env, [pub], id)
 
 
+# 기능 : 사용자 계정 생성 및 선택적으로 SSH 키 생성, sudo 권한 부여, 공개 ssh키 등록의 기능
+# 호출 위치 파악 : O
+# centOS 변경 : X
 def makeUser(
     env, id, home=None, shell=None, genSshKey=True, grantSudo=False, authPubs=None
 ):
@@ -1040,6 +1109,9 @@ def makeUser(
         sshKeyGen(env, id, authPubs)
 
 
+# 기능 : ssh 키 생성 및 선택적으로 키 등록
+# 호출 위치 파악 : O
+# centOS 변경 : O
 def sshKeyGen(env, id, authPubs=None):
     home = env.runOutput(f"echo ~{id}").strip()
 
@@ -1062,6 +1134,10 @@ def sshKeyGen(env, id, authPubs=None):
         registerAuthPubs(env, authPubs=authPubs, id=id)
 
 
+
+# 기능 : 이미지를 빌드하기 전 사전 작업, 컨테이너와 이미지 제거
+# 호출 위치 파악 : X
+# centOS 변경 : X
 def buildImagePre(env):
     buildImage = env.server.get("buildImage", False)
     if buildImage:
@@ -1077,6 +1153,9 @@ def buildImagePre(env):
     return buildImage
 
 
+# 기능 : 도커 이미지 빌드 후처리, 도커 컨테이너의 상태를 이미지로 커밋
+# 호출 위치 파악 : X
+# centOS 변경 : X
 def buildImagePost(env):
     buildImage = env.server.get("buildImage", False)
     if not buildImage:
@@ -1089,6 +1168,9 @@ def buildImagePost(env):
     writeBuildSh(env)
 
 
+# 기능 : 도커 컨테이너를 실행하기 위한 쉘스크립트 작성
+# 호출 위치 파악 : O
+# centOS 변경 : X
 def writeBuildSh(env):
     ss = dockerRunCmd("$1", env.vars.dkName, env.vars.get("dkPort", ""))
     env.makeFile(
@@ -1100,6 +1182,9 @@ def writeBuildSh(env):
     )
 
 
+# 기능 : 버전 문자열로 return
+# 호출 위치 파악 : O
+# centOS 변경 : X
 def verStr(version):
     if type(version) is int:
         v1 = int(version / 10000)
@@ -1110,6 +1195,9 @@ def verStr(version):
     return version
 
 
+# 기능 : 버전 관리 자동화 (기존 버전 존재시 1씩 증가)
+# 호출 위치 파악 : O
+# centOS 변경 : X
 def _skipSameVersion(env, prefix, ver):
     """
     prefix: "{name}:{baseVer}" 문자열
@@ -1133,6 +1221,9 @@ def _skipSameVersion(env, prefix, ver):
     return ver
 
 
+# 기능 : component의 해시 비교 -> 변경 사항이 있을 경우 버전 업데이트 + yaml 파일에 저장
+# 호출 위치 파악 : O
+# centOS 변경 : X
 def _getVersionYaml(env, fn, component, imgName, prefix, hash):
     """
     component이름의 hash를 얻어와서 비교하고 다르면 버젼 업후, 버젼 반환
@@ -1191,6 +1282,9 @@ def _getVersionYaml(env, fn, component, imgName, prefix, hash):
     return ver
 
 
+# 기능 : 주어진 파일의 내용을 기반으로 해시 계산 + 버전 결정
+# 호출 위치 파악 : X
+# centOS 변경 : X
 def baseCheckVersion(env, files, imgName, prefix):
     sha = hashlib.sha256()
     for fn in files:
@@ -1203,6 +1297,9 @@ def baseCheckVersion(env, files, imgName, prefix):
     return f"{prefix}{ver}", hash
 
 
+# 기능 : 배포에 사용되는 파일들의 내용을 기반으로 해시 생성 + 버전 결정
+# 호출 위치 파악 : X
+# centOS 변경 : X
 def deployCheckVersion(env, util, imgName, prefix):
     sha = hashlib.sha256()
 
@@ -1223,6 +1320,9 @@ def deployCheckVersion(env, util, imgName, prefix):
     return f"{prefix}{ver}", hash
 
 
+# 기능 : 도커 이미지 업데이트 (기존 미이지 존재 + 부모 이미지 일치시 새로운 이미지 생성)
+# 호출 위치 파악 : O
+# centOS 변경 : X
 def dockerUpdateImage(
     env, baseName, baseVer, newName, newVer, hash, func, net=None, userId=None
 ):
@@ -1287,7 +1387,10 @@ def dockerUpdateImage(
 
 
 # nodeVer는 coimg에 포함된거라 매번 바뀌지 않는다
+# centOS 변환 필요
 def dockerCoImage(env, nodeVer="16.13.1", dartVer="3.1.5"):
+    print(f"================================= dockerCoImage : {env.__dict__} ========================================")
+    print(f"================================= dockerCoImage : {os.getcwd()} ========================================")
     baseName, baseVer = dockerBaseImage(env)
 
     newName = "coimg"
@@ -1353,7 +1456,11 @@ def dockerCoImage(env, nodeVer="16.13.1", dartVer="3.1.5"):
     return newName, newVer
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def dockerBaseImage(env):
+    print(f"============================== dockerBaseImage : {env.__dict__} ==================================================")
     name = "baseimg"
     version = 1
     # 이게 서버에 동일한 버젼이 있었던 경우가 유일한 취약점이다
@@ -1397,6 +1504,7 @@ RUN apt update && \\
     return name, version
 
 
+# 수정 필요
 def dockerImageForSupervisor(env, name, version, userId, func):
     """
     기본용 이미지만 만들어놓고, FROM으로 여기서부터 생성한다 - 빠름
@@ -1455,6 +1563,9 @@ CMD ["/start"]
     env.run(f"sudo docker rmi {name}-work")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def makeDockerContainerForSupervisor(
     env, name, image=None, port=None, dkId=None, mountBase=True
 ):
@@ -1484,6 +1595,7 @@ def makeDockerContainerForSupervisor(
     return dk
 
 
+# 수정 필요
 def makeDockerContainerForRunit(
     env, name, image=None, port=None, dkId=None, mountBase=True
 ):
@@ -1506,6 +1618,9 @@ def makeDockerContainerForRunit(
     return dk
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def dockerRunCmd(name, image, port=None, mountBase=True, net=None, env=None, extra=""):
     """
     port: "3306:3306", "9018-9019:9018-9019", ["9018-9019:9018-9019"]
@@ -1565,11 +1680,17 @@ def dockerRunCmd(name, image, port=None, mountBase=True, net=None, env=None, ext
     return cmd
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def dockerContainerExists(env, name):
     ret = env.runOutput(f'. ~/.profile && sudo docker ps -aqf name="^{name}$"')
     return ret.strip() != ""
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def makeDockerContainer(env, name, image=None, port=None, mountBase=True):
     """
     image: None(create image directly), string(using that image)
@@ -1613,6 +1734,9 @@ CMD ["/start"]
     env.run(f". ~/.profile && sudo docker cp /tmp/dockerCmd {name}:/cmd")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def writeRunScript(env, cmd):
     print(f">> [{env.name}] writeRunScript: {cmd}")
     env.makeFile(
@@ -1628,6 +1752,9 @@ def writeRunScript(env, cmd):
     writeSvHelper(env)
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def writeSvHelper(env):
     print(f">> [{env.name}] writeSvHelper")
 
@@ -1649,6 +1776,9 @@ echo "{help}"
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def promptSet(env, name):
     env.configBlock(
         path="~/.bashrc",
@@ -1657,6 +1787,9 @@ def promptSet(env, name):
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def supervisorBasic(env, serverName):
     if env.runSafe("test -f /etc/profile.d/sv.sh"):
         return
@@ -1679,6 +1812,9 @@ alias slog='sudo supervisorctl tail -f'
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def localeSet(env):
     env.run("sudo apt install --no-install-recommends -y locales")
     env.run(
@@ -1686,6 +1822,9 @@ def localeSet(env):
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def registerSshPubsFromS3(env, local, bucket, prefix, account):
     local.run("mkdir -p work/%s" % prefix)
     lst = local.s3List(bucket=bucket, prefix=prefix)
@@ -1707,6 +1846,9 @@ def registerSshPubsFromS3(env, local, bucket, prefix, account):
     registerSshPubs(env, local=local, pubs=pubs, account=account)
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def registerSshPubs(env, local, pubs, account):
     # pp = "~/.ssh/authorized_keys"
     home = env.runOutput("echo ~%s" % account).strip()
@@ -1719,6 +1861,9 @@ def registerSshPubs(env, local, pubs, account):
         )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def supervisorSshServer(env, port, denyUsers=None):
     env.run("sudo apt install --no-install-recommends -y openssh-server")
     env.configLine(
@@ -1751,6 +1896,9 @@ stdout_logfile=/var/log/supervisor/%(program_name)s_out.log
     env.run("sudo supervisorctl reread && sudo supervisorctl update")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def cronForSupervisor(env):
     env.run("sudo apt install --no-install-recommends -y cron anacron")
     # env.uploadFileTo("./files/cron.conf", "/tmp/efile/")
@@ -1777,6 +1925,9 @@ exit 0
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def rsyslogForSupervisor(env):
     env.run("sudo apt install --no-install-recommends -y rsyslog")
     env.makeFile(
@@ -1795,6 +1946,9 @@ stdout_logfile=/var/log/supervisor/%(program_name)s_out.log
     env.run("sudo supervisorctl reread && sudo supervisorctl update")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def logrotateForSupervisor(env):
     env.run("sudo apt install --no-install-recommends -y logrotate")
     env.makeFile(
@@ -1814,6 +1968,9 @@ def logrotateForSupervisor(env):
     env.run("sudo supervisorctl reread && sudo supervisorctl update")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def setupTz(env):
     # mongodb설치할때 time zone물어본다 그거 회피용
     # https://stackoverflow.com/questions/44331836/apt-get-install-tzdata-noninteractive
@@ -1825,6 +1982,9 @@ def setupTz(env):
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 # TODO: mysql, goBuild, gqlGen, dbXorm, pm2Register등은 기본 task에서 빼야할듯
 def mysqlUserDel(env, id, host):
     hr = env.runOutput(
@@ -1836,6 +1996,9 @@ def mysqlUserDel(env, id, host):
     env.run('''sudo mysql -e "DROP USER '%s'@'%s';"''' % (id, host))
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def mysqlUserGen(env, id, pw, host, priv, unixSocket=False):
     """
     priv: "*.*:ALL,GRANT", "*.*:RELOAD,PROCESS,LOCK TABLES,REPLICATION CLIENT"
@@ -1870,6 +2033,9 @@ def mysqlUserGen(env, id, pw, host, priv, unixSocket=False):
         )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def goBuild(env, targetOs="", targetArch=""):
     """
     os: windows, darwin, linux
@@ -1892,6 +2058,9 @@ def goBuild(env, targetOs="", targetArch=""):
         raise Exception("task.goBuild: build failed")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def gqlGen(env):
     print("task: gql gen...")
     env.onlyLocal()
@@ -1914,6 +2083,9 @@ def gqlGen(env):
         print("task: gql - skip because of no modification.")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def dbXormReverse(env):
     print("task: xorm reverse...")
     env.onlyLocal()
@@ -1946,6 +2118,9 @@ def dbXormReverse(env):
     env.run(cmd)
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def installMongodb(
     env,
     dataDir="/var/lib/mongodb",
@@ -2013,6 +2188,9 @@ sudo gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg --dearmor"
     env.makeFile(ss, "/etc/mongod.conf")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def mongodbForSupervisor(env, dataDir, cacheSizeGB=None, admin=None, pw=None):
     if env.runSafe("command -v mongo"):
         return False
@@ -2057,6 +2235,9 @@ autostart=true
     env.run("sudo supervisorctl restart mongodb")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def installMariaDb(env, dataDir="/var/lib/mysql", port=3306, repo=None):
     """
     repo = "deb [arch=amd64,arm64,ppc64el,s390x] https://mirror.yongbok.net/mariadb/repo/10.5/ubuntu focal main"
@@ -2114,6 +2295,9 @@ def installMariaDb(env, dataDir="/var/lib/mysql", port=3306, repo=None):
     )  # it runs when apt install. baseimage에서는 실행이 안된다
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def mariadbInit(env, binlog, galera, galeraIps, galeraSstPw):
     """
     ips: 192.168.1.100,192.168.1.101
@@ -2162,6 +2346,9 @@ log_slave_updates=1
     # https://whitekeyboard.tistory.com/620?category=881248
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def upcntRunStr():
     # return "test -f /var/opt/upcnt || echo 0 > /var/opt/upcnt; awk -F, '{$1=$1+1}1' /var/opt/upcnt > /tmp/upt && mv /tmp/upt /var/opt/upcnt"
     return (
@@ -2169,6 +2356,9 @@ def upcntRunStr():
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def baseimgInitScript(env):
     env.makeFile(
         content="#!/bin/bash\necho -1 > /var/run/upcnt",
@@ -2176,6 +2366,9 @@ def baseimgInitScript(env):
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def mariaDbForSupervisor(env, dataDir="/var/lib/mysql", port=3306):
     # hr = env.runOutput('pidof mysqld; echo').strip()
     # if len(hr) > 0:
@@ -2204,6 +2397,9 @@ autostart=true
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def mysqlCreateUsersFromS3(env, local, bucket, key):
     # local.run("mkdir -p ./work")
     dbUserList = local.s3DownloadFile(bucket=bucket, key=key, dest=None).decode()
@@ -2215,6 +2411,9 @@ def mysqlCreateUsersFromS3(env, local, bucket, key):
         )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 # mariabackup과 비교해서 복구시 1:15 vs 15초 정도로 5배 정도 느리다
 # 빽업은 37 vs 11 3.5배정도 느리다
 def mysqlSqlDump(env, cron):
@@ -2253,6 +2452,9 @@ fi
         env.run("ln -sf /usr/local/bin/db-dump /etc/cron.daily/db-dump")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def mysqlBinDump(env, cron, desync):
     # 이제 이거만 쓴다
     # 증분빽업은 이렇게
@@ -2339,17 +2541,27 @@ fi
         env.run("ln -sf /usr/local/bin/db-bdump /etc/cron.daily/db-bdump")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def dockerForceNetwork(env, name):
     env.run(f"docker network inspect {name} || docker network create {name}")
     # -f {{.Name}}
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def getArch(env):
     arch = env.runOutput("dpkg --print-architecture").strip()
     return arch
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def installDocker(env, arch=None):
+    print(f"============================== installDocker : {env.run('pwd')} ==================================================")
     """
     arch: amd64 | arm64
     """
@@ -2380,6 +2592,9 @@ def installDocker(env, arch=None):
     time.sleep(3)  # boot up
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def installRestic(env, version, arch=None):
     """
     version: 0.12.1
@@ -2400,6 +2615,9 @@ def installRestic(env, version, arch=None):
         env.run("rm -rf restic")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def supervisorNginxInstall(env):
     if env.runSafe("command -v nginx"):
         return
@@ -2446,6 +2664,9 @@ autorestart=true
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def certbotInstall(env):
     if env.runSafe("command -v certbot"):
         return
@@ -2480,6 +2701,9 @@ test -x /usr/bin/certbot -a \! -d /run/systemd/system && perl -e 'sleep int(rand
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def certbotCopy(pubWeb, web, domain, cfgName):
     # 일단 d21 proxy, direct 둘다 지원한다
     # cron으로 주기적으로 가져와야한다
@@ -2514,6 +2738,9 @@ def certbotCopy(pubWeb, web, domain, cfgName):
         web.run("nginx -s reload")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def bupInstall(env, bupPath):
     env.run(
         "sudo add-apt-repository -y ppa:ulikoehler/bup && sudo apt update && sudo apt -y install bup git"
@@ -2533,6 +2760,9 @@ export BUP_DIR={bupPath}
         )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def certbotSetup(
     env,
     domainStr,
@@ -2584,6 +2814,9 @@ def certbotSetup(
     env.run("sudo nginx -s reload")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def nginxWebSite(
     env,
     name,
@@ -2664,6 +2897,9 @@ server {{
         )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 # deprecated - setupWebApp을 privateApi, root없이 쓰자. publicApi는 '/'
 def setupProxyForNginx(
     env,
@@ -2744,6 +2980,9 @@ server {{
         env.run("sudo nginx -s reload")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 # deprecated - setupWebApp을 root=null로 사용하라
 def setupProxyForNginxWithPrivate(
     env,
@@ -2815,7 +3054,9 @@ server {{
         env.run("sudo nginx -s reload")
 
 
-#
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def setupWebApp(
     env,
     name,
@@ -2961,6 +3202,9 @@ server {{
         env.run("sudo nginx -s reload")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def cronResticB2BackupFromS3(env, local, bucket, key, b2Repo, pw, dirs):
     if env.runSafe("test -f /etc/cron.daily/restic-sync"):
         return
@@ -2969,6 +3213,9 @@ def cronResticB2BackupFromS3(env, local, bucket, key, b2Repo, pw, dirs):
     cronResticB2Backup(env, "restic-backup", b2Info.id, b2Info.secret, b2Repo, pw, dirs)
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def cronResticB2Backup(env, name, b2id, b2secret, b2repo, pw, dirs, baseDir=None):
     pp = f"/etc/cron.daily/{name}"
     # if env.runSafe(f"test -f {pp}"):
@@ -3007,6 +3254,9 @@ fi
         raise e
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def installGolang(env, version, arch):
     """
     version=1.13.5
@@ -3024,6 +3274,9 @@ def installGolang(env, version, arch):
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def installGocryptfs(env, withOpenssl=False):
     if env.runSafe(". ~/.profile && command -v gocryptfs"):
         return
@@ -3049,6 +3302,9 @@ def installGocryptfs(env, withOpenssl=False):
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def installTransmission(env, port, userName, pw, downDir, incompleteDir, watchDir):
     if port == "":
         raise Exception("transmission - specify port")
@@ -3115,6 +3371,9 @@ def installTransmission(env, port, userName, pw, downDir, incompleteDir, watchDi
     env.run("sudo /etc/init.d/transmission-daemon start")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def pm2Register(env, nvmPath="~/.nvm", useNvm=True):
     print("task: pm2 register...")
     env.onlyRemote()
@@ -3126,12 +3385,18 @@ def pm2Register(env, nvmPath="~/.nvm", useNvm=True):
     env.run(cmd)
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def pm2Install(env):
     env.run(
         f". ~/.profile && cd {env.server.deployPath} && /opt/nvm/nvm-exec npm i -g pm2"
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def nvmInstall(env, account=None, nodeVer=None):
     """
     node는 추가시 34m정도
@@ -3166,6 +3431,9 @@ export NVM_DIR=/opt/nvm
         env.run(f". /etc/profile && . /opt/nvm/nvm.sh && nvm install {nodeVer}")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def fnmInstall(env, nodeVer=None):
     if env.runSafe("command -v fnm"):
         return
@@ -3187,12 +3455,18 @@ def fnmInstall(env, nodeVer=None):
         env.run(f". /etc/profile && fnm install {nodeVer}")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def pnpmAndGulp(env):
     # 이거 의미 없다. 쓰면 안된다.
     env.run(". /etc/profile && . /opt/nvm/nvm.sh && npm install -g pnpm")
     env.run(". /etc/profile && . /opt/nvm/nvm.sh && pnpm install -g gulp")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def installYarnGulp(env):
     # . /opt/nvm.sh --install 이거는 .nvmrc를 인스톨을 못한다.
     env.run(
@@ -3209,6 +3483,9 @@ def installYarnGulp(env):
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def installNvmPnpmGulp(env, gulpBuild=True):
     """
     pnpm 이제 쓰지말자, node_modules link폴더 인식 안되고,
@@ -3233,6 +3510,9 @@ def installNvmPnpmGulp(env, gulpBuild=True):
         )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def installNvmGulp(env, installGulp=True, gulpBuild=True, path=None):
     if path is None:
         path = env.util.cfg.deployPath
@@ -3247,6 +3527,9 @@ def installNvmGulp(env, installGulp=True, gulpBuild=True, path=None):
         env.run(f". ~/.profile && cd {path} && /opt/nvm/nvm-exec gulp build")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def installFail2ban(env, action="iptables-multiport", blockType=None, ignoreIps=""):
     """
     ignoreIps: '1.1.1.1 2.2.2.2' or [ '1.1.1.1', '2.2.2.2' ]
@@ -3295,6 +3578,9 @@ port     = 22
     env.run("sudo systemctl restart fail2ban")
 
 
+# 기능 : rclone을 사용하여 특적 서버에 대한 SFTP 백업 설정 자동화
+# 호출 위치 파악 : X
+# centOS 변경 : X
 def rcloneSetupForN2(env, accountName, pubs):
     # backup.strEnsure("/jail/%s/.ssh/authorized_keys" % 'b_engdb', pub, sudo=True)
     backup = env.remoteConn(host="backup.mmx.kr", port=7022, id="cjng96")
@@ -3312,6 +3598,9 @@ def rcloneSetupForN2(env, accountName, pubs):
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def sshTunneling(env, runUser, name, host, user, local, remote, port=22):
     """
     sudo systemctl status secure-tunnel@dkreg
@@ -3366,6 +3655,9 @@ Host {name}
     env.run(f"sudo systemctl enable --now secure-tunnel@{name}")
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def scriptBasic(env):
     env.configBlock(
         path="~/.bashrc",
@@ -3376,6 +3668,9 @@ alias sz="sudo du -hd1 | sort -h"
     )
 
 
+# 기능 : 
+# 호출 위치 파악 : 
+# centOS 변경 : 
 def scriptDocker(env, saYml="./resource/sa.yml"):
     env.makeFile(
         path="/usr/local/bin/de", content="""docker exec -it "$@" bash -l """, sudo=True
