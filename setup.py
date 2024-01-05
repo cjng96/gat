@@ -1,10 +1,10 @@
 from setuptools import setup, find_packages
-import gattool
+import gat
 
 setup(
-    name="gat-tool",
-    version=gattool.__version__,
-    description="Restart automatically when modified and support deployment for golang.",
+    name="god-tool",
+    version=gat.__version__,
+    description="Provisioning and App deployment tool.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     author="Felix Choi",
@@ -18,7 +18,7 @@ setup(
     python_requires=">=3",
     platforms="Posix; MacOS X; Windows",
     zip_safe=False,
-    entry_points={"console_scripts": ["gat=gattool:gat.main"]},
+    entry_points={"console_scripts": ["gat=gat:gat.main"]},
     classifiers=[
         "Operating System :: OS Independent",
         "Programming Language :: Python",
