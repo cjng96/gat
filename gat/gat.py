@@ -66,6 +66,7 @@ g_packages = {
     "libmysqlclient-dev" : "mysql-devel",
     "python3-pip" : "python3-pip",
     "locales" : "glibc-locale-source glibc-langpack-en",
+    "openssh-server" : "openssh-server",
 }
 
 # 우분투 명령어와 centos 명령어를 매핑

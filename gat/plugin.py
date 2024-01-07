@@ -1823,8 +1823,8 @@ alias slog='sudo supervisorctl tail -f'
 
 
 # 기능 : 시스템의 로케일 설정을 변경하는 작업
-# 호출 위치 파악 : 
-# centOS 변경 : O
+# 호출 위치 파악 : X
+# centOS 변경 : O -> 변경 완료
 def localeSet(env):
     # env.run("sudo apt install --no-install-recommends -y locales")
     env.pkgInstall(sudo=True, options=["--no-install-recommends", "-y"], packages=["locales"])
@@ -1869,7 +1869,7 @@ def registerSshPubsFromS3(env, local, bucket, prefix, account):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def registerSshPubs(env, local, pubs, account):
     # pp = "~/.ssh/authorized_keys"
     home = env.runOutput("echo ~%s" % account).strip()
@@ -1882,11 +1882,13 @@ def registerSshPubs(env, local, pubs, account):
         )
 
 
-# 기능 : 
-# 호출 위치 파악 : 
-# centOS 변경 : 
+# 기능 : SSH 서버를 설치하고, Supervisor를 사용하여 이를 관리하는 설정을 구성하는 작업
+# 호출 위치 파악 : X
+# centOS 변경 : O -> 변경 완료
 def supervisorSshServer(env, port, denyUsers=None):
-    env.run("sudo apt install --no-install-recommends -y openssh-server")
+    # env.run("sudo apt install --no-install-recommends -y openssh-server")
+    env.pkgInstall(sudo=True, options=["--no-install-recommends", "-y"], packages=["openssh-server"])
+
     env.configLine(
         path="/etc/ssh/sshd_config",
         regexp="#PasswordAuthtication yes",
