@@ -1118,8 +1118,9 @@ def sshKeyGen(env, id, authPubs=None):
 
     # 자기파일이라 sudo가 필요없어야하는데, 이미 존재했을 경우 위에서 chown을 해주는데도 안되는 경우가 있음
     if not env.runSafe(f"sudo test -e {home}/.ssh/id_rsa"):
-        env.run("sudo apt update")  # openssh-client설치에서 404오류 나는 경우가
-        env.run("sudo apt install --no-install-recommends -y openssh-client")
+        env.pkgUpdate(sudo=True) # openssh-client설치에서 404오류 나는 경우가
+        # env.run("sudo apt install --no-install-recommends -y openssh-client")
+        env.pkgInstall(sudo=True, options = ["--no-install-recommends", "-y"], packages=["openssh-client"])
         env.run(
             f'sudo -u {id} ssh-keygen -b 2048 -q -t ed25519 -N "" -f {home}/.ssh/id_rsa'
         )

@@ -60,7 +60,7 @@ g_scriptPath = ""
 # key(ubuntu) : value(centos)
 # 우분투 패키지 명 기준으로 매핑 
 g_packages = {
-    
+    "openssh-client" : "openssh-clients",
 }
 
 # 우분투 명령어와 centos 명령어를 매핑
