@@ -17,6 +17,7 @@ def loadFile(pp):
 
 
 # 프로세스 관리를 위한 Supervisor 실행
+# 수정 완료
 def installSupervisor(env):
     """
     It's replace start script
@@ -80,7 +81,7 @@ files = /etc/supervisor/conf.d/*.conf
     )
     return True
 
-
+# 수정 완료
 def installRunit(env):
     """
     It's replace start script
@@ -116,13 +117,14 @@ def installHomebrew(env):
             'bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
         )
 
-
+# 수정 완료
 def installSshfsMount(env, name, src, target, port=22, id=None):
     """
     installSshfsMount(remote, 'test', 'account@server.com:', '/tmp/mnt', port=7022)
     """
     if not env.runSafe("command -v sshfs"):
-        env.run("sudo apt install --no-install-recommends -y sshfs")
+        # env.run("sudo apt install --no-install-recommends -y sshfs")
+        env.pkgInstall(sudo=True, options=["--no-install-recommends", "-y"], packages=["sshfs"])
 
     if id is None:
         home = "~"
@@ -165,8 +167,7 @@ TimeoutSec=60
     )
 
 
-# 도커 내에서 실행되는 듯? -> 수정 X
-# 어디서 호출되는지 확인 X
+# 수정 완료
 def installSamba(env):
     if env.runSafe("command -v samba"):
         return
@@ -175,8 +176,7 @@ def installSamba(env):
     # env.run("sudo smbpasswd -a cjng96")
 
 
-# 도커 내에서 실행되는 듯? -> 수정 X
-# 어디서 호출되는지 확인 X
+# 수정 완료
 def installKnock(env, sequence, timeout=10):
     """
     https://linux.die.net/man/1/knockd
@@ -211,7 +211,8 @@ KNOCKD_OPTS="-i eth0"
     )
 
     if not env.runSafe("command -v knock"):
-        env.run("sudo apt install -y knockd")
+        # env.run("sudo apt install -y knockd")
+        env.pkgInstall(sudo=True, options=["-y"], packages=["knockd"])
         env.run("sudo systemctl enable knockd")
     env.run("sudo systemctl restart knockd")
 

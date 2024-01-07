@@ -62,6 +62,7 @@ g_scriptPath = ""
 g_packages = {
     "rssh" : "rssh",
     "sshfs" : "sshfs",
+    "knockd" : "epel-release knockd",
     "openssh-client" : "openssh-clients",
     "git" : "git",
     "libmysqlclient-dev" : "mysql-devel",
