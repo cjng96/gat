@@ -947,7 +947,7 @@ def mountFolder(env, src, dest):
 
 # 기능 : rssh 설치 및 chroot 환경 설정
 # 호출 위치 파악 : X
-# centOS 변경 : O
+# centOS 변경 : O -> 변경 완료
 def installRssh(env, home, useChroot=True):
     """
     rssh이용해서 rsyn를 쓸수 있게.
@@ -1874,7 +1874,7 @@ def localeSet(env):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def registerSshPubsFromS3(env, local, bucket, prefix, account):
     local.run("mkdir -p work/%s" % prefix)
     lst = local.s3List(bucket=bucket, prefix=prefix)
@@ -2025,15 +2025,18 @@ def logrotateForSupervisor(env):
 
 # 기능 : mongodb설치할때 time zone물어본다 그거 회피용
 # 호출 위치 파악 : 
-# centOS 변경 : X
+# centOS 변경 : O -> 변환 완료
 def setupTz(env):
     # https://stackoverflow.com/questions/44331836/apt-get-install-tzdata-noninteractive
     env.run(
         "export DEBIAN_FRONTEND=noninteractive && "
         "sudo ln -fs /usr/share/zoneinfo/Asia/Seoul /etc/localtime && "
-        "sudo apt install -y tzdata && "
         "sudo dpkg-reconfigure --frontend noninteractive tzdata"
     )
+    # "sudo apt install -y tzdata"
+    env.pkgInstall(sudo=True, options=["-y"], packages=["tzdata"])
+
+    env.run("sudo dpkg-reconfigure --frontend noninteractive tzdata")
 
 
 # 기능 : 

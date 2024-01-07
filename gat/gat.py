@@ -73,6 +73,7 @@ g_packages = {
     "python3-setuptools" : "python36-setuptools",
     "locales" : "glibc-locale-source glibc-langpack-en",
     "openssh-server" : "openssh-server",
+    "tzdata" : "tzdata",
     "cron" : "cronie",
     "anacron" : "anacron",
     "rsyslog" : "rsyslog",
