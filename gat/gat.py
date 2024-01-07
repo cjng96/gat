@@ -64,13 +64,16 @@ g_packages = {
     "openssh-client" : "openssh-clients",
     "git" : "git",
     "libmysqlclient-dev" : "mysql-devel",
-    "python3-pip" : "python3-pip",
+    "python3" : "epel-release python36",
+    "python3-pip" : "python36-pip",
+    "python3-setuptools" : "python36-setuptools",
     "locales" : "glibc-locale-source glibc-langpack-en",
     "openssh-server" : "openssh-server",
     "cron" : "cronie",
     "anacron" : "anacron",
     "rsyslog" : "rsyslog",
     "logrotate" : "logrotate",
+    "sudo" : "sudo",
 }
 
 # 우분투 명령어와 centos 명령어를 매핑

@@ -17,7 +17,6 @@ def loadFile(pp):
 
 
 # 프로세스 관리를 위한 Supervisor 실행
-# 도커 이미지 내에서 실행 -> 수정 필요 X
 def installSupervisor(env):
     """
     It's replace start script
@@ -25,13 +24,17 @@ def installSupervisor(env):
     if env.runSafe("test -f /etc/supervisor/supervisord.conf"):
         return False
 
-    env.run("apt update")
+    # env.run("apt update")
+    env.pkgUpdate(sudo=False)
     # env.run('apt install -y supervisor sudo')
     # env.run('apt install -y python python-pip python-setuptools python3 python3-pip python3-setuptools')
-    env.run("apt install --no-install-recommends -y sudo")
-    env.run(
-        "apt install --no-install-recommends -y python3 python3-pip python3-setuptools"
-    )
+    # env.run("apt install --no-install-recommends -y sudo")
+    env.pkgInstall(sudo=False, options=["--no-install-recommends", "-y"], packages=["sudo"])
+    # env.run(
+    #     "apt install --no-install-recommends -y python3 python3-pip python3-setuptools"
+    # )
+    env.pkgInstall(sudo=False, options=["--no-install-recommends", "-y"], packages=["python3", "python3-pip", "python3-setuptools"])
+
     env.run("pip3 install supervisor")
     env.run("mkdir -p /var/log/supervisor")
 
@@ -1994,11 +1997,10 @@ def logrotateForSupervisor(env):
     env.run("sudo supervisorctl reread && sudo supervisorctl update")
 
 
-# 기능 : 
+# 기능 : mongodb설치할때 time zone물어본다 그거 회피용
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def setupTz(env):
-    # mongodb설치할때 time zone물어본다 그거 회피용
     # https://stackoverflow.com/questions/44331836/apt-get-install-tzdata-noninteractive
     env.run(
         "export DEBIAN_FRONTEND=noninteractive && "
@@ -2585,7 +2587,7 @@ def getArch(env):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : O
 def installDocker(env, arch=None):
     print(f"============================== installDocker : {env.run('pwd')} ==================================================")
     """
