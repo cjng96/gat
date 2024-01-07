@@ -730,7 +730,7 @@ def installRedis(env, memSize="1G", memPolicy="allkeys-lru", port=None):
 
 # 기능 : mq 설치 스크립트
 # 호출 위치 파악 : X
-# centOS 변경 : 기본적으로 설치 스크립트는 도커 내에서 실행된다고 판단 -> 변경 X
+# centOS 변경 : O -> 변경 완료
 def installRabbitMq(env, account="admin", pw=""):
     """
     localhost:15672
@@ -738,13 +738,16 @@ def installRabbitMq(env, account="admin", pw=""):
     if env.runSafe("command -v rabbitmqctl"):
         return
 
-    env.run(
-        "sudo apt install --no-install-recommends -y rabbitmq-server && sudo service rabbitmq-server start"
-    )
+    # env.run(
+    #     "sudo apt install --no-install-recommends -y rabbitmq-server && sudo service rabbitmq-server start"
+    # )
+    env.pkgInstall(sudo=True, options=["--no-install-recommends", "-y"])
+    env.pkgStart(sudo=True, package="rabbitmq-server")
     env.run("sudo rabbitmq-plugins enable rabbitmq_management")
     env.run(f'sudo rabbitmqctl add_user {account} "{env.util.str2arg(pw)}"')  # TODO: pw
     env.run(f"sudo rabbitmqctl set_user_tags {account} administrator")
-    env.run("sudo service rabbitmq-server restart")
+    # env.run("sudo service rabbitmq-server restart")
+    env.pkgRestart(sudo=True, package="rabbitmq-server")
 
 
 # 기능 : 다트 설치

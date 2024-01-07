@@ -67,6 +67,7 @@ g_packages = {
     "git" : "git",
     "libmysqlclient-dev" : "mysql-devel",
     "redis-server" : "redis",
+    "rabbitmq-server" : "rabbitmq-server",
     "python3" : "epel-release python36",
     "python3-pip" : "python36-pip",
     "python3-setuptools" : "python36-setuptools",
@@ -703,6 +704,42 @@ class Tasks:
         # 명령어 실행
         cmd = f"{cmdSudo}{cmdPkgManager} update"
         self.run(cmd)
+
+    # 프로그램 실행 함수
+    def pkgStart(self, sudo=False, package=""):
+        os = self.getOS()
+
+        # sudo 권한 여부 확인 후 sudo 추가
+        cmdSudo = "sudo " if sudo else ""
+
+        # 프로그램 시작 명령어
+        cmdPkgStart = None
+        pkg = self._mapPackageToOs(os=os, packages=package)
+        if os == 'ubuntu':
+            cmdPkgStart = f"service {pkg} start"
+        elif os == 'centos':
+            cmdPkgStart = f"systemctl start {pkg} && {cmdSudo}systemctl {pkg}"
+
+        # 명령어 실행
+        cmd = f"{cmdSudo}{cmdPkgStart}"
+        
+    def pkgRestart(self, sudo=False, package=""):
+        os = self.getOS()
+
+        # sudo 권한 여부 확인 후 sudo 추가
+        cmdSudo = "sudo " if sudo else ""
+
+        # 프로그램 시작 명령어
+        cmdPkgStart = None
+        pkg = self._mapPackageToOs(os=os, packages=package)
+        if os == 'ubuntu':
+            cmdPkgStart = f"service {pkg} restart"
+        elif os == 'centos':
+            cmdPkgStart = f"systemctl restart {pkg}"
+
+        # 명령어 실행
+        cmd = f"{cmdSudo}{cmdPkgStart}"
+
 
     # Tasks 초기화는 보통 로컬에서 진행 -> 전역으로 두면 에러
     # 매번 호출해주는게 바람직할듯
