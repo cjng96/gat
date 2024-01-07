@@ -1822,14 +1822,25 @@ alias slog='sudo supervisorctl tail -f'
     )
 
 
-# 기능 : 
+# 기능 : 시스템의 로케일 설정을 변경하는 작업
 # 호출 위치 파악 : 
 # centOS 변경 : O
 def localeSet(env):
-    env.run("sudo apt install --no-install-recommends -y locales")
-    env.run(
-        "sudo locale-gen en_US en_US.UTF-8 && sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8"
-    )
+    # env.run("sudo apt install --no-install-recommends -y locales")
+    env.pkgInstall(sudo=True, options=["--no-install-recommends", "-y"], packages=["locales"])
+    
+    os = env.getOS()
+
+    if os == 'ubuntu' :
+        env.run(
+            "sudo locale-gen en_US en_US.UTF-8 && sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8"
+        )
+    elif os == 'centos':
+        env.run(
+            "sudo localedef -c -i en_US -f UTF-8 en_US.UTF-8 && sudo localectl set-locale LANG=en_US.UTF-8"
+        )
+        
+        
 
 
 # 기능 : 
