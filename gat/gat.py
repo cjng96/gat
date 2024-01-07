@@ -56,7 +56,22 @@ from .coCollection import dictMerge, Dict2, dictMerge2
 g_cwd = ""
 g_scriptPath = ""
 
-g_libraryMap = map()
+# 우분투 명령어와 centos 명령어를 매핑
+# key(ubuntu) : value(centos)
+# 우분투 패키지 명 기준으로 매핑 
+g_packages = {
+    
+}
+
+# 우분투 명령어와 centos 명령어를 매핑
+# key(ubuntu) : value(centos)
+# 우분투 패키지 명 기준으로 매핑
+g_options = {
+    '-y' : '-y',
+    '--no-install-recommends' : '',
+}
+
+
 
 # def lbRegister()
 
@@ -626,34 +641,55 @@ class Tasks:
         bb = s3.bucketGet(bucket)
         return bb.downloadFile(key, dest)
 
-    def compIsn(self, options=[], packages=[]):
-        os = self._getOS()
+    # 패키지 install 함수 -> ubuntu, centos 지원
+    def pkgInstall(self, sudo=False, options=[], packages=[]):
+        os = self.getOS()
 
-        cmd = ""
+        # sudo 권한 여부 확인 후 sudo 추가
+        cmdSudo = "sudo " if sudo else ""
 
-        optionStr = ""
-        for option in options:
-            optionStr += option
-
-        packages = ""
-        for package in packages:
-            pass
-
-        if os == 'unbuntu':
-            pass
+        # OS에 따라 패키지 매니저 추가
+        cmdPkgManager = None
+        if os == 'ubuntu':
+            cmdPkgManager = 'apt-get'
         elif os == 'centos':
-            pass
+            cmdPkgManager = 'yum'
+        
+        # 해당 옵션을 운영체제에 알맞게 매핑 
+        optionList = self._mapOptionToOs(os=os, options=options)
+        cmdOption = " ".join(optionList)
 
+        # 해당 OS에 알맞게 패키지명 매핑
+        packageList = self._mapPackageToOs(os=os, packages=packages)
+        cmdPackage = " ".join(packageList)
+        
 
-    def updateComponet(self, options=[]):
-        pass
+        # 명령어 실행
+        cmd = f"{cmdSudo}{cmdPkgManager} install {cmdOption} {cmdPackage}"
+        self.run(cmd)
+        
 
-    def createUserComponent(self, cmd=[]):
-        pass
+    # update 함수 -> ubuntu, centos 지원
+    def pkgUpdate(self, sudo=False):
+        os = self.getOS()
+
+        # sudo 권한 여부 확인 후 sudo 추가
+        cmdSudo = "sudo " if sudo else ""
+
+        # OS에 따라 패키지 매니저 추가
+        cmdPkgManager = None
+        if os == 'ubuntu':
+            cmdPkgManager = 'apt-get'
+        elif os == 'centos':
+            cmdPkgManager = 'yum'
+        
+        # 명령어 실행
+        cmd = f"{cmdSudo}{cmdPkgManager} update"
+        self.run(cmd)
 
     # Tasks 초기화는 보통 로컬에서 진행 -> 전역으로 두면 에러
     # 매번 호출해주는게 바람직할듯
-    def _getOS(self):
+    def getOS(self):
         try:
             with open('/etc/os-release') as file:
                 for line in file:
@@ -664,10 +700,44 @@ class Tasks:
                         elif 'centos' in os_name.lower():
                             return 'centos'
                         else:
-                            raise Exception('Unkonwn OS')
+                            raise Exception('Unknown OS')
         except Exception as e:
             print(f"Error detecting OS: {e}")
+
+    # 옵션 인자를 OS에 맞춰서 매핑
+    def _mapOptionToOs(self, os = '', options = []):
+        global g_options
+        optionList = []
     
+        for option in options:
+            if g_options.__contains__(option):
+                if os == 'ubuntu':
+                    optionList.append(option)
+                elif os == 'centos':
+                    optionCentOs = g_options.get(option)
+                    optionList.append(optionCentOs)
+            else:
+                raise Exception('Unknown option')
+
+        return optionList
+    
+    # 패키지를 OS에 맞춰서 매핑
+    def _mapPackageToOs(self, os = '', packages = []):
+        global g_packages
+        packageList = []
+
+        for package in packages:
+            if g_packages.__contains__(package):
+                if os == 'ubuntu':
+                    packageList.append(package)
+                elif os == 'centos':
+                    packageCentOs = g_packages.get(package)
+                    packageList.append(packageCentOs)
+            else:
+                raise Exception('Unknown package')
+
+        return packageList
+
 
 
 # https://pythonhosted.org/watchdog/

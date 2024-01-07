@@ -742,7 +742,7 @@ def installRabbitMq(env, account="admin", pw=""):
 # 기능 : 다트 설치
 # 호출 위치 파악 : O
 # centOS 변경 : 기본적으로 설치 스크립트는 도커 내에서 실행된다고 판단 -> 변경 X
-def installDart(치env, ver="latest"):
+def installDart(env, ver="latest"):
     """
     version: lastest, 3.0.7...
     dart sdk: 400MB
@@ -948,16 +948,11 @@ def installRssh(env, home, useChroot=True):
     또 문제가, internal-sftp는 /media/ssd1/users/b_test2를 쓰려고 하면 /media/ssd1..등의 부모 폴더도
     다 root owned and 755여야 한다. mount bind할수 있지만 치명적
     """
-
-    os = _getOS()
-    _checkNotNullOS(os)
-    installCommand = _getInstallCommand(os)
-
     # https://www.cyberciti.biz/tips/howto-linux-unix-rssh-chroot-jail-setup.html"
     if env.runSafe(f"test -f {home}/ok"):
         return
 
-    env.run(f"{installCommand} rssh")
+    env.pkgInstall(sudo=True, options=["--no-install-recommends", "-y"], packages=["rssh"])
     env.run(f"mkdir -p {home}/{{dev,etc,lib,usr,bin}}")
     env.run(f"mkdir -p {home}/usr/bin")
     # env.run(f'mkdir -p {home}/usr/libexec/openssh'.format(home))
@@ -1078,9 +1073,6 @@ def registerAuthPub(env, pub, id=None):
 def makeUser(
     env, id, home=None, shell=None, genSshKey=True, grantSudo=False, authPubs=None
 ):
-    os = _getOS()
-    _checkNotNullOS(os)
-    createUserComm = _createUserCommand(os)
     print(
         f">> [{env.name}] makeUser - id:{id} home:{home} shell:{shell} genKey:{genSshKey} grantSudo:{grantSudo} authPubs:{authPubs}"
     )
@@ -1095,7 +1087,7 @@ def makeUser(
 
     # if not existOk or runRet("id -u %s" % name) != 0:
     # 	run("useradd %s -m -s /bin/bash" % (name))
-    cmd = f'sudo {createUserComm} --disabled-password --gecos ""'
+    cmd = f'sudo adduser --disabled-password --gecos ""'
     if home is not None:
         cmd += f" --home {home}"
     if shell is not None:
@@ -3772,29 +3764,3 @@ def _getOS():
         raise e
     
     return 'null'
-
-# OS 이름이 null일 경우 예외를 발생시키기 위한 함수
-def _checkNotNullOS(osName):
-    if osName == 'null':
-        raise Exception('osNams is null')
-    
-# os별 설치 명령어를 문자열로 return    
-def _getInstallCommand(osName):
-    if osName == 'ubuntu':
-        return 'sudo apt install --no-install-recommends -y'
-    elif osName == 'centos':
-        return 'sudo yum install -y'
-    
-# os별 업데이트
-def _getUpdateCommand(osName):
-    if osName == 'ubuntu':
-        return 'sudo apt install --no-install-recommends -y'
-    elif osName == 'centos':
-        return 'sudo yum install -y'
-    
-# os별 유저 생성 명령어
-def _createUserCommand(osName):
-    if osName == 'ubuntu':
-        return 'adduser'
-    elif osName == 'centos':
-        return 'useradd'
