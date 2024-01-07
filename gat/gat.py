@@ -74,6 +74,7 @@ g_packages = {
     "rsyslog" : "rsyslog",
     "logrotate" : "logrotate",
     "sudo" : "sudo",
+    "runit" : "epel-release runit"
 }
 
 # 우분투 명령어와 centos 명령어를 매핑

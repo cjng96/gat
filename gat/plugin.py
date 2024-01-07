@@ -81,7 +81,6 @@ files = /etc/supervisor/conf.d/*.conf
     return True
 
 
-# 도커 내에서 실행 -> 수정 필요 X
 def installRunit(env):
     """
     It's replace start script
@@ -90,8 +89,10 @@ def installRunit(env):
     if env.runSafe("test -f /sbin/runit"):
         return
 
-    env.run("apt update")
-    env.run("apt install -y sudo runit")
+    # env.run("apt update")
+    env.pkgUpdate(sudo=False)
+    # env.run("apt install -y sudo runit")
+    env.pkgInstall(sudo=False, options=["-y"], packages=["sudo", "runit"])
 
     env.makeFile(
         content="""\
