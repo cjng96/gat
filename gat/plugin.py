@@ -110,8 +110,6 @@ fi
     )
 
 
-# 도커 내에서 실행되는 듯? -> 수정 X
-# 어디서 호출되는지 확인 X
 def installHomebrew(env):
     if not env.runSafe(". ~/.zshrc && command -v brew"):
         env.run(
@@ -119,8 +117,6 @@ def installHomebrew(env):
         )
 
 
-# 도커 내에서 실행되는 듯? -> 수정 X
-# 어디서 호출되는지 확인 X
 def installSshfsMount(env, name, src, target, port=22, id=None):
     """
     installSshfsMount(remote, 'test', 'account@server.com:', '/tmp/mnt', port=7022)

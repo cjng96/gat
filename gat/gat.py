@@ -61,6 +61,7 @@ g_scriptPath = ""
 # 우분투 패키지 명 기준으로 매핑 
 g_packages = {
     "rssh" : "rssh",
+    "sshfs" : "sshfs",
     "openssh-client" : "openssh-clients",
     "git" : "git",
     "libmysqlclient-dev" : "mysql-devel",
