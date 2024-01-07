@@ -721,11 +721,12 @@ def installRedis(env, memSize="1G", memPolicy="allkeys-lru", port=None):
 
     os = env.getOS()
 
-    if os == 'ubuntu':
-        env.run("sudo service redis-server start")
-    elif os == 'centos':
-        env.run("sudo systemctl start redis")
-        env.run("sudo systemctl enable redis")
+    # if os == 'ubuntu':
+    #     env.run("sudo service redis-server start")
+    # elif os == 'centos':
+    #     env.run("sudo systemctl start redis")
+    #     env.run("sudo systemctl enable redis")
+    env.pkgRestart(sudo=True, package="redis-server")
 
 
 # 기능 : mq 설치 스크립트
