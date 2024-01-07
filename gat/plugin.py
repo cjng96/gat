@@ -1971,11 +1971,12 @@ stdout_logfile=/var/log/supervisor/%(program_name)s_out.log
     env.run("sudo supervisorctl reread && sudo supervisorctl update")
 
 
-# 기능 : 
-# 호출 위치 파악 : 
-# centOS 변경 : 
+# 기능 : logrotate 프로그램을 설치하고, Supervisor 로그 파일을 관리하기 위한 logrotate 설정을 구성
+# 호출 위치 파악 : X
+# centOS 변경 : O -> 변경 완료
 def logrotateForSupervisor(env):
-    env.run("sudo apt install --no-install-recommends -y logrotate")
+    # env.run("sudo apt install --no-install-recommends -y logrotate")
+    env.pkgInstall(sudo=True, options=["--no-install-recommends", "-y"], packages=["logrotate"])
     env.makeFile(
         content="""\
 /var/log/supervisor/*.log {
