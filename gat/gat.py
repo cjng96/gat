@@ -66,6 +66,7 @@ g_packages = {
     "openssh-client" : "openssh-clients",
     "git" : "git",
     "libmysqlclient-dev" : "mysql-devel",
+    "mongodb-org" : "mongodb-org",
     "redis-server" : "redis",
     "rabbitmq-server" : "rabbitmq-server",
     "python3" : "epel-release python36",
@@ -79,7 +80,8 @@ g_packages = {
     "rsyslog" : "rsyslog",
     "logrotate" : "logrotate",
     "sudo" : "sudo",
-    "runit" : "epel-release runit"
+    "runit" : "epel-release runit",
+    "gnupg" : "gnupg2"
 }
 
 # 우분투 명령어와 centos 명령어를 매핑

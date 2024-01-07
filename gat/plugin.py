@@ -2041,7 +2041,7 @@ def setupTz(env):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 # TODO: mysql, goBuild, gqlGen, dbXorm, pm2Register등은 기본 task에서 빼야할듯
 def mysqlUserDel(env, id, host):
     hr = env.runOutput(
@@ -2055,7 +2055,7 @@ def mysqlUserDel(env, id, host):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def mysqlUserGen(env, id, pw, host, priv, unixSocket=False):
     """
     priv: "*.*:ALL,GRANT", "*.*:RELOAD,PROCESS,LOCK TABLES,REPLICATION CLIENT"
@@ -2092,7 +2092,7 @@ def mysqlUserGen(env, id, pw, host, priv, unixSocket=False):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def goBuild(env, targetOs="", targetArch=""):
     """
     os: windows, darwin, linux
@@ -2117,7 +2117,7 @@ def goBuild(env, targetOs="", targetArch=""):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def gqlGen(env):
     print("task: gql gen...")
     env.onlyLocal()
@@ -2142,7 +2142,7 @@ def gqlGen(env):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def dbXormReverse(env):
     print("task: xorm reverse...")
     env.onlyLocal()
@@ -2194,7 +2194,8 @@ def installMongodb(
     # env.run("sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 9DA31620334BD75D9DCB49F368818C72E52529D4")
     # env.run("echo 'deb [ arch=amd64 ] https://repo.mongodb.org/apt/ubuntu bionic/mongodb-org/4.0 multiverse' | sudo tee /etc/apt/sources.list.d/mongodb-org-4.0.list")
     # env.run("sudo apt install --no-install-recommends -y openssl gnupg2")
-    env.run("sudo apt install --no-install-recommends -y gnupg")
+    # env.run("sudo apt install --no-install-recommends -y gnupg")
+    env.pkgInstall(sudo=True, options=["--no-install-recommends", "-y"], packages=["gnupg"])
 
     # env.run("wget -qO - https://www.mongodb.org/static/pgp/server-4.2.asc | sudo apt-key add -")
     # env.run("curl https://www.mongodb.org/static/pgp/server-4.2.asc | sudo apt-key add -")
@@ -2213,15 +2214,29 @@ sudo gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg --dearmor"
     #     'echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/5.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-5.0.list'
     # )
     # 22.04
-    env.run(
-        'echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list'
-    )
+    os = env.getOS()
+    if os == 'ubuntu':
+        env.run(
+            'echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list'
+        )
+    elif os == 'centos':
+        env.run(
+            "sudo tee /etc/yum.repos.d/mongodb-org-6.0.repo <<EOF \
+            [mongodb-org-6.0] \
+            name=MongoDB Repository \
+            baseurl=https://repo.mongodb.org/yum/redhat/\$releasever/mongodb-org/6.0/x86_64/ \
+            gpgcheck=1 \
+            enabled=1 \
+            gpgkey=https://www.mongodb.org/static/pgp/server-6.0.asc \
+            EOF"
+        )
     # 20.04
     # env.run(
     #     'echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list'
     # )
 
-    env.run("sudo apt update")
+    # env.run("sudo apt update")
+    env.pkgUpdate(sudo=True)
     # env.run("sudo apt install --no-install-recommends -y mongodb-org")
     env.run("sudo apt install -y mongodb-org")
 
@@ -2511,7 +2526,7 @@ fi
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def mysqlBinDump(env, cron, desync):
     # 이제 이거만 쓴다
     # 증분빽업은 이렇게
@@ -2600,7 +2615,7 @@ fi
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def dockerForceNetwork(env, name):
     env.run(f"docker network inspect {name} || docker network create {name}")
     # -f {{.Name}}
@@ -2608,7 +2623,7 @@ def dockerForceNetwork(env, name):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def getArch(env):
     arch = env.runOutput("dpkg --print-architecture").strip()
     return arch
@@ -2651,7 +2666,7 @@ def installDocker(env, arch=None):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : O
 def installRestic(env, version, arch=None):
     """
     version: 0.12.1
@@ -2674,7 +2689,7 @@ def installRestic(env, version, arch=None):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : O
 def supervisorNginxInstall(env):
     if env.runSafe("command -v nginx"):
         return
@@ -2723,7 +2738,7 @@ autorestart=true
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : O
 def certbotInstall(env):
     if env.runSafe("command -v certbot"):
         return
@@ -2760,7 +2775,7 @@ test -x /usr/bin/certbot -a \! -d /run/systemd/system && perl -e 'sleep int(rand
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def certbotCopy(pubWeb, web, domain, cfgName):
     # 일단 d21 proxy, direct 둘다 지원한다
     # cron으로 주기적으로 가져와야한다
@@ -2797,7 +2812,7 @@ def certbotCopy(pubWeb, web, domain, cfgName):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : O
 def bupInstall(env, bupPath):
     env.run(
         "sudo add-apt-repository -y ppa:ulikoehler/bup && sudo apt update && sudo apt -y install bup git"
@@ -2873,7 +2888,7 @@ def certbotSetup(
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def nginxWebSite(
     env,
     name,
@@ -2956,7 +2971,7 @@ server {{
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 # deprecated - setupWebApp을 privateApi, root없이 쓰자. publicApi는 '/'
 def setupProxyForNginx(
     env,
@@ -3039,7 +3054,7 @@ server {{
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 # deprecated - setupWebApp을 root=null로 사용하라
 def setupProxyForNginxWithPrivate(
     env,
@@ -3113,7 +3128,7 @@ server {{
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def setupWebApp(
     env,
     name,
@@ -3261,7 +3276,7 @@ server {{
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def cronResticB2BackupFromS3(env, local, bucket, key, b2Repo, pw, dirs):
     if env.runSafe("test -f /etc/cron.daily/restic-sync"):
         return
@@ -3272,7 +3287,7 @@ def cronResticB2BackupFromS3(env, local, bucket, key, b2Repo, pw, dirs):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def cronResticB2Backup(env, name, b2id, b2secret, b2repo, pw, dirs, baseDir=None):
     pp = f"/etc/cron.daily/{name}"
     # if env.runSafe(f"test -f {pp}"):
@@ -3333,7 +3348,7 @@ def installGolang(env, version, arch):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def installGocryptfs(env, withOpenssl=False):
     if env.runSafe(". ~/.profile && command -v gocryptfs"):
         return
@@ -3361,7 +3376,7 @@ def installGocryptfs(env, withOpenssl=False):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : O
 def installTransmission(env, port, userName, pw, downDir, incompleteDir, watchDir):
     if port == "":
         raise Exception("transmission - specify port")
@@ -3430,7 +3445,7 @@ def installTransmission(env, port, userName, pw, downDir, incompleteDir, watchDi
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def pm2Register(env, nvmPath="~/.nvm", useNvm=True):
     print("task: pm2 register...")
     env.onlyRemote()
@@ -3444,7 +3459,7 @@ def pm2Register(env, nvmPath="~/.nvm", useNvm=True):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def pm2Install(env):
     env.run(
         f". ~/.profile && cd {env.server.deployPath} && /opt/nvm/nvm-exec npm i -g pm2"
@@ -3453,7 +3468,7 @@ def pm2Install(env):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def nvmInstall(env, account=None, nodeVer=None):
     """
     node는 추가시 34m정도
@@ -3490,7 +3505,7 @@ export NVM_DIR=/opt/nvm
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def fnmInstall(env, nodeVer=None):
     if env.runSafe("command -v fnm"):
         return
@@ -3514,7 +3529,7 @@ def fnmInstall(env, nodeVer=None):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def pnpmAndGulp(env):
     # 이거 의미 없다. 쓰면 안된다.
     env.run(". /etc/profile && . /opt/nvm/nvm.sh && npm install -g pnpm")
@@ -3523,7 +3538,7 @@ def pnpmAndGulp(env):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def installYarnGulp(env):
     # . /opt/nvm.sh --install 이거는 .nvmrc를 인스톨을 못한다.
     env.run(
@@ -3542,7 +3557,7 @@ def installYarnGulp(env):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def installNvmPnpmGulp(env, gulpBuild=True):
     """
     pnpm 이제 쓰지말자, node_modules link폴더 인식 안되고,
@@ -3569,7 +3584,7 @@ def installNvmPnpmGulp(env, gulpBuild=True):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def installNvmGulp(env, installGulp=True, gulpBuild=True, path=None):
     if path is None:
         path = env.util.cfg.deployPath
@@ -3586,7 +3601,7 @@ def installNvmGulp(env, installGulp=True, gulpBuild=True, path=None):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : O
 def installFail2ban(env, action="iptables-multiport", blockType=None, ignoreIps=""):
     """
     ignoreIps: '1.1.1.1 2.2.2.2' or [ '1.1.1.1', '2.2.2.2' ]
@@ -3714,7 +3729,7 @@ Host {name}
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def scriptBasic(env):
     env.configBlock(
         path="~/.bashrc",
@@ -3727,7 +3742,7 @@ alias sz="sudo du -hd1 | sort -h"
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def scriptDocker(env, saYml="./resource/sa.yml"):
     env.makeFile(
         path="/usr/local/bin/de", content="""docker exec -it "$@" bash -l """, sudo=True
