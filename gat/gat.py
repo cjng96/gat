@@ -1064,7 +1064,7 @@ class Main:
         exclude = config.get("deploy.exclude", [])
         sharedLinks = config.get("deploy.sharedLinks", [])
 
-        def zipProcess(env, include, exclude, localSrcPath=None):
+        def zipProcess(env, include, exclude, localSrcPath):
             zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
             with zipfile.ZipFile(zipPath, "w") as zipWork:
 
@@ -1109,15 +1109,14 @@ class Main:
 
         strategy = g_config.deploy.strategy
         if strategy == "zip":
-            zipProcess(env, include, exclude, strategy)
+            zipProcess(env, include, exclude, ".")
 
         elif strategy == "git":
             # 여기 path는 git clone을 받을 주소
             # 나중에 따로 god_app.py에서 설정하도록 하면 코드가 더욱 좋아질거라 예상
-            path = "./clone"
-            cloneRepo(g_config.deploy.gitRepo, server.gitBranch, path)
-
-            zipProcess(env, include, exclude, path)
+            workPath = "./clone"
+            cloneRepo(g_config.deploy.gitRepo, server.gitBranch, workPath)
+            zipProcess(env, include, exclude, workPath)
 
             """	no use copy strategy anymore
       elif strategy == "copy":
@@ -1476,7 +1475,7 @@ def main():
     helper = Helper(g_config)
     sys.path.append(g_cwd)
     mymod = __import__(target[:-3], fromlist=[""])
-    g_mygod = mymod.myGod(helper=helper)
+    g_mygat = mymod.myGat(helper=helper)
     # g_config 객체 생성 지점 -> 여기부터 설정 객체 사용 가능
     if manualStrategyValue is not None:
         g_config.deploy.strategy = manualStrategyValue
