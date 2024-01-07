@@ -753,7 +753,7 @@ def installRabbitMq(env, account="admin", pw=""):
 
 # 기능 : 다트 설치
 # 호출 위치 파악 : O
-# centOS 변경 : 기본적으로 설치 스크립트는 도커 내에서 실행된다고 판단 -> 변경 X
+# centOS 변경 : X
 def installDart(env, ver="latest"):
     """
     version: lastest, 3.0.7...
@@ -805,7 +805,7 @@ def installDart(env, ver="latest"):
 
 # 기능 : rclone 설치
 # 호출 위치 파악 : O
-# centOS 변경 : 스토리지로 데이터 전송 솔루션 -> 이걸 바꿔야할까 말까 -> X
+# centOS 변경 : X
 def setupRclone(env, name, type, host, port, user, id=None, keyFile=None):
     """
     sftp용임
@@ -1081,13 +1081,21 @@ def registerAuthPub(env, pub, id=None):
 
 # 기능 : 사용자 계정 생성 및 선택적으로 SSH 키 생성, sudo 권한 부여, 공개 ssh키 등록의 기능
 # 호출 위치 파악 : O
-# centOS 변경 : X
+# centOS 변경 : O -> 변경 완료
 def makeUser(
     env, id, home=None, shell=None, genSshKey=True, grantSudo=False, authPubs=None
 ):
     print(
         f">> [{env.name}] makeUser - id:{id} home:{home} shell:{shell} genKey:{genSshKey} grantSudo:{grantSudo} authPubs:{authPubs}"
     )
+
+    # OS 확인
+    os = env.getOS()
+    cmdUserAdd = None
+    if os == 'ubuntu':
+        cmdUserAdd = 'adduser'
+    elif os == 'centos':
+        cmdUserAdd = 'useradd'
 
     # if env.runSafe('cat /etc/passwd | grep -e "^%s:"' % id):
     if env.runSafe(f'grep -c "^{id}:" /etc/passwd'):
@@ -1099,17 +1107,26 @@ def makeUser(
 
     # if not existOk or runRet("id -u %s" % name) != 0:
     # 	run("useradd %s -m -s /bin/bash" % (name))
-    cmd = f'sudo adduser --disabled-password --gecos ""'
-    if home is not None:
-        cmd += f" --home {home}"
-    if shell is not None:
-        cmd += f" --shell {shell}"
-    cmd += f" {id}"
+    cmd = None
+    if os == 'ubuntu':
+        cmd = f'sudo {cmdUserAdd} --disabled-password --gecos ""'
+        if home is not None:
+            cmd += f" --home {home}"
+        if shell is not None:
+            cmd += f" --shell {shell}"
+        cmd += f" {id}"
+    elif os == 'centos':
+        cmd = f'sudo {cmdUserAdd} -c "" -m'
+        if home is not None:
+            cmd += f" -d {home}"
+        if shell is not None:
+            cmd += f" -s {shell}"
+        cmd += f" {id}"
     env.run(cmd)
 
     if grantSudo:
         env.run(
-            f'sudo adduser {id} sudo && \
+            f'sudo {cmdUserAdd} {id} sudo && \
       sudo echo "{id} ALL=(ALL:ALL) NOPASSWD:ALL" > /etc/sudoers.d/{id} && \
       sudo chmod 0440 /etc/sudoers.d/{id}'
         )
