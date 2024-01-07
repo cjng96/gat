@@ -67,6 +67,8 @@ g_packages = {
     "python3-pip" : "python3-pip",
     "locales" : "glibc-locale-source glibc-langpack-en",
     "openssh-server" : "openssh-server",
+    "cron" : "cronie",
+    "anacron" : "anacron",
 }
 
 # 우분투 명령어와 centos 명령어를 매핑

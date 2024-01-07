@@ -1919,11 +1919,12 @@ stdout_logfile=/var/log/supervisor/%(program_name)s_out.log
     env.run("sudo supervisorctl reread && sudo supervisorctl update")
 
 
-# 기능 : 
-# 호출 위치 파악 : 
-# centOS 변경 : 
+# 기능 : Cron과 Anacron 서비스를 설치하고, 이들을 Supervisor를 통해 관리하기 위한 설정을 구성하는 작업
+# 호출 위치 파악 : X
+# centOS 변경 : O -> 변경 완료
 def cronForSupervisor(env):
-    env.run("sudo apt install --no-install-recommends -y cron anacron")
+    # env.run("sudo apt install --no-install-recommends -y cron anacron")
+    env.pkgInstall(sudo=True, options=["--no-install-recommends", "-y"], packages=["cron", "anacron"])
     # env.uploadFileTo("./files/cron.conf", "/tmp/efile/")
     env.makeFile(
         content="""\
