@@ -1389,7 +1389,7 @@ def dockerUpdateImage(
 
 
 # nodeVer는 coimg에 포함된거라 매번 바뀌지 않는다
-# centOS 변환 필요
+# centOS 변환 필요 -> 변환 완료
 def dockerCoImage(env, nodeVer="16.13.1", dartVer="3.1.5"):
     print(f"================================= dockerCoImage : {env.__dict__} ========================================")
     print(f"================================= dockerCoImage : {os.getcwd()} ========================================")
@@ -1462,9 +1462,9 @@ def dockerCoImage(env, nodeVer="16.13.1", dartVer="3.1.5"):
     return newName, newVer
 
 
-# 기능 : 
-# 호출 위치 파악 : 
-# centOS 변경 : 
+# 기능 : 도커 base 이미지 생성
+# 호출 위치 파악 : O
+# centOS 변경 : X
 def dockerBaseImage(env):
     print(f"============================== dockerBaseImage : {env.__dict__} ==================================================")
     name = "baseimg"
@@ -1510,7 +1510,9 @@ RUN apt update && \\
     return name, version
 
 
-# 수정 필요
+# 기능 : Supervisor 도커 이미지 생성
+# 호출 위치 파악 : X
+# centOS 변경 : X
 def dockerImageForSupervisor(env, name, version, userId, func):
     """
     기본용 이미지만 만들어놓고, FROM으로 여기서부터 생성한다 - 빠름
@@ -1569,9 +1571,9 @@ CMD ["/start"]
     env.run(f"sudo docker rmi {name}-work")
 
 
-# 기능 : 
-# 호출 위치 파악 : 
-# centOS 변경 : 
+# 기능 : Supervisor가 포함된 Docker 컨테이너를 생성하고 설정하는 작업
+# 호출 위치 파악 : X
+# centOS 변경 : X
 def makeDockerContainerForSupervisor(
     env, name, image=None, port=None, dkId=None, mountBase=True
 ):
@@ -1601,7 +1603,9 @@ def makeDockerContainerForSupervisor(
     return dk
 
 
-# 수정 필요
+# 기능 : runit 초기화 시스템이 포함된 Docker 컨테이너를 설정하는 과정을 자동화
+# 호출 위치 파악 : X
+# centOS 변경 : X
 def makeDockerContainerForRunit(
     env, name, image=None, port=None, dkId=None, mountBase=True
 ):
@@ -1624,9 +1628,9 @@ def makeDockerContainerForRunit(
     return dk
 
 
-# 기능 : 
-# 호출 위치 파악 : 
-# centOS 변경 : 
+# 기능 : Docker 컨테이너를 실행하기 위한 명령어를 구성하고 실행하는 역할
+# 호출 위치 파악 : O
+# centOS 변경 : X
 def dockerRunCmd(name, image, port=None, mountBase=True, net=None, env=None, extra=""):
     """
     port: "3306:3306", "9018-9019:9018-9019", ["9018-9019:9018-9019"]
@@ -1686,17 +1690,17 @@ def dockerRunCmd(name, image, port=None, mountBase=True, net=None, env=None, ext
     return cmd
 
 
-# 기능 : 
-# 호출 위치 파악 : 
-# centOS 변경 : 
+# 기능 : 도커 컨테이너가 존재하는지 파악
+# 호출 위치 파악 : O
+# centOS 변경 : X
 def dockerContainerExists(env, name):
     ret = env.runOutput(f'. ~/.profile && sudo docker ps -aqf name="^{name}$"')
     return ret.strip() != ""
 
 
-# 기능 : 
-# 호출 위치 파악 : 
-# centOS 변경 : 
+# 기능 : 도커 컨테이너 생성
+# 호출 위치 파악 : O
+# centOS 변경 : X
 def makeDockerContainer(env, name, image=None, port=None, mountBase=True):
     """
     image: None(create image directly), string(using that image)
@@ -1740,9 +1744,9 @@ CMD ["/start"]
     env.run(f". ~/.profile && sudo docker cp /tmp/dockerCmd {name}:/cmd")
 
 
-# 기능 : 
-# 호출 위치 파악 : 
-# centOS 변경 : 
+# 기능 : 특정 명령어를 담은 실행 스크립트를 생성하고 시스템에 설정
+# 호출 위치 파악 : X
+# centOS 변경 : X
 def writeRunScript(env, cmd):
     print(f">> [{env.name}] writeRunScript: {cmd}")
     env.makeFile(
@@ -1758,9 +1762,9 @@ def writeRunScript(env, cmd):
     writeSvHelper(env)
 
 
-# 기능 : 
-# 호출 위치 파악 : 
-# centOS 변경 : 
+# 기능 : .bashrc 파일에 특정 alias 및 함수를 추가
+# 호출 위치 파악 : O
+# centOS 변경 : X
 def writeSvHelper(env):
     print(f">> [{env.name}] writeSvHelper")
 
@@ -1784,7 +1788,7 @@ echo "{help}"
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def promptSet(env, name):
     env.configBlock(
         path="~/.bashrc",
@@ -1795,7 +1799,7 @@ def promptSet(env, name):
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : X
 def supervisorBasic(env, serverName):
     if env.runSafe("test -f /etc/profile.d/sv.sh"):
         return
@@ -1820,7 +1824,7 @@ alias slog='sudo supervisorctl tail -f'
 
 # 기능 : 
 # 호출 위치 파악 : 
-# centOS 변경 : 
+# centOS 변경 : O
 def localeSet(env):
     env.run("sudo apt install --no-install-recommends -y locales")
     env.run(
