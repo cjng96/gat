@@ -690,7 +690,7 @@ WantedBy=default.target
 
 # 기능 : 레디스 설치 스크립트
 # 호출 위치 파악 : X
-# centOS 변경 : 기본적으로 설치 스크립트는 도커 내에서 실행된다고 판단 -> 변경 X
+# centOS 변경 : O -> 수정 완료
 def installRedis(env, memSize="1G", memPolicy="allkeys-lru", port=None):
     """
     memSize: 1G, 512M
@@ -699,7 +699,8 @@ def installRedis(env, memSize="1G", memPolicy="allkeys-lru", port=None):
     if env.runSafe("command -v redis-cli"):
         return
 
-    env.run("sudo apt install --no-install-recommends -y redis-server")
+    # env.run("sudo apt install --no-install-recommends -y redis-server")
+    env.pkgInstall(sudo=True, options=["--no-install-recommends", "-y"], packages=["redis-server"])
     env.configLine(
         "/etc/redis/redis.conf",
         regexp="^# maxmemory ",
@@ -718,7 +719,13 @@ def installRedis(env, memSize="1G", memPolicy="allkeys-lru", port=None):
             "/etc/redis/redis.conf", regexp="^port ", line=f"port {port}", sudo=True
         )
 
-    env.run("sudo service redis-server start")
+    os = env.getOS()
+
+    if os == 'ubuntu':
+        env.run("sudo service redis-server start")
+    elif os == 'centos':
+        env.run("sudo systemctl start redis")
+        env.run("sudo systemctl enable redis")
 
 
 # 기능 : mq 설치 스크립트

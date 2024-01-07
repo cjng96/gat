@@ -66,6 +66,7 @@ g_packages = {
     "openssh-client" : "openssh-clients",
     "git" : "git",
     "libmysqlclient-dev" : "mysql-devel",
+    "redis-server" : "redis",
     "python3" : "epel-release python36",
     "python3-pip" : "python36-pip",
     "python3-setuptools" : "python36-setuptools",
