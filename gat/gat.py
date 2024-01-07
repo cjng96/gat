@@ -69,6 +69,7 @@ g_packages = {
     "openssh-server" : "openssh-server",
     "cron" : "cronie",
     "anacron" : "anacron",
+    "rsyslog" : "rsyslog",
 }
 
 # 우분투 명령어와 centos 명령어를 매핑

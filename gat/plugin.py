@@ -1949,11 +1949,12 @@ exit 0
     )
 
 
-# 기능 : 
-# 호출 위치 파악 : 
-# centOS 변경 : 
+# 기능 : rsyslog 서비스를 설치하고, Supervisor를 사용하여 이를 관리하는 설정을 구성하는 작업
+# 호출 위치 파악 : X
+# centOS 변경 : O -> 변경 완요
 def rsyslogForSupervisor(env):
-    env.run("sudo apt install --no-install-recommends -y rsyslog")
+    # env.run("sudo apt install --no-install-recommends -y rsyslog")
+    env.pkgInstall(sudo=True, options=["--no-install-recommends", "-y"], packages=["rsyslog"])
     env.makeFile(
         content="""\
 [program:rsyslogd]
