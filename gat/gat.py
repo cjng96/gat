@@ -60,7 +60,11 @@ g_scriptPath = ""
 # key(ubuntu) : value(centos)
 # 우분투 패키지 명 기준으로 매핑 
 g_packages = {
+    "rssh" : "rssh",
     "openssh-client" : "openssh-clients",
+    "git" : "git",
+    "libmysqlclient-dev" : "mysql-devel",
+    "python3-pip" : "python3-pip",
 }
 
 # 우분투 명령어와 centos 명령어를 매핑

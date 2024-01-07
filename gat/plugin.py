@@ -1112,7 +1112,7 @@ def makeUser(
 
 # 기능 : ssh 키 생성 및 선택적으로 키 등록
 # 호출 위치 파악 : O
-# centOS 변경 : O
+# centOS 변경 : O -> 변경 완료
 def sshKeyGen(env, id, authPubs=None):
     home = env.runOutput(f"echo ~{id}").strip()
 
@@ -1405,14 +1405,18 @@ def dockerCoImage(env, nodeVer="16.13.1", dartVer="3.1.5"):
         baseimgInitScript(env)
         env.run(f"echo {newName}:{newVer} >> /version-{newName}-{newVer}")
 
-        env.run("apt update")
-        env.run("apt install -y --no-install-recommends libmysqlclient-dev git")
+        # env.run("apt update")
+        env.pkgUpdate(sudo=False)
+        # env.run("apt install -y --no-install-recommends libmysqlclient-dev git")
+        env.pkgInstall(sudo=False, options=["-y", "--no-install-recommends"], packages=["libmysqlclient-dev", "git"])
         # env.run("sudo apt remove -y python3-pip")
-        env.run(
-            "apt install -y python3-pip"
-        )  # 풀설치- 200메가정도 늘어남. mysqlclient같은거 빌드할때 필요하다
+        # env.run(
+        #     "apt install -y python3-pip"
+        # )  
+        # 풀설치- 200메가정도 늘어남. mysqlclient같은거 빌드할때 필요하다
         # env.run("ln -sf /usr/bin/python3 /usr/bin/python")
         # env.run("apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*")
+        env.pkgInstall(sudo=True, options=["-y"], packages=["python3-pip"])
 
         # 이거 공용 컴포넌트는 별도로 층을 나눌것인가
         env.run(
