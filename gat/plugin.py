@@ -3493,8 +3493,6 @@ time zstd -d $fn -c | docker import --change 'CMD ["/start"]' - $image
     )
 
 def installPkgRssh(env, version=""):
-
-
     try:
         if env.remoteOs == 'ubunut':
             version = "=" + version
