@@ -1287,11 +1287,11 @@ def dockerUpdateImage(
 
 
 # nodeVer는 coimg에 포함된거라 매번 바뀌지 않는다
-def dockerCoImage(env, nodeVer="16.13.1", dartVer="3.1.5"):
+def dockerCoImage(env, nodeVer="16.13.1", dartVer="3.2.3"):
     baseName, baseVer = dockerBaseImage(env)
 
     newName = "coimg"
-    newVer = 4
+    newVer = 5
     newVer = f"{baseVer}{newVer}"
     # 1~9, a~z까지 쓰자
     # 최악으로 coImg와 baseImg버젼이 겹쳐져도 1 11과 11 1처럼 중복되도, 부모가 다르기때문에 오류난다
