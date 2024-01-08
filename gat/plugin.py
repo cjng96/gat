@@ -1,3 +1,4 @@
+from functools import wraps
 import os
 import re
 import json
@@ -15,6 +16,7 @@ def decoratorGetOS(fn):
     @wraps(fn)
     def wrapper(env, *args, **kwargs):
         env.os = getOS()
+        print(f"========== Current os : {env.os} ==========")
         result = fn(env, *args, **kwargs)
         return result
     return wrapper
@@ -2373,6 +2375,7 @@ def getArch(env):
     return arch
 
 
+@decoratorGetOS
 def installDocker(env, arch=None):
     """
     arch: amd64 | arm64
@@ -2384,24 +2387,36 @@ def installDocker(env, arch=None):
     if env.runSafe("command -v docker"):
         return
 
-    env.run(
-        "sudo apt install --no-install-recommends -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common"
-    )
-    env.run(
-        "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -"
-    )
-    # sudo apt-key fingerprint 0EBFCD88
-    env.run(
-        f'sudo add-apt-repository "deb [arch={arch}] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"'
-    )
-    env.run("sudo apt update")
-    env.run("apt-cache policy docker-ce")
-    env.run("sudo apt install --no-install-recommends -y docker-ce")
+    if env.os == 'ubuntu':
+        env.run(
+            "sudo apt install --no-install-recommends -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common"
+        )
+        env.run(
+            "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -"
+        )
+        # sudo apt-key fingerprint 0EBFCD88
+        env.run(
+            f'sudo add-apt-repository "deb [arch={arch}] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"'
+        )
+        env.run("sudo apt update")
+        env.run("apt-cache policy docker-ce")
+        env.run("sudo apt install --no-install-recommends -y docker-ce")
 
-    env.run("sudo usermod -aG docker $USER")
-    # env.run("sudo adduser {{server.id}} docker")	# remote.server.id
-    # env.run("sudo service docker restart")	# /etc/init.d/docker restart
+        env.run("sudo usermod -aG docker $USER")
+        # env.run("sudo adduser {{server.id}} docker")	# remote.server.id
+        # env.run("sudo service docker restart")	# /etc/init.d/docker restart
+    elif env.os == 'centos':
+        env.run("sudo yum install -y yum-utils device-mapper-persistent-data lvm2")
+        env.run("sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo")
+        env.run("sudo yum makecache fast")
+        env.run("yum list docker-ce --showduplicates | sort -r")
+        env.run("sudo yum install -y docker-ce docker-ce-cli containerd.io")
+        env.run("sudo systemctl start docker")
+        env.run("sudo systemctl enable docker")
+        env.run("sudo usermod -aG docker $USER")
+
     time.sleep(3)  # boot up
+        
 
 
 def installRestic(env, version, arch=None):
