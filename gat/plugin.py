@@ -11,31 +11,6 @@ import subprocess
 # import gattool.coSsh as coSsh
 # from .coS3 import CoS3
 
-# 함수 실행 전, 해당 함수가 실행되는 OS를 알기 위해 사용
-def decoratorGetOS(fn):
-    @wraps(fn)
-    def wrapper(env, *args, **kwargs):
-        env.os = getOS()
-        print(f"========== Current os : {env.os} ==========")
-        result = fn(env, *args, **kwargs)
-        return result
-    return wrapper
-
-
-def getOS():
-    try:
-        with open('/etc/os-release') as file:
-            for line in file:
-                if line.startswith('NAME='):
-                    os_name = line.strip().split('=')[1].replace('"', '')
-                    if 'ubuntu' in os_name.lower():
-                        return 'ubuntu'
-                    elif 'centos' in os_name.lower():
-                        return 'centos'
-                    else:
-                        raise Exception('Unknown OS')
-    except Exception as e:
-        print(f"Error detecting OS: {e}")
 
 def loadFile(pp):
     with open(pp, "r") as fp:
@@ -2375,7 +2350,6 @@ def getArch(env):
     return arch
 
 
-@decoratorGetOS
 def installDocker(env, arch=None):
     """
     arch: amd64 | arm64

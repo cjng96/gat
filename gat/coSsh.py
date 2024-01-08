@@ -223,3 +223,17 @@ class CoSsh:
             except Exception as e:
                 print(e)
                 raise e
+            
+    # remote 서버의 OS를 return
+    def getRemoteOS(self):
+        stdin, stdout, stderr = self.ssh.exec_command('cat /etc/os-release')
+        osInfo = stdout.read().decode()
+
+        if 'ubuntu' in osInfo.lower():
+            print("========== remote os : ubuntu ==========")
+            return 'ubuntu'
+        elif 'centos' in osInfo.lower():
+            print("========== remote os : centos ==========")
+            return 'centos'
+        else:
+            raise Exception("Unknown OS")
