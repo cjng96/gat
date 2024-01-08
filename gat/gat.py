@@ -56,6 +56,81 @@ from .coCollection import dictMerge, Dict2, dictMerge2
 g_cwd = ""
 g_scriptPath = ""
 
+# ##################### 나중에 사용될 여지가 있다. ###########################################
+
+# 우분투 명령어와 centos 명령어를 매핑
+# key(ubuntu) : value(centos)
+# 우분투 패키지 명 기준으로 매핑
+g_packages = {
+    "rssh" : { "centos" : "rssh",},
+    "sshfs" : { "centos" : "sshfs", },
+    "knockd" : { "centos" : "epel-release knockd", },
+    "openssh-client" : { "centos" : "openssh-clients", },
+    "git" : { "centos" : "git", },
+    "libmysqlclient-dev" : { "centos" : "mysql-devel", },
+    "mongodb-org" : { "centos" : "mongodb-org", },
+    "redis-server" : { "centos" : "redis", },
+    "rabbitmq-server" : { "centos" : "rabbitmq-server", },
+    "python3" : { "centos" : "epel-release python36", },
+    "python3-pip" : { "centos" : "python36-pip", },
+    "python3-setuptools" : { "centos" : "python36-setuptools", },
+    "locales" : { "centos" : "glibc-locale-source glibc-langpack-en", },
+    "openssh-server" : { "centos" : "openssh-server", },
+    "tzdata" : { "centos" : "tzdata", },
+    "cron" : { "centos" : "cronie", },
+    "anacron" : { "centos" : "anacron", },
+    "rsyslog" : { "centos" : "rsyslog", },
+    "logrotate" : { "centos" : "logrotate", },
+    "sudo" : { "centos" : "sudo", },
+    "runit" : { "centos" : "epel-release runit", },
+    "gnupg" : { "centos" : "gnupg2", },
+    "fail2ban" : { "centos" : "fail2ban", },
+    "transmission-daemon" : { "centos" : "transmission-daemon", },
+    "bup" : { "centos" : "epel-release bup" }
+}
+
+# 우분투 명령어와 centos 명령어를 매핑
+# key(ubuntu) : value(centos)
+# 우분투 패키지 명 기준으로 매핑
+g_options = {
+    '-y' : { 'centos' : '-y', },
+    '--no-install-recommends' : { 'centos' : '', },
+}
+
+# 패키지 등록 함수
+# 우분투 패키지 이름을 기준으로 매핑
+def pkgRegister(os, pkgUbuntu, pkg):
+    global g_packages
+    # 1. g_packages에 ubuntu 명령어 자체가 없는 경우, 새로운 매핑 생성
+    if pkgUbuntu not in g_packages:
+        g_packages[pkgUbuntu] = {os: pkg}
+        print(f"{pkgUbuntu} for {os} has been successfully registered")
+    else:
+        # 2. 해당 Ubuntu 패키지에 대한 OS 매핑이 이미 존재하는 경우, 메시지 출력
+        if os in g_packages[pkgUbuntu]:
+            print(f"{pkgUbuntu} for {os} is already exist with package {g_packages[pkgUbuntu][os]}")
+        else:
+            # 3. 존재하지 않는 경우, 새로운 OS 매핑 추가
+            g_packages[pkgUbuntu][os] = pkg
+            print(f"{pkgUbuntu} for {os} has been successfully registered")
+
+# 옵션 등록 함수
+# 우분투 옵션 이름을 기준으로 매핑
+# 나중에 다시 수정이 필요, because 명령어마다 옵션이 다르기 때문에
+def optRegister(os, optUbuntu, opt):
+    global g_options
+    if optUbuntu not in g_options:
+        g_options[optUbuntu] = { os : opt }
+        print(f"{optUbuntu} for {os} has been successfully registered")
+    else:
+        if os in g_options[optUbuntu]:
+            print(f"{optUbuntu} for {os} is already exist with package {g_options[optUbuntu][os]}")
+        else:
+            g_options[optUbuntu][os] = opt
+            print(f"{optUbuntu} for {os} has been successfully registered")
+
+
+# ######################################################################################3
 
 class Error(Exception):
     pass
@@ -622,7 +697,128 @@ class Tasks:
         s3 = CoS3(env.config.get("s3.key", None), env.config.get("s3.secret", None))
         bb = s3.bucketGet(bucket)
         return bb.downloadFile(key, dest)
+    
+    # ####################### 나중에 사용될 여지가 있다. ####################################
 
+    # 패키지 install 함수 -> ubuntu, centos 지원
+    def pkgInstall(self, sudo=False, options=[], packages=[]):
+        os = self.getOS()
+        # sudo 권한 여부 확인 후 sudo 추가
+        cmdSudo = "sudo " if sudo else ""
+        # OS에 따라 패키지 매니저 추가
+        cmdPkgManager = None
+        if os == 'ubuntu':
+            cmdPkgManager = 'apt-get'
+        elif os == 'centos':
+            cmdPkgManager = 'yum'
+        # 해당 옵션을 운영체제에 알맞게 매핑
+        optionList = self._mapOptionToOs(os=os, options=options)
+        cmdOption = " ".join(optionList)
+        # 해당 OS에 알맞게 패키지명 매핑
+        packageList = self._mapPackageToOs(os=os, packages=packages)
+        cmdPackage = " ".join(packageList)
+        # 명령어 실행
+        cmd = f"{cmdSudo}{cmdPkgManager} install {cmdOption} {cmdPackage}"
+        self.run(cmd)
+
+    # update 함수 -> ubuntu, centos 지원
+    def pkgUpdate(self, sudo=False):
+        os = self.getOS()
+        # sudo 권한 여부 확인 후 sudo 추가
+        cmdSudo = "sudo " if sudo else ""
+        # OS에 따라 패키지 매니저 추가
+        cmdPkgManager = None
+        if os == 'ubuntu':
+            cmdPkgManager = 'apt-get'
+        elif os == 'centos':
+            cmdPkgManager = 'yum'
+        # 명령어 실행
+        cmd = f"{cmdSudo}{cmdPkgManager} update"
+        self.run(cmd)
+
+    # 프로그램 실행 함수
+    def pkgStart(self, sudo=False, package=""):
+        # sudo 권한 여부 확인 후 sudo 추가
+        cmdSudo = "sudo " if sudo else ""
+        # 프로그램 시작 명령어
+        cmdPkgStart = None
+        pkg = self._mapPackageToOs(os=os, packages=package)
+        cmdPkgStart = f"systemctl start {pkg}"
+        # 명령어 실행
+        cmd = f"{cmdSudo}{cmdPkgStart}"
+        self.run(cmd)
+
+    # 프로그램 재실행 함수
+    def pkgRestart(self, sudo=False, package=""):
+        # sudo 권한 여부 확인 후 sudo 추가
+        cmdSudo = "sudo " if sudo else ""
+        # 프로그램 시작 명령어
+        cmdPkgRestart = None
+        pkg = self._mapPackageToOs(os=os, packages=package)
+        cmdPkgRestart = f"systemctl restart {pkg}"
+        # 명령어 실행
+        cmd = f"{cmdSudo}{cmdPkgRestart}"
+        self.run(cmd)
+
+    # 프로그램 정지 함수
+    def pkgStop(self, sudo=False, package=""):
+        # sudo 권한 여부 확인 후 sudo 추가
+        cmdSudo = "sudo " if sudo else ""
+        # 프로그램 정지 명령어
+        cmdPkgStop = None
+        pkg = self._mapPackageToOs(os=os, packages=package)
+        cmdPkgStop = f"systemctl restart {pkg}"
+        cmd = f"{cmdSudo}{cmdPkgStop}"
+        self.run(cmd)
+
+    # Tasks 초기화는 보통 로컬에서 진행 -> 전역으로 두면 에러
+    # 매번 호출해주는게 바람직할듯
+    def getOS(self):
+        try:
+            with open('/etc/os-release') as file:
+                for line in file:
+                    if line.startswith('NAME='):
+                        os_name = line.strip().split('=')[1].replace('"', '')
+                        if 'ubuntu' in os_name.lower():
+                            return 'ubuntu'
+                        elif 'centos' in os_name.lower():
+                            return 'centos'
+                        else:
+                            raise Exception('Unknown OS')
+        except Exception as e:
+            print(f"Error detecting OS: {e}")
+
+    # 옵션 인자를 OS에 맞춰서 매핑
+    def _mapOptionToOs(self, os = '', options = []):
+        global g_options
+        optionList = []
+        for option in options:
+            if g_options.__contains__(option):
+                if os == 'ubuntu':
+                    optionList.append(option)
+                elif os == 'centos':
+                    optionCentOs = g_options.get(option)
+                    optionList.append(optionCentOs)
+            else:
+                raise Exception('Unknown option')
+        return optionList
+    
+    # 패키지를 OS에 맞춰서 매핑
+    def _mapPackageToOs(self, os = '', packages = []):
+        global g_packages
+        packageList = []
+        for package in packages:
+            if g_packages.__contains__(package):
+                if os == 'ubuntu':
+                    packageList.append(package)
+                elif os == 'centos':
+                    packageCentOs = g_packages.get(package)
+                    packageList.append(packageCentOs)
+            else:
+                raise Exception('Unknown package')
+        return packageList
+
+    # #####################################################################3
 
 # https://pythonhosted.org/watchdog/
 class MyHandler(PatternMatchingEventHandler):
