@@ -1119,8 +1119,11 @@ def _skipSameVersion(env, prefix, ver):
     for i in range(100):
         ver += 1
         # 다음버젼이 존재하면 더 넘기기
+        cmdBash = ""
+        if env.remoteOs == 'centos':
+            cmdBash = "bash_"
         ret = env.runOutput(
-            f". ~/.profile && sudo docker images -q {prefix}{ver}"
+            f". ~/.{cmdBash}profile && sudo docker images -q {prefix}{ver}"
         ).strip()
         if ret == "":
             okFlag = True
@@ -1235,16 +1238,19 @@ def dockerUpdateImage(
     # newVer = verStr(newVer)
 
     # 해당 버젼이 이미 있으면 생략
+    cmdBash = ""
+    if env.remoteOs == 'centos':
+        cmdBash = "bash_" 
     ret = env.runOutput(
-        f". ~/.profile && sudo docker images -q {newName}:{newVer}"
+        f". ~/.{cmdBash}profile && sudo docker images -q {newName}:{newVer}"
     ).strip()
     if ret != "":
         # 해당부모가 동일한지 확인
         baseHash = env.runOutput(
-            f". ~/.profile && sudo docker images -q {baseName}:{baseVer}"
+            f". ~/.{cmdBash}profile && sudo docker images -q {baseName}:{baseVer}"
         ).strip()
         ret = env.runOutput(
-            f". ~/.profile && sudo docker image history -q {newName}:{newVer}"
+            f". ~/.{cmdBash}profile && sudo docker image history -q {newName}:{newVer}"
         )
         lst = ret.split()
         if baseHash not in lst:
@@ -1363,7 +1369,14 @@ def dockerBaseImage(env):
     # version = verStr(version)
 
     # 해당 버젼이 이미 있으면 생략
-    ret = env.runOutput(f". ~/.profile && sudo docker images -q {name}:{version}")
+    # 이 부분에서 왜 에러가 나지? -> 도커 설치 X시 에러가 발생
+    cmdBash = ""
+    if env.remoteOs == 'centos':
+        cmdBash = "bash_"
+
+    print(f"===================== remoteOs : {env.remoteOs} =========================")
+
+    ret = env.runOutput(f". ~/.{cmdBash}profile && sudo docker images -q {name}:{version}")
     if ret.strip() != "":
         return name, version
 
@@ -1389,8 +1402,11 @@ RUN apt update && \\
         "/tmp/docker/Dockerfile",
     )
     # upgrade하면 110메가가 는다
+    cmdBash = ""
+    if env.remoteOs == 'centos':
+        cmdBash = "bash_"
     env.run(
-        f". ~/.profile && sudo docker build -t {name}:{version} /tmp/docker && rm -rf /tmp/docker"
+        f". ~/.{cmdBash}profile && sudo docker build -t {name}:{version} /tmp/docker && rm -rf /tmp/docker"
     )
     # --squash --no-cache
     # env.run(f"sudo docker tag {name}:{version} {name}:latest")
@@ -1537,6 +1553,10 @@ def dockerRunCmd(name, image, port=None, mountBase=True, net=None, env=None, ext
 
     if net is not None:
         # host, bridge(default)
+        # 첫 시작시에 net이 없다는 오류가 뜸 -> sudo docker network create net -> 나중에 손 봐야함
+        # print(f"=================== net : {net} ==============================")
+        # env.run(f"sudo docker network create net")
+        # print(f"=================== ret : {ret} ==============================")
         cmd += f"--network {net} "
 
     if portCmd != "":
@@ -1554,7 +1574,9 @@ def dockerRunCmd(name, image, port=None, mountBase=True, net=None, env=None, ext
 
     if env is not None:
         if dockerContainerExists(env, env.vars.dkName):
+            env.run(f"sudo docker start {name}")
             dk = env.dockerConn(name)
+            # 이 부분에서도 에러 발생
             dk.run("! test -f /update || /update")
 
         env.run(f"sudo docker rm -f {env.vars.dkName}")
@@ -1567,7 +1589,10 @@ def dockerRunCmd(name, image, port=None, mountBase=True, net=None, env=None, ext
 
 
 def dockerContainerExists(env, name):
-    ret = env.runOutput(f'. ~/.profile && sudo docker ps -aqf name="^{name}$"')
+    cmdBash = ""
+    if env.remoteOs == 'centos':
+        cmdBash = "bash_"
+    ret = env.runOutput(f'. ~/.{cmdBash}profile && sudo docker ps -aqf name="^{name}$"')
     return ret.strip() != ""
 
 
@@ -2361,7 +2386,7 @@ def installDocker(env, arch=None):
     if env.runSafe("command -v docker"):
         return
 
-    if env.os == 'ubuntu':
+    if env.remoteOs == 'ubuntu':
         env.run(
             "sudo apt install --no-install-recommends -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common"
         )
@@ -2379,7 +2404,7 @@ def installDocker(env, arch=None):
         env.run("sudo usermod -aG docker $USER")
         # env.run("sudo adduser {{server.id}} docker")	# remote.server.id
         # env.run("sudo service docker restart")	# /etc/init.d/docker restart
-    elif env.os == 'centos':
+    elif env.remoteOs == 'centos':
         env.run("sudo yum install -y yum-utils device-mapper-persistent-data lvm2")
         env.run("sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo")
         env.run("sudo yum makecache fast")
@@ -2387,6 +2412,7 @@ def installDocker(env, arch=None):
         env.run("sudo yum install -y docker-ce docker-ce-cli containerd.io")
         env.run("sudo systemctl start docker")
         env.run("sudo systemctl enable docker")
+        # 여기 명령어가 이상한것 같은데?
         env.run("sudo usermod -aG docker $USER")
 
     time.sleep(3)  # boot up
