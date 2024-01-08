@@ -154,8 +154,10 @@ class MyUtil:
         include = env.config.deploy.include
         exclude = env.config.get("deploy.exclude", [])
         followLinks = env.config.deploy.followLinks
-
-        g_main.targetFileListProd(include, exclude, func, followLinks=followLinks)
+        srcPath = env.config.srcPath
+        g_main.targetFileListProd(
+            include, exclude, func, followLinks=followLinks, localSrcPath=srcPath
+        )
 
 
 class Tasks:
@@ -1124,12 +1126,13 @@ class Main:
         for pp in include:
             if type(pp) == str:
                 if pp == "*":
-                    pp = "."
+                    pp = ""
 
                 # daemon
                 pp = _pathExpand(pp)
+                pp = os.path.join(localSrcPath, pp)
 
-                p = pathlib.Path(os.path.join(localSrcPath, pp))
+                p = pathlib.Path(pp)
                 if not p.exists():
                     print(f"target: not exists - {pp}")
                     continue
@@ -1281,7 +1284,7 @@ class Main:
                 #     return strExpand(pp, dic)
 
                 # zipWork.write(config.name, config.name, compress_type=zipfile.ZIP_DEFLATED)
-                def fileProc(src, dest):
+                def _fileProc(src, dest):
                     if dest is None:
                         dest = src
                     _zipAdd(src, dest)
@@ -1289,7 +1292,7 @@ class Main:
                 self.targetFileListProd(
                     include,
                     exclude,
-                    fileProc,
+                    _fileProc,
                     localSrcPath=localSrcPath,
                     followLinks=config.deploy.followLinks,
                 )
@@ -1304,13 +1307,14 @@ class Main:
             os.remove(zipPath)
 
         strategy = g_config.deploy.strategy
+        # workPath = env.config.srcPath
+        workPath = g_config.srcPath  # deployApp으로 온 경우 env.config가 새로 만들어진다
         if strategy == "zip":
-            zipProcess(env, include, exclude, ".")
+            zipProcess(env, include, exclude, workPath)
 
         elif strategy == "git":
             # 여기 path는 git clone을 받을 주소
             # 나중에 따로 god_app.py에서 설정하도록 하면 코드가 더욱 좋아질거라 예상
-            workPath = "./clone"
             cloneRepo(g_config.deploy.gitRepo, server.gitBranch, workPath)
             zipProcess(env, include, exclude, workPath)
 
@@ -1700,6 +1704,12 @@ def main():
     global g_local
     g_local = Tasks(None, g_config)
     # g_local.util = g_util
+
+    strategy = g_config.deploy.strategy
+    if strategy == "zip":
+        g_config.srcPath = "."
+    elif strategy == "git":
+        g_config.srcPath = "./clone"
 
     def checkServerName(serverName):
         """
