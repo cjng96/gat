@@ -170,6 +170,7 @@ class Tasks:
         self._uploadHelper = False
 
         self.server = server
+        print(f"================= slef.server : {server} ============================")
         self.ssh = None
         self.config = config
 
@@ -179,6 +180,9 @@ class Tasks:
 
         # for log
         self.name = "local" if server is None else server.host
+
+        # remote os
+        self.remoteOs = None
 
         if server is not None:
             if dkTunnel is None:
@@ -207,6 +211,8 @@ class Tasks:
             with open(keyFile) as fp:
                 print("key - " + fp.read())
         self.ssh.init(host, port, id, keyFile=keyFile)
+        self.remoteOs = self.ssh.getRemoteOS()
+        print(f"===================== remoteOs : {self.remoteOs} =========================")
 
     def __del__(self):
         if self.ssh is not None:
