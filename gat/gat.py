@@ -170,7 +170,6 @@ class Tasks:
         self._uploadHelper = False
 
         self.server = server
-        print(f"================= slef.server : {server} ============================")
         self.ssh = None
         self.config = config
 
