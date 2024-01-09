@@ -878,6 +878,7 @@ def mountFolder(env, src, dest):
     )
 
 
+# centos 호환 여부 : O
 def installRssh(env, home, useChroot=True):
     """
     rssh이용해서 rsyn를 쓸수 있게.
@@ -894,7 +895,13 @@ def installRssh(env, home, useChroot=True):
     if env.runSafe(f"test -f {home}/ok"):
         return
 
-    # env.run("sudo apt install --no-install-recommends -y rssh")
+    print(f"========== install rssh on {env.remoteOs} ==========")
+    
+    if env.remoteOs == 'ubuntu':
+        env.run("sudo apt install --no-install-recommends -y rssh")
+    elif env.remoteOs == 'centos':
+        env.run("sudo yum install -y rssh")
+
     env.run(f"mkdir -p {home}/{{dev,etc,lib,usr,bin}}")
     env.run(f"mkdir -p {home}/usr/bin")
     # env.run(f'mkdir -p {home}/usr/libexec/openssh'.format(home))
