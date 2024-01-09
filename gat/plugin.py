@@ -1125,12 +1125,14 @@ def _skipSameVersion(env, prefix, ver):
     for i in range(100):
         ver += 1
         # 다음버젼이 존재하면 더 넘기기
-        cmdBash = ""
-        if env.remoteOs == 'centos':
-            cmdBash = "bash_"
-        ret = env.runOutput(
-            f". ~/.{cmdBash}profile && sudo docker images -q {prefix}{ver}"
-        ).strip()
+        # cmdBash = ""
+        # if env.remoteOs == 'centos':
+        #     cmdBash = "bash_"
+        # ret = env.runOutput(
+        #     f". ~/.{cmdBash}profile && sudo docker images -q {prefix}{ver}"
+        # ).strip()
+        
+        ret = env.runOutputProf(f"sudo docker images -q {prefix}{ver}").strip()
         if ret == "":
             okFlag = True
             break
