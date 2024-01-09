@@ -895,7 +895,6 @@ def installRssh(env, home, useChroot=True):
         return
 
     # env.run("sudo apt install --no-install-recommends -y rssh")
-    installPkgRssh(env)
     env.run(f"mkdir -p {home}/{{dev,etc,lib,usr,bin}}")
     env.run(f"mkdir -p {home}/usr/bin")
     # env.run(f'mkdir -p {home}/usr/libexec/openssh'.format(home))
@@ -3490,14 +3489,3 @@ time zstd -d $fn -c | docker import --change 'CMD ["/start"]' - $image
         targetPath="/etc/sa.yml",
         sudo=True,
     )
-
-def installPkgRssh(env, version=""):
-    try:
-        if env.remoteOs == 'ubunut':
-            version = "=" + version
-            env.run(f"sudo apt install rssh{version}")
-        elif env.remoteOs == 'centos':
-            version = "-" + version
-            env.run(f"sudo yum install rssh{version}")
-    except:
-        raise Exception(f"rssh : {version} install failed")
