@@ -448,7 +448,7 @@ class Tasks:
     def runOutputProf(self, cmd, expandVars=True):
         os = self.remoteOs
 
-        tmpCmd = "~/."
+        tmpCmd = ". ~/."
 
         if os == 'ubuntu':
             tmpCmd = tmpCmd + "profile"
@@ -546,7 +546,7 @@ class Tasks:
     def runProf(self, cmd, expandVars=True, printLog=True):
         os = self.remoteOs
 
-        tmpCmd = "~/."
+        tmpCmd = ". ~/."
 
         if os == 'ubuntu':
             tmpCmd = tmpCmd + "profile"
