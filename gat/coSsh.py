@@ -224,16 +224,25 @@ class CoSsh:
                 print(e)
                 raise e
             
-    # remote 서버의 OS를 return
+    # return os name of remote server
     def getRemoteOS(self):
-        stdin, stdout, stderr = self.ssh.exec_command('cat /etc/os-release')
-        osInfo = stdout.read().decode()
+        try:
+            stdin, stdout, stderr = self.ssh.exec_command('cat /etc/os-release')
+            osInfo = stdout.read().decode()
 
-        if 'ubuntu' in osInfo.lower():
-            print("========== remote os : ubuntu ==========")
-            return 'ubuntu'
-        elif 'centos' in osInfo.lower():
-            print("========== remote os : centos ==========")
-            return 'centos'
-        else:
-            raise Exception("Unknown OS")
+            if 'ubuntu' in osInfo.lower():
+                print("========== remote os : ubuntu ==========")
+                return 'ubuntu'
+            elif 'centos' in osInfo.lower():
+                print("========== remote os : centos ==========")
+                return 'centos'
+        except Exception as e:
+            stdin, stdout, stderr = self.ssh.exec_command('sw_vers')
+            osInfo = stdout.read().decode()
+
+            osInfoStr = osInfo.lower()
+            if 'mac os' in osInfoStr or 'macos' in osInfoStr:
+                print("========== remote os : macos ==========")
+                return 'macos'
+            else:
+                raise Exception("Unknown OS")
