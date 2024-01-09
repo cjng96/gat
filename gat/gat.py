@@ -442,6 +442,25 @@ class Tasks:
                 cmd, shell=True, executable="/bin/bash"
             ).decode()
 
+
+    # runOutput 래퍼 함수
+    # os 별 ~/.profile 명령이 다르기 때문에 대응하기 위해
+    def runOutputProf(self, cmd, expandVars=True):
+        os = self.remoteOs
+
+        tmpCmd = "~/."
+
+        if os == 'ubuntu':
+            tmpCmd = tmpCmd + "profile"
+        elif os == 'centos':
+            tmpCmd = tmpCmd + "bash_profile"
+        tmpCmd = tmpCmd + " && "
+
+        cmd = tmpCmd + cmd
+
+        return self.runOutput(cmd, expandVars=expandVars)
+
+
     def runOutputAll(self, cmd, expandVars=True):
         """
         cmd: string or array
@@ -520,6 +539,23 @@ class Tasks:
                 print("  -> ret:%d" % (p.returncode))
                 if p.returncode != 0:
                     raise subprocess.CalledProcessError(p.returncode, cmd)
+
+    
+    # runOutput 래퍼 함수
+    # os 별 ~/.profile 명령이 다르기 때문에 대응하기 위해
+    def runProf(self, cmd, expandVars=True, printLog=True):
+        os = self.remoteOs
+
+        tmpCmd = "~/."
+
+        if os == 'ubuntu':
+            tmpCmd = tmpCmd + "profile"
+        elif os == 'centos':
+            tmpCmd = tmpCmd + "bash_profile"
+        tmpCmd = tmpCmd + " && "
+
+        cmd = tmpCmd + cmd
+        self.run(cmd, expandVars=expandVars, printLog=printLog)
 
     def runSafe(self, cmd):
         """
