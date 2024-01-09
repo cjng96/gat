@@ -1246,22 +1246,9 @@ def dockerUpdateImage(
     # newVer = verStr(newVer)
 
     # 해당 버젼이 이미 있으면 생략
-    # cmdBash = ""
-    # if env.remoteOs == 'centos':
-    #     cmdBash = "bash_" 
-    # ret = env.runOutput(
-    #     f". ~/.{cmdBash}profile && sudo docker images -q {newName}:{newVer}"
-    # ).strip()
-
     ret = env.runOutputProf(f"sudo docker images -q {newName}:{newVer}").strip()
     if ret != "":
         # 해당부모가 동일한지 확인
-        # baseHash = env.runOutput(
-        #     f". ~/.{cmdBash}profile && sudo docker images -q {baseName}:{baseVer}"
-        # ).strip()
-        # ret = env.runOutput(
-        #     f". ~/.{cmdBash}profile && sudo docker image history -q {newName}:{newVer}"
-        # )
         baseHash = env.runOutputProf(f"sudo docker images -q {baseName}:{baseVer}").strip()
         ret = env.runOutputProf(f"sudo docker image history -q {newName}:{newVer}")
         lst = ret.split()
@@ -1381,14 +1368,6 @@ def dockerBaseImage(env):
     # version = verStr(version)
 
     # 해당 버젼이 이미 있으면 생략
-    # 이 부분에서 왜 에러가 나지? -> 도커 설치 X시 에러가 발생
-    # cmdBash = ""
-    # if env.remoteOs == 'centos':
-    #     cmdBash = "bash_"
-
-    # print(f"===================== remoteOs : {env.remoteOs} =========================")
-
-    # ret = env.runOutput(f". ~/.{cmdBash}profile && sudo docker images -q {name}:{version}")
     ret = env.runOutputProf(f"sudo docker images -q {name}:{version}")
     if ret.strip() != "":
         return name, version
@@ -1414,13 +1393,7 @@ RUN apt update && \\
 """,
         "/tmp/docker/Dockerfile",
     )
-    # upgrade하면 110메가가 는다
-    # cmdBash = ""
-    # if env.remoteOs == 'centos':
-    #     cmdBash = "bash_"
-    # env.run(
-    #     f". ~/.{cmdBash}profile && sudo docker build -t {name}:{version} /tmp/docker && rm -rf /tmp/docker"
-    # )
+    # upgrade -> add 110MB
 
     env.runProf(f"sudo docker build -t {name}:{version} /tmp/docker && rm -rf /tmp/docker")
     # --squash --no-cache
@@ -1604,10 +1577,7 @@ def dockerRunCmd(name, image, port=None, mountBase=True, net=None, env=None, ext
 
 
 def dockerContainerExists(env, name):
-    # cmdBash = ""
-    # if env.remoteOs == 'centos':
-    #     cmdBash = "bash_"
-    # ret = env.runOutput(f'. ~/.{cmdBash}profile && sudo docker ps -aqf name="^{name}$"')
+
     ret = env.runOutputProf(f'sudo docker ps -aqf name="^{name}$"')
     return ret.strip() != ""
 
