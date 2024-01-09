@@ -1382,13 +1382,14 @@ def dockerBaseImage(env):
 
     # 해당 버젼이 이미 있으면 생략
     # 이 부분에서 왜 에러가 나지? -> 도커 설치 X시 에러가 발생
-    cmdBash = ""
-    if env.remoteOs == 'centos':
-        cmdBash = "bash_"
+    # cmdBash = ""
+    # if env.remoteOs == 'centos':
+    #     cmdBash = "bash_"
 
-    print(f"===================== remoteOs : {env.remoteOs} =========================")
+    # print(f"===================== remoteOs : {env.remoteOs} =========================")
 
-    ret = env.runOutput(f". ~/.{cmdBash}profile && sudo docker images -q {name}:{version}")
+    # ret = env.runOutput(f". ~/.{cmdBash}profile && sudo docker images -q {name}:{version}")
+    ret = env.runOutputProf(f"sudo docker images -q {name}:{version}")
     if ret.strip() != "":
         return name, version
 
@@ -1414,12 +1415,14 @@ RUN apt update && \\
         "/tmp/docker/Dockerfile",
     )
     # upgrade하면 110메가가 는다
-    cmdBash = ""
-    if env.remoteOs == 'centos':
-        cmdBash = "bash_"
-    env.run(
-        f". ~/.{cmdBash}profile && sudo docker build -t {name}:{version} /tmp/docker && rm -rf /tmp/docker"
-    )
+    # cmdBash = ""
+    # if env.remoteOs == 'centos':
+    #     cmdBash = "bash_"
+    # env.run(
+    #     f". ~/.{cmdBash}profile && sudo docker build -t {name}:{version} /tmp/docker && rm -rf /tmp/docker"
+    # )
+
+    env.runProf(f"sudo docker build -t {name}:{version} /tmp/docker && rm -rf /tmp/docker")
     # --squash --no-cache
     # env.run(f"sudo docker tag {name}:{version} {name}:latest")
 
@@ -1601,10 +1604,11 @@ def dockerRunCmd(name, image, port=None, mountBase=True, net=None, env=None, ext
 
 
 def dockerContainerExists(env, name):
-    cmdBash = ""
-    if env.remoteOs == 'centos':
-        cmdBash = "bash_"
-    ret = env.runOutput(f'. ~/.{cmdBash}profile && sudo docker ps -aqf name="^{name}$"')
+    # cmdBash = ""
+    # if env.remoteOs == 'centos':
+    #     cmdBash = "bash_"
+    # ret = env.runOutput(f'. ~/.{cmdBash}profile && sudo docker ps -aqf name="^{name}$"')
+    ret = env.runOutputProf(f'sudo docker ps -aqf name="^{name}$"')
     return ret.strip() != ""
 
 
