@@ -1131,7 +1131,7 @@ def _skipSameVersion(env, prefix, ver):
         # ret = env.runOutput(
         #     f". ~/.{cmdBash}profile && sudo docker images -q {prefix}{ver}"
         # ).strip()
-        
+
         ret = env.runOutputProf(f"sudo docker images -q {prefix}{ver}").strip()
         if ret == "":
             okFlag = True
@@ -1246,20 +1246,24 @@ def dockerUpdateImage(
     # newVer = verStr(newVer)
 
     # 해당 버젼이 이미 있으면 생략
-    cmdBash = ""
-    if env.remoteOs == 'centos':
-        cmdBash = "bash_" 
-    ret = env.runOutput(
-        f". ~/.{cmdBash}profile && sudo docker images -q {newName}:{newVer}"
-    ).strip()
+    # cmdBash = ""
+    # if env.remoteOs == 'centos':
+    #     cmdBash = "bash_" 
+    # ret = env.runOutput(
+    #     f". ~/.{cmdBash}profile && sudo docker images -q {newName}:{newVer}"
+    # ).strip()
+
+    ret = env.runOutputProf(f"sudo docker images -q {newName}:{newVer}").strip()
     if ret != "":
         # 해당부모가 동일한지 확인
-        baseHash = env.runOutput(
-            f". ~/.{cmdBash}profile && sudo docker images -q {baseName}:{baseVer}"
-        ).strip()
-        ret = env.runOutput(
-            f". ~/.{cmdBash}profile && sudo docker image history -q {newName}:{newVer}"
-        )
+        # baseHash = env.runOutput(
+        #     f". ~/.{cmdBash}profile && sudo docker images -q {baseName}:{baseVer}"
+        # ).strip()
+        # ret = env.runOutput(
+        #     f". ~/.{cmdBash}profile && sudo docker image history -q {newName}:{newVer}"
+        # )
+        baseHash = env.runOutputProf(f"sudo docker images -q {baseName}:{baseVer}").strip()
+        ret = env.runOutputProf(f"sudo docker image history -q {newName}:{newVer}")
         lst = ret.split()
         if baseHash not in lst:
             raise Exception("no matched parent")
