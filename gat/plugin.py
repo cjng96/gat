@@ -896,10 +896,10 @@ def installRssh(env, home, useChroot=True):
         return
 
     print(f"========== install rssh on {env.remoteOs} ==========")
-    
-    if env.remoteOs == 'ubuntu':
+
+    if env.remoteOs == "ubuntu":
         env.run("sudo apt install --no-install-recommends -y rssh")
-    elif env.remoteOs == 'centos':
+    elif env.remoteOs == "centos":
         env.run("sudo yum install -y rssh")
 
     env.run(f"mkdir -p {home}/{{dev,etc,lib,usr,bin}}")
@@ -1249,7 +1249,9 @@ def dockerUpdateImage(
     ret = env.runOutputProf(f"sudo docker images -q {newName}:{newVer}").strip()
     if ret != "":
         # 해당부모가 동일한지 확인
-        baseHash = env.runOutputProf(f"sudo docker images -q {baseName}:{baseVer}").strip()
+        baseHash = env.runOutputProf(
+            f"sudo docker images -q {baseName}:{baseVer}"
+        ).strip()
         ret = env.runOutputProf(f"sudo docker image history -q {newName}:{newVer}")
         lst = ret.split()
         if baseHash not in lst:
@@ -1259,8 +1261,9 @@ def dockerUpdateImage(
         if hash is None:
             return False
 
+        # we should use sudo for docker?
         ret = env.runOutput(
-            f"""docker image inspect -f '{{{{index .Config.Labels "hash"}}}}' {newName}:{newVer}"""
+            f"""sudo docker image inspect -f '{{{{index .Config.Labels "hash"}}}}' {newName}:{newVer}"""
         ).strip()
         # print(f"hash - {hash} {ret}")
         if ret != hash:
@@ -1395,7 +1398,9 @@ RUN apt update && \\
     )
     # upgrade -> add 110MB
 
-    env.runProf(f"sudo docker build -t {name}:{version} /tmp/docker && rm -rf /tmp/docker")
+    env.runProf(
+        f"sudo docker build -t {name}:{version} /tmp/docker && rm -rf /tmp/docker"
+    )
     # --squash --no-cache
     # env.run(f"sudo docker tag {name}:{version} {name}:latest")
 
@@ -1577,7 +1582,6 @@ def dockerRunCmd(name, image, port=None, mountBase=True, net=None, env=None, ext
 
 
 def dockerContainerExists(env, name):
-
     ret = env.runOutputProf(f'sudo docker ps -aqf name="^{name}$"')
     return ret.strip() != ""
 
@@ -1627,6 +1631,7 @@ CMD ["/start"]
 
 def writeRunScript(env, cmd):
     print(f">> [{env.name}] writeRunScript: {cmd}")
+
     env.makeFile(
         f"""\
 #!/bin/sh
@@ -1636,7 +1641,6 @@ def writeRunScript(env, cmd):
         "/app/current/run",
     )
     env.run("mkdir -p /etc/service/app && ln -sf /app/current/run /etc/service/app/run")
-
     writeSvHelper(env)
 
 
@@ -2176,6 +2180,8 @@ log_slave_updates=1
 
 def upcntRunStr():
     # return "test -f /var/opt/upcnt || echo 0 > /var/opt/upcnt; awk -F, '{$1=$1+1}1' /var/opt/upcnt > /tmp/upt && mv /tmp/upt /var/opt/upcnt"
+    # centos에서 docker exec -i dxm bash -c "echo '1'"하면 안된다
+    # 'awk -F, "{$1=$1+1}1" /var/run/upcnt > /tmp/upt && mv /tmp/upt /var/run/upcnt'
     return (
         "awk -F, '{$1=$1+1}1' /var/run/upcnt > /tmp/upt && mv /tmp/upt /var/run/upcnt"
     )
@@ -2372,7 +2378,7 @@ def installDocker(env, arch=None):
     if env.runSafe("command -v docker"):
         return
 
-    if env.remoteOs == 'ubuntu':
+    if env.remoteOs == "ubuntu":
         env.run(
             "sudo apt install --no-install-recommends -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common"
         )
@@ -2390,9 +2396,11 @@ def installDocker(env, arch=None):
         env.run("sudo usermod -aG docker $USER")
         # env.run("sudo adduser {{server.id}} docker")	# remote.server.id
         # env.run("sudo service docker restart")	# /etc/init.d/docker restart
-    elif env.remoteOs == 'centos':
+    elif env.remoteOs == "centos":
         env.run("sudo yum install -y yum-utils device-mapper-persistent-data lvm2")
-        env.run("sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo")
+        env.run(
+            "sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo"
+        )
         env.run("sudo yum makecache fast")
         env.run("yum list docker-ce --showduplicates | sort -r")
         env.run("sudo yum install -y docker-ce docker-ce-cli containerd.io")
@@ -2402,7 +2410,6 @@ def installDocker(env, arch=None):
         env.run("sudo usermod -aG docker $USER")
 
     time.sleep(3)  # boot up
-        
 
 
 def installRestic(env, version, arch=None):

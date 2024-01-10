@@ -62,40 +62,93 @@ g_scriptPath = ""
 # key(ubuntu) : value(centos)
 # 우분투 패키지 명 기준으로 매핑
 g_packages = {
-    "rssh" : { "centos" : "rssh",},
-    "sshfs" : { "centos" : "sshfs", },
-    "knockd" : { "centos" : "epel-release knockd", },
-    "openssh-client" : { "centos" : "openssh-clients", },
-    "git" : { "centos" : "git", },
-    "libmysqlclient-dev" : { "centos" : "mysql-devel", },
-    "mongodb-org" : { "centos" : "mongodb-org", },
-    "redis-server" : { "centos" : "redis", },
-    "rabbitmq-server" : { "centos" : "rabbitmq-server", },
-    "python3" : { "centos" : "epel-release python36", },
-    "python3-pip" : { "centos" : "python36-pip", },
-    "python3-setuptools" : { "centos" : "python36-setuptools", },
-    "locales" : { "centos" : "glibc-locale-source glibc-langpack-en", },
-    "openssh-server" : { "centos" : "openssh-server", },
-    "tzdata" : { "centos" : "tzdata", },
-    "cron" : { "centos" : "cronie", },
-    "anacron" : { "centos" : "anacron", },
-    "rsyslog" : { "centos" : "rsyslog", },
-    "logrotate" : { "centos" : "logrotate", },
-    "sudo" : { "centos" : "sudo", },
-    "runit" : { "centos" : "epel-release runit", },
-    "gnupg" : { "centos" : "gnupg2", },
-    "fail2ban" : { "centos" : "fail2ban", },
-    "transmission-daemon" : { "centos" : "transmission-daemon", },
-    "bup" : { "centos" : "epel-release bup" }
+    "rssh": {
+        "centos": "rssh",
+    },
+    "sshfs": {
+        "centos": "sshfs",
+    },
+    "knockd": {
+        "centos": "epel-release knockd",
+    },
+    "openssh-client": {
+        "centos": "openssh-clients",
+    },
+    "git": {
+        "centos": "git",
+    },
+    "libmysqlclient-dev": {
+        "centos": "mysql-devel",
+    },
+    "mongodb-org": {
+        "centos": "mongodb-org",
+    },
+    "redis-server": {
+        "centos": "redis",
+    },
+    "rabbitmq-server": {
+        "centos": "rabbitmq-server",
+    },
+    "python3": {
+        "centos": "epel-release python36",
+    },
+    "python3-pip": {
+        "centos": "python36-pip",
+    },
+    "python3-setuptools": {
+        "centos": "python36-setuptools",
+    },
+    "locales": {
+        "centos": "glibc-locale-source glibc-langpack-en",
+    },
+    "openssh-server": {
+        "centos": "openssh-server",
+    },
+    "tzdata": {
+        "centos": "tzdata",
+    },
+    "cron": {
+        "centos": "cronie",
+    },
+    "anacron": {
+        "centos": "anacron",
+    },
+    "rsyslog": {
+        "centos": "rsyslog",
+    },
+    "logrotate": {
+        "centos": "logrotate",
+    },
+    "sudo": {
+        "centos": "sudo",
+    },
+    "runit": {
+        "centos": "epel-release runit",
+    },
+    "gnupg": {
+        "centos": "gnupg2",
+    },
+    "fail2ban": {
+        "centos": "fail2ban",
+    },
+    "transmission-daemon": {
+        "centos": "transmission-daemon",
+    },
+    "bup": {"centos": "epel-release bup"},
 }
 
 # 우분투 명령어와 centos 명령어를 매핑
 # key(ubuntu) : value(centos)
 # 우분투 패키지 명 기준으로 매핑
 g_options = {
-    '-y' : { 'centos' : '-y', },
-    '--no-install-recommends' : { 'centos' : '', },
+    "-y": {
+        "centos": "-y",
+    },
+    "--no-install-recommends": {
+        "centos": "",
+    },
 }
+
 
 # 패키지 등록 함수
 # 우분투 패키지 이름을 기준으로 매핑
@@ -108,11 +161,14 @@ def pkgRegister(os, pkgUbuntu, pkg):
     else:
         # 2. 해당 Ubuntu 패키지에 대한 OS 매핑이 이미 존재하는 경우, 메시지 출력
         if os in g_packages[pkgUbuntu]:
-            print(f"{pkgUbuntu} for {os} is already exist with package {g_packages[pkgUbuntu][os]}")
+            print(
+                f"{pkgUbuntu} for {os} is already exist with package {g_packages[pkgUbuntu][os]}"
+            )
         else:
             # 3. 존재하지 않는 경우, 새로운 OS 매핑 추가
             g_packages[pkgUbuntu][os] = pkg
             print(f"{pkgUbuntu} for {os} has been successfully registered")
+
 
 # 옵션 등록 함수
 # 우분투 옵션 이름을 기준으로 매핑
@@ -120,17 +176,20 @@ def pkgRegister(os, pkgUbuntu, pkg):
 def optRegister(os, optUbuntu, opt):
     global g_options
     if optUbuntu not in g_options:
-        g_options[optUbuntu] = { os : opt }
+        g_options[optUbuntu] = {os: opt}
         print(f"{optUbuntu} for {os} has been successfully registered")
     else:
         if os in g_options[optUbuntu]:
-            print(f"{optUbuntu} for {os} is already exist with package {g_options[optUbuntu][os]}")
+            print(
+                f"{optUbuntu} for {os} is already exist with package {g_options[optUbuntu][os]}"
+            )
         else:
             g_options[optUbuntu][os] = opt
             print(f"{optUbuntu} for {os} has been successfully registered")
 
 
 # ######################################################################################3
+
 
 class Error(Exception):
     pass
@@ -211,7 +270,9 @@ class Tasks:
                 print("key - " + fp.read())
         self.ssh.init(host, port, id, keyFile=keyFile)
         self.remoteOs = self.ssh.getRemoteOS()
-        print(f"===================== remoteOs : {self.remoteOs} =========================")
+        print(
+            f"===================== remoteOs : {self.remoteOs} ========================="
+        )
 
     def __del__(self):
         if self.ssh is not None:
@@ -416,6 +477,7 @@ class Tasks:
         self.run(
             f'echo "{content}" | {sudoCmd} tee {path} > /dev/null && {sudoCmd} chmod {mode} {path}'
         )
+        # self.run(f'echo "{content}" > {path}')
 
     def runOutput(self, cmd, expandVars=True):
         """
@@ -442,7 +504,6 @@ class Tasks:
                 cmd, shell=True, executable="/bin/bash"
             ).decode()
 
-
     # runOutput 래퍼 함수
     # os 별 ~/.profile 명령이 다르기 때문에 대응하기 위해
     def runOutputProf(self, cmd, expandVars=True):
@@ -450,16 +511,15 @@ class Tasks:
 
         tmpCmd = ". ~/."
 
-        if os == 'ubuntu':
+        if os == "ubuntu":
             tmpCmd = tmpCmd + "profile"
-        elif os == 'centos':
+        elif os == "centos":
             tmpCmd = tmpCmd + "bash_profile"
         tmpCmd = tmpCmd + " && "
 
         cmd = tmpCmd + cmd
 
         return self.runOutput(cmd, expandVars=expandVars)
-
 
     def runOutputAll(self, cmd, expandVars=True):
         """
@@ -476,7 +536,7 @@ class Tasks:
         if self.dkTunnel is not None:
             dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
             cmd = str2arg(cmd)
-            cmd = f'sudo docker exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
+            cmd = f'docker exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
             return self.dkTunnel.ssh.runOutputAll(cmd)
         elif self.ssh is not None:
             return self.ssh.runOutputAll(cmd)
@@ -504,8 +564,9 @@ class Tasks:
             # it하면 오류 난다
             dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
             cmd = str2arg(cmd)
-            cmd = f'sudo docker exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
-            # print('run cmd(dk) - %s' % cmd)
+            # sudo docker로 하면 cmd에 '가 있으면 centos에서 실행이 안된다
+            cmd = f'docker exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
+            # print("run cmd(dk) - %s" % cmd)
             return self.dkTunnel.ssh.run(cmd)
         elif self.ssh is not None:
             # print('run cmd(ssh) - %s' % cmd)
@@ -540,7 +601,6 @@ class Tasks:
                 if p.returncode != 0:
                     raise subprocess.CalledProcessError(p.returncode, cmd)
 
-    
     # runOutput 래퍼 함수
     # os 별 ~/.profile 명령이 다르기 때문에 대응하기 위해
     def runProf(self, cmd, expandVars=True, printLog=True):
@@ -548,9 +608,9 @@ class Tasks:
 
         tmpCmd = ". ~/."
 
-        if os == 'ubuntu':
+        if os == "ubuntu":
             tmpCmd = tmpCmd + "profile"
-        elif os == 'centos':
+        elif os == "centos":
             tmpCmd = tmpCmd + "bash_profile"
         tmpCmd = tmpCmd + " && "
 
@@ -740,7 +800,7 @@ class Tasks:
         s3 = CoS3(env.config.get("s3.key", None), env.config.get("s3.secret", None))
         bb = s3.bucketGet(bucket)
         return bb.downloadFile(key, dest)
-    
+
     # ####################### 나중에 사용될 여지가 있다. ####################################
 
     # 패키지 install 함수 -> ubuntu, centos 지원
@@ -750,10 +810,10 @@ class Tasks:
         cmdSudo = "sudo " if sudo else ""
         # OS에 따라 패키지 매니저 추가
         cmdPkgManager = None
-        if os == 'ubuntu':
-            cmdPkgManager = 'apt-get'
-        elif os == 'centos':
-            cmdPkgManager = 'yum'
+        if os == "ubuntu":
+            cmdPkgManager = "apt-get"
+        elif os == "centos":
+            cmdPkgManager = "yum"
         # 해당 옵션을 운영체제에 알맞게 매핑
         optionList = self._mapOptionToOs(os=os, options=options)
         cmdOption = " ".join(optionList)
@@ -771,10 +831,10 @@ class Tasks:
         cmdSudo = "sudo " if sudo else ""
         # OS에 따라 패키지 매니저 추가
         cmdPkgManager = None
-        if os == 'ubuntu':
-            cmdPkgManager = 'apt-get'
-        elif os == 'centos':
-            cmdPkgManager = 'yum'
+        if os == "ubuntu":
+            cmdPkgManager = "apt-get"
+        elif os == "centos":
+            cmdPkgManager = "yum"
         # 명령어 실행
         cmd = f"{cmdSudo}{cmdPkgManager} update"
         self.run(cmd)
@@ -818,50 +878,51 @@ class Tasks:
     # 매번 호출해주는게 바람직할듯
     def getOS(self):
         try:
-            with open('/etc/os-release') as file:
+            with open("/etc/os-release") as file:
                 for line in file:
-                    if line.startswith('NAME='):
-                        os_name = line.strip().split('=')[1].replace('"', '')
-                        if 'ubuntu' in os_name.lower():
-                            return 'ubuntu'
-                        elif 'centos' in os_name.lower():
-                            return 'centos'
+                    if line.startswith("NAME="):
+                        os_name = line.strip().split("=")[1].replace('"', "")
+                        if "ubuntu" in os_name.lower():
+                            return "ubuntu"
+                        elif "centos" in os_name.lower():
+                            return "centos"
                         else:
-                            raise Exception('Unknown OS')
+                            raise Exception("Unknown OS")
         except Exception as e:
             print(f"Error detecting OS: {e}")
 
     # 옵션 인자를 OS에 맞춰서 매핑
-    def _mapOptionToOs(self, os = '', options = []):
+    def _mapOptionToOs(self, os="", options=[]):
         global g_options
         optionList = []
         for option in options:
             if g_options.__contains__(option):
-                if os == 'ubuntu':
+                if os == "ubuntu":
                     optionList.append(option)
-                elif os == 'centos':
+                elif os == "centos":
                     optionCentOs = g_options.get(option)
                     optionList.append(optionCentOs)
             else:
-                raise Exception('Unknown option')
+                raise Exception("Unknown option")
         return optionList
-    
+
     # 패키지를 OS에 맞춰서 매핑
-    def _mapPackageToOs(self, os = '', packages = []):
+    def _mapPackageToOs(self, os="", packages=[]):
         global g_packages
         packageList = []
         for package in packages:
             if g_packages.__contains__(package):
-                if os == 'ubuntu':
+                if os == "ubuntu":
                     packageList.append(package)
-                elif os == 'centos':
+                elif os == "centos":
                     packageCentOs = g_packages.get(package)
                     packageList.append(packageCentOs)
             else:
-                raise Exception('Unknown package')
+                raise Exception("Unknown package")
         return packageList
 
     # #####################################################################3
+
 
 # https://pythonhosted.org/watchdog/
 class MyHandler(PatternMatchingEventHandler):
@@ -1746,11 +1807,11 @@ def main():
     g_local = Tasks(None, g_config)
     # g_local.util = g_util
 
-    strategy = g_config.deploy.strategy
-    if strategy == "zip":
-        g_config.srcPath = "."
-    elif strategy == "git":
-        g_config.srcPath = "./clone"
+    g_config.srcPath = "."
+    if cmd != "system":
+        strategy = g_config.deploy.strategy
+        if strategy == "git":
+            g_config.srcPath = "./clone"
 
     def checkServerName(serverName):
         """
