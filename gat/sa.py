@@ -140,7 +140,10 @@ def doPrune():
         qs = ss.splitlines()
         ids = ids + qs
 
-    cmd = """{dkCmd} images --format '{"id":"{{.ID}}", "img":"{{.Repository}}:{{.Tag}}"}' """
+    cmd = (
+        dkCmd
+        + """ images --format '{"id":"{{.ID}}", "img":"{{.Repository}}:{{.Tag}}"}' """
+    )
 
     ss = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
     images = ss.splitlines()
