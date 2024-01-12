@@ -1516,28 +1516,45 @@ def makeDockerContainerForRunit(
     return dk
 
 
-def dockerRunCmd(name, image, port=None, mountBase=True, net=None, env=None, extra=""):
+def cloudWatchInit(conn, accessKey, secretKey):
+    conn.run("sudo mkdir -p /etc/systemd/system/docker.service.d/")
+    conn.run("sudo touch /etc/systemd/system/docker.service.d/aws-credentials.conf")
+
+    conn.configBlock(
+        "/etc/systemd/system/docker.service.d/aws-credentials.conf",
+        "### {mark} cloud watch",
+        f'''\
+[Service]
+Environment="AWS_ACCESS_KEY_ID={accessKey}"  
+Environment="AWS_SECRET_ACCESS_KEY={secretKey}"''',
+        sudo=True,
+    )
+
+    conn.run("sudo systemctl daemon-reload")
+    conn.run("sudo systemctl restart docker")
+
+
+def dockerRunCmd(
+    name,
+    image,
+    port=None,
+    mountBase=True,
+    net=None,
+    env=None,
+    extra="",
+    awsLogsGroup=None,
+    awsLogsStream=None,
+    awsLogsRegion=None,
+):
     """
     port: "3306:3306", "9018-9019:9018-9019", ["9018-9019:9018-9019"]
     """
     print("port", port)
-    portCmd = ""
-    if port is not None:
-        if type(port) is str:
-            if port != "":
-                portCmd += f"-p {port} "
-        elif type(port) is int:
-            portCmd += f"-p {port} "
-        elif type(port) is list:
-            for p in port:
-                portCmd += f"-p {p} "
-        else:
-            raise Exception(f"******** invalid port type is {type(port)}")
 
-        # if portCnt != 1:
-        # 	portCmd = '-p {0}-{1}:{0}-{1}'.format(port, port+portCnt-1)
-        # else:
-        # 	portCmd = '-p {0}:{0}'.format(port)
+    # if portCnt != 1:
+    # 	portCmd = '-p {0}-{1}:{0}-{1}'.format(port, port+portCnt-1)
+    # else:
+    # 	portCmd = '-p {0}:{0}'.format(port)
 
     cmd = (
         "sudo docker run -itd --restart unless-stopped "
@@ -1552,7 +1569,19 @@ def dockerRunCmd(name, image, port=None, mountBase=True, net=None, env=None, ext
         # print(f"=================== ret : {ret} ==============================")
         cmd += f"--network {net} "
 
-    if portCmd != "":
+    if port is not None:
+        portCmd = ""
+        if type(port) is str:
+            if port != "":
+                portCmd += f"-p {port} "
+        elif type(port) is int:
+            portCmd += f"-p {port} "
+        elif type(port) is list:
+            for p in port:
+                portCmd += f"-p {p} "
+        else:
+            raise Exception(f"******** invalid port type is {type(port)}")
+
         cmd += f"{portCmd} "
 
     if mountBase:
@@ -1561,7 +1590,17 @@ def dockerRunCmd(name, image, port=None, mountBase=True, net=None, env=None, ext
             f"-v /data/{name}:/data -v /work/{name}:/work "
         )
 
-    cmd += "--log-opt max-size=30m --log-opt max-file=3 "
+    if awsLogsGroup is not None:
+        awsLogsRegion = awsLogsRegion or "us-west-1"
+        awsLogsStream = awsLogsStream or name
+
+        cmd += f"--log-driver=awslogs "
+        cmd += f"--log-opt awslogs-region={awsLogsRegion} "
+        cmd += f"--log-opt awslogs-group={awsLogsGroup} "
+        cmd += f"--log-opt awslogs-stream={awsLogsStream} "
+    else:
+        cmd += "--log-opt max-size=30m --log-opt max-file=3 "
+
     cmd += extra
     cmd += f" {image}"
 
