@@ -3511,8 +3511,9 @@ time zstd -d $fn -c | docker import --change 'CMD ["/start"]' - $image
         sudo=True,
     )
 
+    pp = os.path.dirname(os.path.abspath(__file__))
     env.copyFile(
-        srcPath="./resource/sa.py",
+        srcPath=f"{pp}/sa.py",
         targetPath="/usr/local/bin/sa",
         sudo=True,
     )
