@@ -1542,6 +1542,7 @@ def dockerRunCmd(
     net=None,
     env=None,
     extra="",
+    useHost=True,
     awsLogsGroup=None,
     awsLogsStream=None,
     awsLogsRegion=None,
@@ -1600,6 +1601,9 @@ def dockerRunCmd(
         cmd += f"--log-opt awslogs-stream={awsLogsStream} "
     else:
         cmd += "--log-opt max-size=30m --log-opt max-file=3 "
+
+    if useHost:
+        cmd += "--add-host=host.docker.internal:host-gateway "
 
     cmd += extra
     cmd += f" {image}"
