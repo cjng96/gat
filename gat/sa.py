@@ -156,8 +156,13 @@ def doPrune():
             if imgName in deleteTargets:
                 cmd = f"{dkCmd} rmi {img['id']}"
                 # print(cmd)
-                ss = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-                print(ss)
+                try:
+                    ss = (
+                        subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
+                    )
+                    print(ss)
+                except Exception as e:
+                    print(f"  err -> {e}")
             else:
                 print("  -> but don't delete it which is not in deleteTarget list")
 
