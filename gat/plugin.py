@@ -1643,6 +1643,15 @@ def makeDockerContainer(env, name, image=None, port=None, mountBase=True):
     if dockerContainerExists(env, name):
         return
 
+    os = env.remoteOs
+    loadProfile = None
+    if os == 'ubunut':
+        loadProfile = ". ~/.profile"
+    elif os == 'centos':
+        loadProfile = ". ~/.bash_profile"
+    else:
+        raise Exception("Unsupported Operating System") 
+
     if image is None:
         # 이미지가 지정되어 있지 않으면 기본 이미지로 같은 이름으로 만든다.
         image = name
@@ -1660,16 +1669,18 @@ CMD ["/start"]
 """,
             "/tmp/docker-sv/Dockerfile",
         )
+
         env.run(
-            f". ~/.profile && sudo docker build -t {image} /tmp/docker-sv && rm -rf /tmp/docker-sv"
+            f"{loadProfile} && sudo docker build -t {image} /tmp/docker-sv && rm -rf /tmp/docker-sv"
         )  # --no-cache
+             
 
     cmd = dockerRunCmd(name, image, port, mountBase)
-    env.run(". ~/.profile && " + cmd)
+    env.run(f"{loadProfile} && {cmd}")
 
     # leave cmd as a file
     env.makeFile(cmd, "/tmp/dockerCmd")
-    env.run(f". ~/.profile && sudo docker cp /tmp/dockerCmd {name}:/cmd")
+    env.run(f"{loadProfile} && sudo docker cp /tmp/dockerCmd {name}:/cmd")
 
 
 def writeRunScript(env, cmd):
