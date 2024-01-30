@@ -2406,7 +2406,13 @@ def dockerForceNetwork(env, name):
 
 
 def getArch(env):
-    arch = env.runOutput("dpkg --print-architecture").strip()
+    arch = None
+
+    if env.remoteOs == 'ubuntu':
+        arch = env.runOutput("dpkg --print-architecture").strip()
+    if env.remoteOs == 'centos':
+        arch = env.runOutput("uname -m").strip()
+
     return arch
 
 
