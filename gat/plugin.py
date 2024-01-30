@@ -2409,7 +2409,7 @@ def getArch(env):
     os = env.remoteOs
     arch = None
 
-    if os == 'ubuntu':
+    if os == 'ubuntu' or os == None:
         arch = env.runOutput("dpkg --print-architecture").strip()
     elif os == 'centos':
         arch = env.runOutput("uname -m").strip()
