@@ -236,11 +236,16 @@ class Tasks:
         self.data = g_data
         self.util = g_util
 
-        # for log
-        self.name = "local" if server is None else server.host
+        self._os = None
 
-        # remote os
-        self.remoteOs = None
+        # for log
+        if server is None:
+            self.logName = "local"
+        else:
+            if dkTunnel is None:
+                self.logName = f"{server.host}:{server.port}"
+            else:
+                self.logName = f"{dkTunnel.logName}/{dkName}"
 
         if server is not None:
             if dkTunnel is None:
@@ -262,17 +267,18 @@ class Tasks:
             dkId = strExpand(dkId, g_dic)
         self.dkId = dkId
 
+    def log(self, msg):
+        print(f"[{self.logName}]: {msg}")
+
     def initSsh(self, host, port, id, keyFile=None):
         self.ssh = CoSsh()
-        print(f"ssh: connecting to the server[{id}@{host}:{port}] with key:{keyFile}")
+        self.log(
+            f"ssh - connecting to the server[{id}@{host}:{port}] with key:{keyFile}"
+        )
         if keyFile is not None:
             with open(keyFile) as fp:
                 print("key - " + fp.read())
         self.ssh.init(host, port, id, keyFile=keyFile)
-        self.remoteOs = self.ssh.getRemoteOS()
-        print(
-            f"===================== remoteOs : {self.remoteOs} ========================="
-        )
 
     def __del__(self):
         if self.ssh is not None:
@@ -343,7 +349,7 @@ class Tasks:
         if not os.path.exists(path + ".py"):
             raise Exception(f"There is no target file[{path}] for deployApp")
 
-        print(f"\nsetupApp - path:{path}...")
+        self.log(f"setupApp - path:{path}...")
         dir = os.path.dirname(path)
         fn = os.path.basename(path)
 
@@ -401,7 +407,7 @@ class Tasks:
         if not os.path.exists(path + ".py"):
             raise Exception(f"There is no target file[{path}] for deployApp")
 
-        print(f"\ndeployApp - path:{path}, profile:{profile}")
+        self.log(f"deployApp - path:{path}, profile:{profile}")
         dir = os.path.dirname(path)
         fn = os.path.basename(path)
 
@@ -486,7 +492,7 @@ class Tasks:
         return: stdout string
         exception: subprocess.CalledProcessError(returncode, output)
         """
-        print("executeOutput on %s[%s].." % (self._serverName(), cmd))
+        self.log(f"runOutput [{cmd}]...")
 
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
@@ -504,21 +510,62 @@ class Tasks:
                 cmd, shell=True, executable="/bin/bash"
             ).decode()
 
+    # Tasks 초기화는 보통 로컬에서 진행 -> 전역으로 두면 에러
+    # 매번 호출해주는게 바람직할듯
+    # def getOS(self):
+    #     try:
+    #         with open("/etc/os-release") as file:
+    #             for line in file:
+    #                 if line.startswith("NAME="):
+    #                     os_name = line.strip().split("=")[1].replace('"', "")
+    #                     if "ubuntu" in os_name.lower():
+    #                         return "ubuntu"
+    #                     elif "centos" in os_name.lower():
+    #                         return "centos"
+    #                     else:
+    #                         raise Exception("Unknown OS")
+    #     except Exception as e:
+    #         print(f"Error detecting OS: {e}")
+
+    # return os name of remote server
+    def getOS(self):
+        if self._os is None:
+            try:
+                osInfo = self.runOutput("cat /etc/os-release").lower()
+                if "ubuntu" in osInfo:
+                    self._os = "ubuntu"
+                elif "centos" in osInfo:
+                    self._os = "centos"
+                else:
+                    raise Exception("Unknown OS")
+
+            except Exception as e:
+                osInfo = self.runOutput("sw_vers")
+                osInfo = osInfo.lower()
+                if "mac os" in osInfo or "macos" in osInfo:
+                    self._os = "macos"
+                else:
+                    raise Exception("Unknown OS")
+
+            print(f"========== remote os : {self._os} ==========")
+
+        return self._os
+
     # runOutput 래퍼 함수
     # os 별 ~/.profile 명령이 다르기 때문에 대응하기 위해
     def runOutputProf(self, cmd, expandVars=True):
-        os = self.remoteOs
-
-        tmpCmd = ". ~/."
+        os = self.getOS()
 
         if os == "ubuntu":
-            tmpCmd = tmpCmd + "profile"
+            profile = "profile"
         elif os == "centos":
-            tmpCmd = tmpCmd + "bash_profile"
-        tmpCmd = tmpCmd + " && "
+            profile = "bash_profile"
+        elif os == "macos":
+            profile = "bash_profile"
+        else:
+            raise Exception(f"Unknown OS - {os}")
 
-        cmd = tmpCmd + cmd
-
+        cmd = f". ~/.{profile} && " + cmd
         return self.runOutput(cmd, expandVars=expandVars)
 
     def runOutputAll(self, cmd, expandVars=True):
@@ -528,7 +575,7 @@ class Tasks:
         return: stdout and stderr string
         exception: subprocess.CalledProcessError(returncode, output)
         """
-        print("executeOutputAll on %s[%s].." % (self._serverName(), cmd))
+        self.log(f"runOutputAll [{cmd}]...")
 
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
@@ -545,17 +592,18 @@ class Tasks:
                 cmd, shell=True, stderr=subprocess.STDOUT, executable="/bin/bash"
             )
 
-    def _serverName(self):
-        if self.server is None:
-            return "local"
-        elif self.dkTunnel is None:
-            return f"{self.server.host}:{self.server.port}"
-        else:
-            return f"{self.dkName}[{self.server.host}:{self.server.port}]"
+    # def _serverName(self):
+    #     if self.server is None:
+    #         return "local"
+    #     elif self.dkTunnel is None:
+    #         return f"{self.server.host}:{self.server.port}"
+    #     else:
+    #         return f"{self.dkName}[{self.server.host}:{self.server.port}]"
 
     def run(self, cmd, expandVars=True, printLog=True):
         if printLog:
-            print(f"execute on {self._serverName()}[{cmd}]..")
+            # print(f"execute on {self._serverName()}[{cmd}]..")
+            self.log(f"run [{cmd}]...")
 
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
@@ -604,7 +652,7 @@ class Tasks:
     # runOutput 래퍼 함수
     # os 별 ~/.profile 명령이 다르기 때문에 대응하기 위해
     def runProf(self, cmd, expandVars=True, printLog=True):
-        os = self.remoteOs
+        os = self.getOS()
 
         tmpCmd = ". ~/."
 
@@ -694,7 +742,9 @@ class Tasks:
 
         # ss = str2arg(json.dumps(args, cls=ObjectEncoder))
         ss = json.dumps(args, cls=ObjectEncoder)
-        ss2 = zlib.compress(ss.encode())  # 1/3이나 절반 - 사이즈가 문제가 아니라 escape때문에
+        ss2 = zlib.compress(
+            ss.encode()
+        )  # 1/3이나 절반 - 사이즈가 문제가 아니라 escape때문에
         ss = base64.b64encode(ss2).decode()
         self.run(
             '%spython3 %s runBin "%s"' % ("sudo " if sudo else "", pp2, ss),
@@ -713,7 +763,7 @@ class Tasks:
   """
 
     def strLoad(self, path):
-        print("task: strLoad from[%s]..." % path)
+        self.log("task - strLoad from[%s]..." % path)
         self.onlyLocal()
 
         path = os.path.expanduser(path)
@@ -724,7 +774,7 @@ class Tasks:
         """
         str이 없으면 추가한다
         """
-        print("task[%s]: strEnsure[%s] for %s..." % (self._serverName(), str, path))
+        self.log(f"task - strEnsure[{str}] for {path}...")
         self.onlyRemote()
 
         args = dict(cmd="strEnsure", dic=g_dic, path=path, str=str)
@@ -736,7 +786,7 @@ class Tasks:
         marker: ### {mark} TEST
         block: vv=1
         """
-        print(f"task: config block[{marker}] for {path}...\n[{block}]\n")
+        self.log(f"task - config block[{marker}] for {path}...\n[{block}]\n")
         # self.onlyRemote()
 
         args = dict(
@@ -753,7 +803,7 @@ class Tasks:
         """
         regexp에 부합되는 라인이 있을 경우 변경한다
         """
-        print("task: config line[%s] for %s..." % (line, path))
+        self.log("task - config line[%s] for %s..." % (line, path))
         # self.onlyRemote()
 
         args = dict(
@@ -768,7 +818,7 @@ class Tasks:
         self._helperRun(args, sudo)
 
     def s3List(self, env, bucket, prefix):
-        print("task: s3 list[%s/%s]..." % (bucket, prefix))
+        self.log("task - s3 list[%s/%s]..." % (bucket, prefix))
         self.onlyLocal()
 
         if not prefix.endswith("/"):
@@ -780,7 +830,7 @@ class Tasks:
         return lst
 
     def s3DownloadFiles(self, env, bucket, prefix, nameList, targetFolder):
-        print("task: s3 download files[%s/%s]..." % (bucket, prefix))
+        self.log("task - s3 download files[%s/%s]..." % (bucket, prefix))
         self.onlyLocal()
 
         if not targetFolder.endswith("/"):
@@ -794,7 +844,7 @@ class Tasks:
             bb.downloadFile(prefix + name, targetFolder + name)
 
     def s3DownloadFile(self, env, bucket, key, dest=None):
-        print("task: s3 download file[%s -> %s]..." % (key, dest))
+        self.log("task - s3 download file[%s -> %s]..." % (key, dest))
         self.onlyLocal()
 
         s3 = CoS3(env.config.get("s3.key", None), env.config.get("s3.secret", None))
@@ -805,15 +855,18 @@ class Tasks:
 
     # 패키지 install 함수 -> ubuntu, centos 지원
     def pkgInstall(self, sudo=False, options=[], packages=[]):
-        os = self.getOS()
         # sudo 권한 여부 확인 후 sudo 추가
         cmdSudo = "sudo " if sudo else ""
         # OS에 따라 패키지 매니저 추가
+        os = self.getOS()
         cmdPkgManager = None
         if os == "ubuntu":
             cmdPkgManager = "apt-get"
         elif os == "centos":
             cmdPkgManager = "yum"
+        else:
+            raise Exception(f"Unknown OS - {os}")
+
         # 해당 옵션을 운영체제에 알맞게 매핑
         optionList = self._mapOptionToOs(os=os, options=options)
         cmdOption = " ".join(optionList)
@@ -873,23 +926,6 @@ class Tasks:
         cmdPkgStop = f"systemctl restart {pkg}"
         cmd = f"{cmdSudo}{cmdPkgStop}"
         self.run(cmd)
-
-    # Tasks 초기화는 보통 로컬에서 진행 -> 전역으로 두면 에러
-    # 매번 호출해주는게 바람직할듯
-    def getOS(self):
-        try:
-            with open("/etc/os-release") as file:
-                for line in file:
-                    if line.startswith("NAME="):
-                        os_name = line.strip().split("=")[1].replace('"', "")
-                        if "ubuntu" in os_name.lower():
-                            return "ubuntu"
-                        elif "centos" in os_name.lower():
-                            return "centos"
-                        else:
-                            raise Exception("Unknown OS")
-        except Exception as e:
-            print(f"Error detecting OS: {e}")
 
     # 옵션 인자를 OS에 맞춰서 매핑
     def _mapOptionToOs(self, os="", options=[]):
@@ -1410,7 +1446,9 @@ class Main:
 
         strategy = g_config.deploy.strategy
         # workPath = env.config.srcPath
-        workPath = g_config.srcPath  # deployApp으로 온 경우 env.config가 새로 만들어진다
+        workPath = (
+            g_config.srcPath
+        )  # deployApp으로 온 경우 env.config가 새로 만들어진다
         if strategy == "zip":
             zipProcess(env, include, exclude, workPath)
 
@@ -1762,7 +1800,9 @@ def main():
                     manualStrategyValue = "zip"
                     # g_config.deploy.strategy = argv
                 else:
-                    raise Exception(f"{manualStrategyValue}는 올바르지 않은 명령어입니다.")
+                    raise Exception(
+                        f"{manualStrategyValue}는 올바르지 않은 명령어입니다."
+                    )
 
     else:
         print("missing gat command")
