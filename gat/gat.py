@@ -654,12 +654,14 @@ class Tasks:
     def runProf(self, cmd, expandVars=True, printLog=True):
         os = self.getOS()
 
-        tmpCmd = ". ~/."
+        tmpCmd = None
 
         if os == "ubuntu":
-            tmpCmd = tmpCmd + "profile"
+            tmpCmd = ". ~/.profile"
         elif os == "centos":
-            tmpCmd = tmpCmd + "bash_profile"
+            tmpCmd = ". ~/.bash_profile"
+        else:
+            raise Exception("Unsupported Operating System")
         tmpCmd = tmpCmd + " && "
 
         cmd = tmpCmd + cmd
