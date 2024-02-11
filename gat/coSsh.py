@@ -223,26 +223,3 @@ class CoSsh:
             except Exception as e:
                 print(e)
                 raise e
-            
-    # return os name of remote server
-    def getRemoteOS(self):
-        try:
-            stdin, stdout, stderr = self.ssh.exec_command('cat /etc/os-release')
-            osInfo = stdout.read().decode()
-
-            if 'ubuntu' in osInfo.lower():
-                print("========== remote os : ubuntu ==========")
-                return 'ubuntu'
-            elif 'centos' in osInfo.lower():
-                print("========== remote os : centos ==========")
-                return 'centos'
-        except Exception as e:
-            stdin, stdout, stderr = self.ssh.exec_command('sw_vers')
-            osInfo = stdout.read().decode()
-
-            osInfoStr = osInfo.lower()
-            if 'mac os' in osInfoStr or 'macos' in osInfoStr:
-                print("========== remote os : macos ==========")
-                return 'macos'
-            else:
-                raise Exception("Unknown OS")

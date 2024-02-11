@@ -895,11 +895,11 @@ def installRssh(env, home, useChroot=True):
     if env.runSafe(f"test -f {home}/ok"):
         return
 
-    print(f"========== install rssh on {env.remoteOs} ==========")
-
-    if env.remoteOs == "ubuntu":
+    os = env.getOS()
+    print(f"========== install rssh on {os} ==========")
+    if os == "ubuntu":
         env.run("sudo apt install --no-install-recommends -y rssh")
-    elif env.remoteOs == "centos":
+    elif os == "centos":
         env.run("sudo yum install -y rssh")
 
     env.run(f"mkdir -p {home}/{{dev,etc,lib,usr,bin}}")
@@ -990,7 +990,7 @@ def makeRsshUser(env, id, rootPath, authPubs):
 
 
 def registerAuthPubs(env, authPubs, id=None):
-    print(f">> [{env.name}] registerAuthPubs - id:{id} pubs:{authPubs}")
+    env.log(f">> registerAuthPubs - id:{id} pubs:{authPubs}")
     if id is None:
         home = "~"
     else:
@@ -1010,8 +1010,8 @@ def registerAuthPub(env, pub, id=None):
 def makeUser(
     env, id, home=None, shell=None, genSshKey=True, grantSudo=False, authPubs=None
 ):
-    print(
-        f">> [{env.name}] makeUser - id:{id} home:{home} shell:{shell} genKey:{genSshKey} grantSudo:{grantSudo} authPubs:{authPubs}"
+    env.log(
+        f">> makeUser - id:{id} home:{home} shell:{shell} genKey:{genSshKey} grantSudo:{grantSudo} authPubs:{authPubs}"
     )
 
     # if env.runSafe('cat /etc/passwd | grep -e "^%s:"' % id):
@@ -1673,7 +1673,7 @@ CMD ["/start"]
 
 
 def writeRunScript(env, cmd):
-    print(f">> [{env.name}] writeRunScript: {cmd}")
+    env.log(f">> writeRunScript: {cmd}")
 
     env.makeFile(
         f"""\
@@ -1688,7 +1688,7 @@ def writeRunScript(env, cmd):
 
 
 def writeSvHelper(env):
-    print(f">> [{env.name}] writeSvHelper")
+    env.log(f">> writeSvHelper")
 
     help = "shortcuts - c(app),s(status),r(run),d(stop),re(restart),e(exit)"
     env.configBlock(
@@ -2406,12 +2406,12 @@ def dockerForceNetwork(env, name):
 
 
 def getArch(env):
-    os = env.remoteOs
+    os = env.getOS()
     arch = None
 
-    if os == 'ubuntu':
+    if os == "ubuntu":
         arch = env.runOutput("dpkg --print-architecture").strip()
-    elif os == 'centos':
+    elif os == "centos":
         arch = env.runOutput("uname -m").strip()
     else:
         raise Exception("Unsupported Operating System")
@@ -2430,7 +2430,9 @@ def installDocker(env, arch=None):
     if env.runSafe("command -v docker"):
         return
 
-    if env.remoteOs == "ubuntu":
+    os = env.getOS()
+
+    if os == "ubuntu":
         env.run(
             "sudo apt install --no-install-recommends -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common"
         )
@@ -2448,7 +2450,7 @@ def installDocker(env, arch=None):
         env.run("sudo usermod -aG docker $USER")
         # env.run("sudo adduser {{server.id}} docker")	# remote.server.id
         # env.run("sudo service docker restart")	# /etc/init.d/docker restart
-    elif env.remoteOs == "centos":
+    elif os == "centos":
         env.run("sudo yum install -y yum-utils device-mapper-persistent-data lvm2")
         env.run(
             "sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo"
@@ -2460,6 +2462,8 @@ def installDocker(env, arch=None):
         env.run("sudo systemctl enable docker")
         # 여기 명령어가 이상한것 같은데?
         env.run("sudo usermod -aG docker $USER")
+    else:
+        raise Exception(f"Unsupported Operating System - {os}")
 
     time.sleep(3)  # boot up
 
