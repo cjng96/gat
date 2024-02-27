@@ -51,7 +51,7 @@ from .myutil import (
     pathRemove,
     pathIsChild,
 )  # NonBlockingStreamReader,
-from .coCollection import dictMerge, Dict2, dictMerge2
+from .coCollection import dictMerge, Dict2, dict2Merge
 
 g_cwd = ""
 g_scriptPath = ""
@@ -211,7 +211,8 @@ class MyUtil:
 
     def deployFileListProd(self, env, func):
         include = env.config.deploy.include
-        exclude = env.config.get("deploy.exclude", [])
+        exclude = env.config.deploy.get("exclude", [])
+        # basePath = env.config.deploy.get("basePath", ".")
         followLinks = env.config.deploy.followLinks
         srcPath = env.config.srcPath
         g_main.targetFileListProd(
@@ -1264,7 +1265,7 @@ class Main:
         for pp in include:
             if type(pp) == str:
                 if pp == "*":
-                    pp = ""
+                    pp = "."
 
                 # daemon
                 pp = _pathExpand(pp)
@@ -1435,62 +1436,69 @@ class Main:
                     followLinks=config.deploy.followLinks,
                 )
 
-            env.uploadFile(
-                zipPath, "/tmp/gatUploadPkg.zip"
-            )  # we don't include it by default
+            # we don't include it by default
+            env.uploadFile(zipPath, "/tmp/gatUploadPkg.zip")
+            os.remove(zipPath)
             env.run(
                 f"cd {deployRoot}/releases/{todayName} "
                 + f"&& {sudoCmd} unzip /tmp/gatUploadPkg.zip && {sudoCmd} rm /tmp/gatUploadPkg.zip"
             )
-            os.remove(zipPath)
 
         strategy = g_config.deploy.strategy
         # workPath = env.config.srcPath
-        workPath = (
-            g_config.srcPath
-        )  # deployApp으로 온 경우 env.config가 새로 만들어진다
-        if strategy == "zip":
-            zipProcess(env, include, exclude, workPath)
+        workPath = g_config.srcPath
 
-        elif strategy == "git":
-            # 여기 path는 git clone을 받을 주소
-            # 나중에 따로 god_app.py에서 설정하도록 하면 코드가 더욱 좋아질거라 예상
-            cloneRepo(g_config.deploy.gitRepo, server.gitBranch, workPath)
-            zipProcess(env, include, exclude, workPath)
+        old = os.path.abspath(os.curdir)
+        try:
+            # 아예 해당 폴더로 가서 생성한다
+            os.chdir(workPath)
+            workPath = ""
 
-            """	no use copy strategy anymore
-      elif strategy == "copy":
-        ssh.uploadFile(config.name, os.path.join(realTargetFull, config.name))	# we don't include it by default
-        ssh.run("chmod 755 %s/%s" % (realTargetFull, config.name))
+            # deployApp으로 온 경우 env.config가 새로 만들어진다
+            if strategy == "zip":
+                zipProcess(env, include, exclude, workPath)
 
-        ssh.uploadFilterFunc = _filterFunc
+            elif strategy == "git":
+                # 여기 path는 git clone을 받을 주소
+                # 나중에 따로 god_app.py에서 설정하도록 하면 코드가 더욱 좋아질거라 예상
+                cloneRepo(g_config.deploy.gitRepo, server.gitBranch, workPath)
+                zipProcess(env, include, exclude, workPath)
 
-        for pp in include:
-          if type(pp) == str:
-            if pp == "*":
-              pp = "."
-            
-            # daemon
-            pp = pp.replace("${name}", config.name)
-                        
-            p = pathlib.Path(pp)
-            if not p.exists():
-              print("deploy: not exists - %s" % pp)
-              continue
-            
-            if p.is_dir():
-              tt = os.path.join(realTargetFull, pp)
-              ssh.uploadFolder(pp, tt)
-            else: 
-              ssh.uploadFileTo(pp, realTargetFull)
-          else:
-            src = pp["src"]
-            target = pp["target"]
-            tt = os.path.join(realTargetFull, target)
-            ssh.uploadFolder(src, tt)
-      """
-        else:
-            raise Exception(f"unknown strategy[{strategy}]")
+                """	no use copy strategy anymore
+        elif strategy == "copy":
+            ssh.uploadFile(config.name, os.path.join(realTargetFull, config.name))	# we don't include it by default
+            ssh.run("chmod 755 %s/%s" % (realTargetFull, config.name))
+
+            ssh.uploadFilterFunc = _filterFunc
+
+            for pp in include:
+            if type(pp) == str:
+                if pp == "*":
+                  pp = "."
+                
+                # daemon
+                pp = pp.replace("${name}", config.name)
+                            
+                p = pathlib.Path(pp)
+                if not p.exists():
+                print("deploy: not exists - %s" % pp)
+                continue
+                
+                if p.is_dir():
+                tt = os.path.join(realTargetFull, pp)
+                ssh.uploadFolder(pp, tt)
+                else: 
+                ssh.uploadFileTo(pp, realTargetFull)
+            else:
+                src = pp["src"]
+                target = pp["target"]
+                tt = os.path.join(realTargetFull, target)
+                ssh.uploadFolder(src, tt)
+        """
+            else:
+                raise Exception(f"unknown strategy[{strategy}]")
+        finally:
+            os.chdir(old)
 
         # shared links
         for pp in sharedLinks:
@@ -1575,6 +1583,7 @@ def expandVar(dic):
 class Config(Dict2):
     def __init__(self):
         super().__init__()
+        self.dic["srcPath"] = "."
 
     def configStr(self, cfgType, ss):
         """
@@ -1582,17 +1591,11 @@ class Config(Dict2):
         """
         if cfgType == "yaml":
             try:
-                # self.cfg = Dict2()
                 self.fill(yaml.safe_load(ss))
-                # g_util.config = g_config
 
                 if "defaultVars" in self:
                     for server in self.servers:
-                        # vars2 = Dict2()
-                        # vars2.fill(self.defaultVars)
-                        # vars2.fill(server.vars)
-                        # server.vars = vars2
-                        server.vars = dictMerge2(self.defaultVars, server.vars)
+                        server.vars = dict2Merge(self.defaultVars, server.vars)
 
                 if self.type == "app":
                     if "followLinks" not in self.deploy:
@@ -1601,7 +1604,7 @@ class Config(Dict2):
             except yaml.YAMLError as e:
                 raise e
         else:
-            raise Exception("unknown config type[%s]" % cfgType)
+            raise Exception(f"unknown config type[{cfgType}]")
 
     def configFile(self, cfgType, pp):
         """
@@ -1816,7 +1819,8 @@ def main():
     global g_config
     helper = Helper(g_config)
     sys.path.append(g_cwd)
-    mymod = __import__(target[:-3], fromlist=[""])
+    pyFileName = target[:-3]
+    mymod = __import__(pyFileName, fromlist=[""])
     g_mygat = mymod.myGat(helper=helper)
     # g_config 객체 생성 지점 -> 여기부터 설정 객체 사용 가능
     if manualStrategyValue is not None:
@@ -1825,8 +1829,9 @@ def main():
     print("gat-tool V%s" % __version__)
     name = g_config.name
     type = g_config.get("type", "app")
+    srcPath = g_config.srcPath
 
-    print("** config[type:%s, name:%s]" % (type, name))
+    print(f"** config[type:{type}, name:{name}, srcPath:{srcPath}]")
 
     # load secret - 이걸 mygat init하는데서 수동으로 하게해놨는데..
     # 무조건 로드하게하고 추가 로드를 할수 있게할까? - 좀 애매하다
@@ -1847,7 +1852,7 @@ def main():
     g_local = Tasks(None, g_config)
     # g_local.util = g_util
 
-    g_config.srcPath = "."
+    # g_config.srcPath = "."
     if cmd != "system":
         strategy = g_config.deploy.strategy
         if strategy == "git":
