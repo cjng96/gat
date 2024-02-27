@@ -31,6 +31,7 @@ def dictGetTest():
 
 # dictGetTest()
 
+
 # https://gist.github.com/angstwad/bf22d1822c38a92ec0a9
 def dictMerge(dic, dic2):
     newDic = {}
@@ -40,7 +41,11 @@ def dictMerge(dic, dic2):
             newDic[k] = deepcopy(v)
 
     for k, v in dic2.items():
-        if k in dic and isinstance(dic[k], dict) and isinstance(dic2[k], collectionsAbc.Mapping):
+        if (
+            k in dic
+            and isinstance(dic[k], dict)
+            and isinstance(dic2[k], collectionsAbc.Mapping)
+        ):
             # newDic[k] = mergeDict(dic[k], dic2[k])
             newDic[k] = dictMerge(dic[k], dic2[k])
         else:
@@ -49,21 +54,26 @@ def dictMerge(dic, dic2):
     return newDic
 
 
-def dictMerge2(dic, dic2):
-    newDic = Dict2()
-
+# supported Dict2
+def dict2Merge(dic, dic2):
     if isinstance(dic, Dict2):
         dic = dic.dic
 
     if isinstance(dic2, Dict2):
         dic2 = dic2.dic
 
+    newDic = Dict2()
     for k, v in dic.items():
         if k not in dic2:
             newDic[k] = deepcopy(v)
+
     for k, v in dic2.items():
-        if k in dic and isinstance(dic[k], (dict, Dict2)) and isinstance(dic2[k], (collectionsAbc.Mapping, Dict2)):
-            newDic[k] = dictMerge2(dic[k], dic2[k])
+        if (
+            k in dic
+            and isinstance(dic[k], (dict, Dict2))
+            and isinstance(dic2[k], (collectionsAbc.Mapping, Dict2))
+        ):
+            newDic[k] = dict2Merge(dic[k], dic2[k])
         else:
             newDic[k] = deepcopy(dic2[k])
 
@@ -74,6 +84,9 @@ class Dict2:
     """
     dic["attr"] -> dic.attr
     dic.val = 1
+
+    # 단 새로운 멤버변수 생성은 안된다
+    dic.newV = 1
     """
 
     def __init__(self, dic=None):
@@ -120,17 +133,19 @@ class Dict2:
     def __contains__(self, key):
         return key in self.dic
 
+    # merge all attributes but array is replaced
     def fill(self, dic):
         if isinstance(dic, Dict2):
-            # self.fill(dic.dic)
-            # return
-            dic = dic.dic
+            dic = deepcopy(dic.dic)
 
         for key, value in dic.items():
-            tt = type(value)
-            if tt == dict:
-                self.dic[key] = Dict2(value)
-            elif tt == list:
+            valueType = type(value)
+            if valueType == dict:
+                if key in self.dic:
+                    self.dic[key] = dict2Merge(self.dic[key], value)
+                else:
+                    self.dic[key] = Dict2(value)
+            elif valueType == list:
                 for idx, vv in enumerate(value):
                     if type(vv) == dict:
                         value[idx] = Dict2(vv)
@@ -157,7 +172,7 @@ class Dict2:
 def dictMerge2Test():
     a = Dict2(dic={"a": 1, "d": {"a1": 1, "b1": 2}})
     b = Dict2(dic={"b": 1, "d": {"a1": 2, "c1": 3}})
-    c = dictMerge2(a, b)
+    c = dict2Merge(a, b)
     assert c.a == 1
     assert c.b == 1
     assert c.d.a1 == 2
