@@ -451,6 +451,7 @@ class Tasks:
         finally:
             os.chdir(pp)
 
+    # 이거 좀 애매한데 uploadFile인데 사실상...
     def copyFile(self, srcPath, targetPath, sudo=False, mode=755, makeFolder=False):
         srcPath = os.path.expanduser(srcPath)
         srcPath = os.path.abspath(srcPath)
