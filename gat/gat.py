@@ -220,7 +220,7 @@ class MyUtil:
         )
 
 
-class Tasks:
+class Conn:
     def __init__(self, server, config, dkTunnel=None, dkName=None, dkId=None):
         """
         server: can be none
@@ -251,9 +251,11 @@ class Tasks:
         if server is not None:
             if dkTunnel is None:
                 port = server.get("port", 22)
-                self.initSsh(
-                    server.host, port, server.id, keyFile=server.get("keyFile")
-                )
+                # port 0 is local conn
+                if port != 0:
+                    self.initSsh(
+                        server.host, port, server.id, keyFile=server.get("keyFile")
+                    )
 
             if "vars" not in server:
                 server.vars = {}
@@ -300,7 +302,7 @@ class Tasks:
             return self.dkTunnel.dockerConn(name, dkId)
 
         # dk = Tasks(self.server, g_config, self, name, dkId)
-        dk = Tasks(self.server, self.config, self, name, dkId)
+        dk = Conn(self.server, self.config, self, name, dkId)
         return dk
 
     def otherDockerConn(self, name, dkId=None):
@@ -321,7 +323,7 @@ class Tasks:
             dict(name="remote", host=host, port=port, id=id, pw=pw, keyFile=keyFile)
         )
 
-        dk = Tasks(serverCfg, self.config)
+        dk = Conn(serverCfg, self.config)
         # no have owner
 
         # Tasks 생성자에서 접속하는듯...
@@ -679,18 +681,23 @@ class Tasks:
             return False
 
     def uploadFile(self, src, dest):
-        self.onlyRemote()
+        """
+        support both local and remote
+        """
+        # self.onlyRemote()
         src = os.path.expanduser(src)
         dest = os.path.expanduser(dest)
-        pp = f"/tmp/upload-{g_main.uid}.tmp"
         if self.dkTunnel is not None:
+            pp = f"/tmp/upload-{g_main.uid}.tmp"
             self.dkTunnel.ssh.uploadFile(src, pp)
             self.dkTunnel.ssh.run(f"sudo docker cp {pp} {self.dkName}:{dest}")
+        elif self.ssh is None:
+            self.run(f"cp {src} {dest}")
         else:
             self.ssh.uploadFile(src, dest)
 
     def uploadFileTo(self, src, dest):
-        self.onlyRemote()
+        # self.onlyRemote()
         src = os.path.expanduser(src)
         dest = os.path.expanduser(dest)
         pp = os.path.join(dest, os.path.basename(src))
@@ -1166,7 +1173,7 @@ class Main:
         # if "dkName" in server.dic:
         #     g_remote = g_remote.dockerConn(server.dkName, dkId=server.get("dkId"))
 
-        env = Tasks(server, config)
+        env = Conn(server, config)
         if "dkName" in server.dic:
             env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
 
@@ -1336,7 +1343,7 @@ class Main:
 
     # def taskDeploy(self, env, server, mygat, config):
     def taskDeploy(self, server, mygat, config):
-        env = Tasks(server, config)
+        env = Conn(server, config)
         if "dkName" in server.dic:
             env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
 
@@ -1352,6 +1359,7 @@ class Main:
 
         # name = config.name
         deployRoot = server.deployRoot
+        env.run(f"mkdir -p {deployRoot}")
         realTarget = env.runOutput("realpath %s" % deployRoot)
         realTarget = realTarget.strip("\r\n")  # for sftp
         todayName = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")[2:]
@@ -1788,7 +1796,7 @@ def main():
                 else:
                     runCmd = "setup"
 
-                print(f"target2 -- {runCmd}, {serverName}")
+                # print(f"target2 -- {runCmd}, {serverName}")
 
             else:
                 runCmd = "setup"
@@ -1850,7 +1858,7 @@ def main():
         g_data = g_mygat.data
 
     global g_local
-    g_local = Tasks(None, g_config)
+    g_local = Conn(None, g_config)
     # g_local.util = g_util
 
     # g_config.srcPath = "."
