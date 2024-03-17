@@ -1193,7 +1193,7 @@ def _getVersionYaml(env, fn, component, imgName, prefix, hash):
     #     raise Exception(f"Failed to found next new version - {imgName}:{prefix}{infoVer}")
     ver = _skipSameVersion(env, f"{imgName}:{prefix}", infoVer)
 
-    print(f"{fn}/{component}: new ver - {ver}")
+    print(f"{fn}/{component}: new version - {ver}")
     info["version"] = ver
     info["hash"] = hash
     info["date"] = nowStr

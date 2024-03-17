@@ -26,6 +26,7 @@ import traceback
 import importlib
 import importlib.util
 
+
 from copy import deepcopy
 
 # from io import StringIO
@@ -33,6 +34,8 @@ from subprocess import Popen  # , PIPE
 
 import zipfile
 import tempfile
+
+from termcolor import colored, cprint
 
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
@@ -189,6 +192,22 @@ def optRegister(os, optUbuntu, opt):
 
 
 # ######################################################################################3
+
+
+g_verbose = 0
+
+
+def lld(ss):
+    if g_verbose >= 1:
+        print(ss)
+
+
+def llw(ss):
+    cprint(ss, "magenta", attrs=["bold"])
+
+
+def lle(ss):
+    cprint(ss, "red", attrs=["bold"])
 
 
 class Error(Exception):
@@ -489,30 +508,39 @@ class Conn:
         )
         # self.run(f'echo "{content}" > {path}')
 
-    def runOutput(self, cmd, expandVars=True):
+    def runOutput(self, cmd, expandVars=True, printLog=True):
         """
         cmd: string or array
         expandVars:
         return: stdout string
         exception: subprocess.CalledProcessError(returncode, output)
         """
-        self.log(f"runOutput [{cmd}]...")
+        if printLog:
+            ss = cmd[:100] + "..." if len(cmd) > 100 else cmd
+            self.log(f"runOutput [{ss}]")
 
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
 
+        log = g_verbose > 0
+
+        out = ""
         if self.dkTunnel is not None:
             dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
             cmd = str2arg(cmd)
             cmd = f'sudo docker exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
             # alias defined in .bashrc is working but -l should be used for something in /etc/profile.d and .profile
-            return self.dkTunnel.ssh.runOutput(cmd)
+            out = self.dkTunnel.ssh.runOutput(cmd, log=log)
         elif self.ssh is not None:
-            return self.ssh.runOutput(cmd)
+            out = self.ssh.runOutput(cmd, log=log)
         else:
-            return subprocess.check_output(
+            out = subprocess.check_output(
                 cmd, shell=True, executable="/bin/bash"
             ).decode()
+
+        if g_verbose > 0:
+            print("  -> output:%s" % (out))
+        return out
 
     # Tasks 초기화는 보통 로컬에서 진행 -> 전역으로 두면 에러
     # 매번 호출해주는게 바람직할듯
@@ -551,7 +579,7 @@ class Conn:
                 else:
                     raise Exception("Unknown OS")
 
-            print(f"========== remote os : {self._os} ==========")
+            # print(f"========== remote os : {self._os} ==========")
 
         return self._os
 
@@ -572,14 +600,16 @@ class Conn:
         cmd = f". ~/.{profile} && " + cmd
         return self.runOutput(cmd, expandVars=expandVars)
 
-    def runOutputAll(self, cmd, expandVars=True):
+    def runOutputAll(self, cmd, expandVars=True, printLog=True):
         """
         cmd: string or array
         expandVars:
         return: stdout and stderr string
         exception: subprocess.CalledProcessError(returncode, output)
         """
-        self.log(f"runOutputAll [{cmd}]...")
+        if printLog:
+            ss = cmd[:100] + "..." if len(cmd) > 100 else cmd
+            self.log(f"runOutputAll [{ss}]")
 
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
@@ -607,7 +637,8 @@ class Conn:
     def run(self, cmd, expandVars=True, printLog=True):
         if printLog:
             # print(f"execute on {self._serverName()}[{cmd}]..")
-            self.log(f"run [{cmd}]...")
+            ss = cmd[:100] + "..." if len(cmd) > 100 else cmd
+            self.log(f"run [{ss}]")
 
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
@@ -1144,11 +1175,11 @@ class Main:
                     break
 
     def buildTask(self, mygat):
-        print("run: building the app")
+        llw("build: building the app")
         if hasattr(mygat, "buildTask"):
             return mygat.buildTask(util=g_util, local=g_local, remote=g_remote)
         else:
-            print("You should override buildTask method.")
+            lle("You should override buildTask method.")
 
     # def taskSetup(self, target, serverName, subCmd):
     def taskSetup(self, server, subCmd, mygat, config):
@@ -1201,7 +1232,7 @@ class Main:
         expandVar(config)
 
         if not hasattr(mygat, "setupTask"):
-            print("setup: You should override setupTask function in your myGat class")
+            lle("setup: You should override setupTask function in your myGat class")
             return
 
         # 1. 원격 repo에서 특정 브렌치의 최신 커밋 받기
@@ -1281,12 +1312,12 @@ class Main:
 
                 p = pathlib.Path(pp)
                 if not p.exists():
-                    print(f"target: not exists - {pp}")
+                    llw(f"targetList: not exists - {pp}")
                     continue
 
                 if p.is_dir():
                     if _excludeFilter(exclude, pp):
-                        print(f"target: skip - {pp}")
+                        lld(f"targetList: skip - {pp}")
                         continue
 
                     for folder, dirs, files in os.walk(pp, followlinks=followLinks):
@@ -1295,7 +1326,7 @@ class Main:
                         for d in dirs:
                             dd = os.path.join(folder, d)
                             if _excludeFilter(exclude, dd):
-                                print(f"target: skip - {dd}")
+                                lld(f"targetList: skip - {dd}")
                                 continue
 
                             dirs2.append(d)
@@ -1306,14 +1337,14 @@ class Main:
                             # _zipAdd(os.path.join(folder, ff), os.path.join(folder, ff))
                             full = os.path.join(folder, ff)
                             if _excludeFilter(exclude, full):
-                                print(f"target: skip - {full}")
+                                lld(f"targetList: skip - {full}")
                                 continue
 
                             func(full, None)
                 else:
                     # _zipAdd(pp, pp)
                     if _excludeFilter(exclude, pp):
-                        print(f"target: skip - {pp}")
+                        lld(f"targetList: skip - {pp}")
                         continue
 
                     func(pp, None)
@@ -1332,7 +1363,7 @@ class Main:
                         localPath = os.path.join(folder, ff)
                         localPath = pathRemove(localPath, src)
                         if _excludeFilter(exclude2, localPath):
-                            print(f"target: skip - {os.path.join(folder, ff)}")
+                            lld(f"targetList: skip - {os.path.join(folder, ff)}")
                             continue
 
                         # _zipAdd(os.path.join(folder, ff), os.path.join(dest, cutpath(src, folder), ff))
@@ -1387,9 +1418,9 @@ class Main:
 
         max = config.deploy.maxRelease - 1
         cnt = len(releases)
-        print(f"deploy: releases folders count is {cnt}")
+        llw(f"deploy: releases folders count is {cnt}")
         if cnt > max:
-            print(f"deploy: remove old {cnt - max} folders")
+            llw(f"deploy: remove old {cnt - max} folders")
             removeList = releases[: cnt - max]
             for ff in removeList:
                 env.runOutput(f"{sudoCmd} rm -rf {deployRoot}/releases/{ff}")
@@ -1423,7 +1454,7 @@ class Main:
                     # make "./aaa" -> "aaa"
                     targetP = os.path.normpath(targetP)
 
-                    print(f"zipping {srcP} -> {targetP}")
+                    lld(f"zipping {srcP} -> {targetP}")
                     zipWork.write(srcP, targetP, compress_type=zipfile.ZIP_DEFLATED)
 
                 # dic = dict(name=config.name)
@@ -1511,7 +1542,7 @@ class Main:
 
         # shared links
         for pp in sharedLinks:
-            print(f"deploy: sharedLinks - {pp}")
+            lld(f"deploy: sharedLinks - {pp}")
             if pp.endswith("/"):
                 env.run(f"cd {deployRoot} && {sudoCmd} mkdir -p shared/{pp} ")
                 pp = pp[:-1]
@@ -1555,7 +1586,7 @@ def initSamples(type, fn):
         else:
             fp.write(sampleSys)
 
-    print(
+    llw(
         "init: %s file generated. You should modify that file for your environment before service or deployment."
         % (fn)
     )
@@ -1654,11 +1685,11 @@ class Helper:
         if not os.path.exists(pp):
             raise Exception(f"there is no data file[{pp}]")
 
-        print(f"load data from {pp}...")
+        print(f"init: load data from {pp}...")
         # TODO: encrypt with input key when changed
         with open(pp, "r") as fp:
             dd = Dict2(yaml.safe_load(fp.read()))
-            print("data -", dd)
+            # print("data -", dd)
             return dd
 
 
@@ -1686,16 +1717,19 @@ gat init app - Generates gat_app.py file for application.
 gat init sys SYSTEM_NAME - Generates the file for system.
   the SYSTEM_NAME.py file will be generated.
 
-For application(There should be gat_app.py file.),
+For application(a gat_app.py file should be exist),
 gat - Serves application.
-gat test - running automatic test.
-gat PROFILE_NAME deploy - Deploy the application to the server.
+gat test - Runs automatic test.
 
-gat PROFILE_NAME setup - Setup task.
-gat PROFILE_NAME run - Run system.
+For deployment(a gat_app.py file should be exist),
+gat SERVER_NAME deploy - Deploy the application to the server.
 
-For system,
-gat SYSTEM_NAME PROFILE_NAME - Setup server defined in GAT_FILE.
+For setup task(a gat_app.py file should be exist),
+gat SERVER_NAME setup - Setups environment.
+gat SERVER_NAME run - Setup and Run the system.
+
+For system(GAT_FILE_NAME.py file should be exist),
+gat GAT_FILE_NAME PROFILE_NAME - Setup server defined in GAT_FILE.
 """
     )
     if target is not None:
@@ -1711,7 +1745,7 @@ def main():
     cnt = len(sys.argv)
     cmd = None
     # setup or run의 argv를 받기 위한 변수
-    manualStrategyValue = None
+    deployStrategy = None
     if cnt > 1:
         cmd = sys.argv[1]
 
@@ -1721,12 +1755,12 @@ def main():
 
         elif cmd == "init":
             if cnt < 3:
-                print("gat init app OR gat init sys NAME.")
+                lle("gat init app OR gat init sys NAME.")
                 return
 
             type = sys.argv[2]
             if type != "app" and type != "sys":
-                print("app or sys can be used for gat init command.")
+                lle("app or sys can be used for gat init command.")
                 return
 
             if type == "app":
@@ -1734,7 +1768,7 @@ def main():
 
             elif type == "sys":
                 if cnt < 4:
-                    print("Please specify Target file name to be generated.")
+                    lle("Please specify Target file name to be generated.")
                     return
 
                 target = sys.argv[3]
@@ -1743,7 +1777,7 @@ def main():
                 initSamples(type, target)
 
             else:
-                print("unknown init type[%s]" % type)
+                lle(f"unknown init type[{type}]")
 
             return
 
@@ -1766,8 +1800,26 @@ def main():
             cmd = "system"
             if cnt < 2:
                 # can skip SERVER_NAME(if there is only one target), cmd(default setup)
-                print("gat [CONFIG_NAME] [SERVER_NAME] [run|deploy|init|SETUP]")
+                print("gat SERVER_NAME CMD")
+                print("  CMD: init|deploy|setup|run")
                 return
+
+            removeIdx = []
+            for i in range(1, len(sys.argv)):
+                arg = sys.argv[i]
+                if arg == "--git":
+                    deployStrategy = "git"
+                    removeIdx.append(i)
+                elif arg == "--zip":
+                    deployStrategy = "zip"
+                    removeIdx.append(i)
+                elif arg == "-v":
+                    global g_verbose
+                    g_verbose = 1
+                    removeIdx.append(i)
+
+            for i in reversed(removeIdx):
+                sys.argv.pop(i)
 
             p = 1
             if target is None:
@@ -1797,27 +1849,24 @@ def main():
                     runCmd = "setup"
 
                 # print(f"target2 -- {runCmd}, {serverName}")
-
             else:
                 runCmd = "setup"
 
             # strategy 분기
-            p += 1
-            if (runCmd == "setup" or runCmd == "run") and cnt - 1 == p:
-                print(f"========== 명령어 확인 : {sys.argv[p]} ==========")
-                if sys.argv[p] == "--git":
-                    manualStrategyValue = "git"
-                    # g_config.deploy.strategy = argv
-                elif sys.argv[p] == "--zip":
-                    manualStrategyValue = "zip"
-                    # g_config.deploy.strategy = argv
-                else:
-                    raise Exception(
-                        f"{manualStrategyValue}는 올바르지 않은 명령어입니다."
-                    )
+            # p += 1
+            # if (runCmd == "setup" or runCmd == "run") and cnt - 1 == p:
+            #     # print(f"========== 명령어 확인 : {sys.argv[p]} ==========")
+            #     if sys.argv[p] == "--git":
+            #         manualStrategyValue = "git"
+            #         # g_config.deploy.strategy = argv
+            #     elif sys.argv[p] == "--zip":
+            #         manualStrategyValue = "zip"
+            #         # g_config.deploy.strategy = argv
+            #     else:
+            #         raise Exception(f"{manualStrategyValue} is invalid command.")
 
     else:
-        print("missing gat command")
+        lle("missing gat command")
         return
 
     # check first
@@ -1832,10 +1881,10 @@ def main():
     mymod = __import__(pyFileName, fromlist=[""])
     g_mygat = mymod.myGat(helper=helper)
     # g_config 객체 생성 지점 -> 여기부터 설정 객체 사용 가능
-    if manualStrategyValue is not None:
-        g_config.deploy.strategy = manualStrategyValue
+    if deployStrategy is not None:
+        g_config.deploy.strategy = deployStrategy
 
-    print("gat-tool V%s" % __version__)
+    cprint(f"gat-tool V{__version__}", "green")
     name = g_config.name
     type = g_config.get("type", "app")
     srcPath = g_config.srcPath
@@ -1873,7 +1922,7 @@ def main():
         """
         if serverName is None:
             if len(g_config.servers) == 0:
-                print("\nThere is no server definition.")
+                lle("\nThere is no server definition.")
                 return
 
             if len(g_config.servers) == 1:
@@ -1883,9 +1932,8 @@ def main():
                 ss = ""
                 for it in g_config.servers:
                     ss += it["name"] + "|"
-                print(
-                    f"\nPlease specify the sever name is no server definition.[{ss[:-1]}]"
-                )
+                s2 = ss[:-1]
+                lle(f"\nPlease specify the sever name is no server definition.[{s2}]")
                 return
 
         else:
@@ -1898,7 +1946,7 @@ def main():
                 for it in g_config.servers:
                     ss += it.name + "|"
 
-                print(f"There is no server[{serverName}] in {ss[:-1]}")
+                lle(f"There is no server[{serverName}] in {ss[:-1]}")
                 return
         return serverName
 
@@ -1937,7 +1985,7 @@ def main():
         if serverName is None:
             return
 
-        print(f"systemSetup - target:{target}, server:{serverName}, subCmd:{subCmd}")
+        llw(f"systemSetup - target:{target}, server:{serverName}, subCmd:{subCmd}")
         server = g_config.configServerGet(serverName)
 
         g_main.taskSetup(server, subCmd, g_mygat, g_config)
@@ -1946,7 +1994,7 @@ def main():
     elif cmd == "test":
         # serve
         if type != "app":
-            print("just gat command can be used for application type only.")
+            lle("just gat command can be used for application type only.")
             return
 
         g_main.taskTest()
@@ -1954,7 +2002,7 @@ def main():
     elif cmd == "serve":
         # serve
         if type != "app":
-            print("just gat command can be used for application type only.")
+            lle("just gat command can be used for application type only.")
             return
 
         g_main.taskServe()

@@ -70,7 +70,7 @@ class CoSsh:
         if hasattr(self, "ssh"):
             self.ssh.close()
 
-    def _run(self, cmd, doOutput, arg):
+    def _run(self, cmd, doOutput, arg, log=False):
         s = time.time()
         chan = self.ssh.get_transport().open_session()
         # chan.get_pty()
@@ -98,11 +98,12 @@ class CoSsh:
 
         ret = chan.recv_exit_status()
 
-        g = time.time() - s
-        g = int(g * 1000)
-        ss = f"{g}ms" if g < 10000 else f"{int(g/1000)}s"
+        if log:
+            g = time.time() - s
+            g = int(g * 1000)
+            ss = f"{g}ms" if g < 10000 else f"{int(g/1000)}s"
+            print(f"  -> ({ss}) ret:{ret} ")
 
-        print(f"  -> ({ss}) ret:{ret} ")
         chan.close()
         if ret != 0:
             # raise CalledProcessError("ssh command failed with ret:%d" % ret)
@@ -110,17 +111,18 @@ class CoSsh:
             raise MyCalledProcessError(ret, cmd, ss)
 
     # return: nothing
-    def run(self, cmd):
+    def run(self, cmd, log=False):
         """
         exception: output이 빈채로 온다
         """
 
         def doOutput(isStdout, ss, arg):
-            print(ss, end="")
+            if log:
+                print(ss, end="")
 
-        self._run(cmd, doOutput, None)
+        self._run(cmd, doOutput, None, log=log)
 
-    def runOutput(self, cmd):
+    def runOutput(self, cmd, log=False):
         """
         return: stdout result
         exception: output에 stdout만 포함
@@ -133,11 +135,11 @@ class CoSsh:
             else:
                 print(" stderr: ", ss)
 
-        self._run(cmd, doOutput, out)
-        print("  -> output:%s" % (out[0]))
+        self._run(cmd, doOutput, out, log=log)
+        # print("  -> output:%s" % (out[0]))
         return out[0]
 
-    def runOutputAll(self, cmd):
+    def runOutputAll(self, cmd, log=False):
         """
         return: stdout + stderr result
         exception: output에 stderr, stdout 모두 포함
@@ -147,8 +149,8 @@ class CoSsh:
         def doOutput(isStdout, ss, arg):
             arg[0] += ss
 
-        self._run(cmd, doOutput, out)
-        print("  -> output:%s" % (out[0]))
+        self._run(cmd, doOutput, out, log=log)
+        # print("  -> output:%s" % (out[0]))
         return out[0]
 
     # sftp 상에 경로를 생성한다.
