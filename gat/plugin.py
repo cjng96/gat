@@ -1241,7 +1241,7 @@ def dockerUpdateImage(
     """
     return: true(created new one), false(already exists)
     """
-    print(f"dockerUpdateImage - {newName}:{newVer} from {baseName}:{baseVer}")
+    print(f"dockerUpdateImage: {newName}:{newVer} from {baseName}:{baseVer}")
     # baseVer = verStr(baseVer)
     # newVer = verStr(newVer)
 

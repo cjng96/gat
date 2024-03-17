@@ -194,11 +194,11 @@ def optRegister(os, optUbuntu, opt):
 # ######################################################################################3
 
 
-g_verbose = 0
+g_logLv = 0
 
 
 def lld(ss):
-    if g_verbose >= 1:
+    if g_logLv >= 1:
         print(ss)
 
 
@@ -508,21 +508,20 @@ class Conn:
         )
         # self.run(f'echo "{content}" > {path}')
 
-    def runOutput(self, cmd, expandVars=True, printLog=True):
+    def runOutput(self, cmd, expandVars=True):
         """
         cmd: string or array
         expandVars:
         return: stdout string
         exception: subprocess.CalledProcessError(returncode, output)
         """
-        if printLog:
-            ss = cmd[:100] + "..." if len(cmd) > 100 else cmd
-            self.log(f"runOutput [{ss}]")
+        ss = cmd[:100] + "..." if g_logLv == 0 and len(cmd) > 100 else cmd
+        self.log(f"runOutput [{ss}]")
 
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
 
-        log = g_verbose > 0
+        log = g_logLv > 0
 
         out = ""
         if self.dkTunnel is not None:
@@ -538,7 +537,7 @@ class Conn:
                 cmd, shell=True, executable="/bin/bash"
             ).decode()
 
-        if g_verbose > 0:
+        if g_logLv > 0:
             print("  -> output:%s" % (out))
         return out
 
@@ -600,16 +599,15 @@ class Conn:
         cmd = f". ~/.{profile} && " + cmd
         return self.runOutput(cmd, expandVars=expandVars)
 
-    def runOutputAll(self, cmd, expandVars=True, printLog=True):
+    def runOutputAll(self, cmd, expandVars=True):
         """
         cmd: string or array
         expandVars:
         return: stdout and stderr string
         exception: subprocess.CalledProcessError(returncode, output)
         """
-        if printLog:
-            ss = cmd[:100] + "..." if len(cmd) > 100 else cmd
-            self.log(f"runOutputAll [{ss}]")
+        ss = cmd[:100] + "..." if g_logLv == 0 and len(cmd) > 100 else cmd
+        self.log(f"runOutputAll [{ss}]")
 
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
@@ -636,8 +634,7 @@ class Conn:
 
     def run(self, cmd, expandVars=True, printLog=True):
         if printLog:
-            # print(f"execute on {self._serverName()}[{cmd}]..")
-            ss = cmd[:100] + "..." if len(cmd) > 100 else cmd
+            ss = cmd[:100] + "..." if g_logLv == 0 and len(cmd) > 100 else cmd
             self.log(f"run [{ss}]")
 
         # if expandVars:
@@ -686,7 +683,7 @@ class Conn:
 
     # runOutput 래퍼 함수
     # os 별 ~/.profile 명령이 다르기 때문에 대응하기 위해
-    def runProf(self, cmd, expandVars=True, printLog=True):
+    def runProf(self, cmd, expandVars=True):
         os = self.getOS()
 
         tmpCmd = ". ~/."
@@ -698,7 +695,7 @@ class Conn:
         tmpCmd = tmpCmd + " && "
 
         cmd = tmpCmd + cmd
-        self.run(cmd, expandVars=expandVars, printLog=printLog)
+        self.run(cmd, expandVars=expandVars)
 
     def runSafe(self, cmd):
         """
@@ -826,7 +823,11 @@ class Conn:
         marker: ### {mark} TEST
         block: vv=1
         """
-        self.log(f"task - config block[{marker}] for {path}...\n[{block}]\n")
+
+        ss = f"task - config block[{marker}] for {path}...\n"
+        if g_logLv > 0:
+            ss += f"[{block}]\n"
+        self.log(ss)
         # self.onlyRemote()
 
         args = dict(
@@ -1814,8 +1815,8 @@ def main():
                     deployStrategy = "zip"
                     removeIdx.append(i)
                 elif arg == "-v":
-                    global g_verbose
-                    g_verbose = 1
+                    global g_logLv
+                    g_logLv = 1
                     removeIdx.append(i)
 
             for i in reversed(removeIdx):

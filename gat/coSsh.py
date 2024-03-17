@@ -133,7 +133,8 @@ class CoSsh:
             if isStdout:
                 arg[0] += ss
             else:
-                print(" stderr: ", ss)
+                if log:
+                    print(" stderr: ", ss)
 
         self._run(cmd, doOutput, out, log=log)
         # print("  -> output:%s" % (out[0]))
