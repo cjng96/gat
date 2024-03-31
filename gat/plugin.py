@@ -1283,6 +1283,7 @@ def dockerUpdateImage(
     dk = env.dockerConn(f"{newName}-con", dkId=userId)
 
     func(dk)
+    dk.clearConn()
 
     # 이미지 생성 및 리소스 제거
     extra = ""
