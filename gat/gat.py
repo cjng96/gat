@@ -195,6 +195,9 @@ def optRegister(os, optUbuntu, opt):
 
 
 g_logLv = 0
+g_force = False
+
+g_connList = []
 
 
 def lld(ss):
@@ -289,6 +292,35 @@ class Conn:
             dkId = strExpand(dkId, g_dic)
         self.dkId = dkId
 
+        self.tempPath = None
+
+        g_connList.append(self)
+
+    def clearConn(self):
+        self.run("rm -f /tmp/gatHelper.py", printLog=False)
+        self.tempPathClear()
+
+    def tempPathGet(self):
+        if self.tempPath is None:
+            pp = f"/tmp/gat-{self.config.name}"
+            ss = self.runOutput(f"test -d ${pp}; echo $?")
+            if ss == "0":
+                if not g_force:
+                    raise Exception(
+                        f"remote work path[{pp}] already exists. you can proceed with -f option."
+                    )
+
+                self.run(f"rm -rf {pp}")
+
+            self.tempPath = pp
+
+        return self.tempPath
+
+    def tempPathClear(self):
+        if self.tempPath is not None:
+            self.run(f"rm -rf {self.tempPath}")
+            self.tempPath = None
+
     def log(self, msg):
         print(f"[{self.logName}]: {msg}")
 
@@ -320,7 +352,6 @@ class Conn:
             # raise Exception("dockerConn can be called only on remote connection.")
             return self.dkTunnel.dockerConn(name, dkId)
 
-        # dk = Tasks(self.server, g_config, self, name, dkId)
         dk = Conn(self.server, self.config, self, name, dkId)
         return dk
 
@@ -413,12 +444,11 @@ class Conn:
         pp = os.path.abspath(os.curdir)
         os.chdir(dir)
         try:
-            # g_main.taskDeploy(remote, server, mygat, config)
-            # g_main.taskSetup(remote, server, mygat, config)
             g_main.taskSetup(server, subCmd, mygat, config)
         finally:
             os.chdir(pp)
 
+    # 이제 이거 쓰는곳이 없다
     def deployApp(self, path, profile, serverOvr=None, varsOvr=None):
         if path.endswith(".py"):
             path = path[:-3]
@@ -467,7 +497,6 @@ class Conn:
         pp = os.path.abspath(os.curdir)
         os.chdir(dir)
         try:
-            # g_main.taskDeploy(remote, server, mygat, config)
             g_main.taskDeploy(server, mygat, config)
         finally:
             os.chdir(pp)
@@ -540,23 +569,6 @@ class Conn:
         if g_logLv > 0:
             print("  -> output:%s" % (out))
         return out
-
-    # Tasks 초기화는 보통 로컬에서 진행 -> 전역으로 두면 에러
-    # 매번 호출해주는게 바람직할듯
-    # def getOS(self):
-    #     try:
-    #         with open("/etc/os-release") as file:
-    #             for line in file:
-    #                 if line.startswith("NAME="):
-    #                     os_name = line.strip().split("=")[1].replace('"', "")
-    #                     if "ubuntu" in os_name.lower():
-    #                         return "ubuntu"
-    #                     elif "centos" in os_name.lower():
-    #                         return "centos"
-    #                     else:
-    #                         raise Exception("Unknown OS")
-    #     except Exception as e:
-    #         print(f"Error detecting OS: {e}")
 
     # return os name of remote server
     def getOS(self):
@@ -716,9 +728,12 @@ class Conn:
         src = os.path.expanduser(src)
         dest = os.path.expanduser(dest)
         if self.dkTunnel is not None:
-            pp = f"/tmp/upload-{g_main.uid}.tmp"
+            # pp = f'/tmp/upload-{g_main.uid}.tmp'
+            pp = f"{self.tempPathGet()}/upload.tmp"
             self.dkTunnel.ssh.uploadFile(src, pp)
-            self.dkTunnel.ssh.run(f"sudo docker cp {pp} {self.dkName}:{dest}")
+            self.dkTunnel.ssh.run(
+                f"sudo docker cp {pp} {self.dkName}:{dest} && rm {pp}"
+            )
         elif self.ssh is None:
             self.run(f"cp {src} {dest}")
         else:
@@ -762,7 +777,8 @@ class Conn:
         self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
 
     def _helperRun(self, args, sudo=False):
-        pp2 = f"/tmp/gatHelper-{g_main.uid}.py"
+        # pp2 = f"{self.tempPathGet()}/gatHelper.py"
+        pp2 = f"/tmp/gatHelper.py"
         src = os.path.join(g_scriptPath, "gatHelper.py")
 
         if self.dkTunnel is None and self.ssh is None:
@@ -1079,7 +1095,9 @@ import socket
 
 class Main:
     def __init__(self):
-        self.uid = socket.gethostname() + "-" + str(os.getpid())
+        # self.uid = socket.gethostname() + "-" + str(os.getpid())
+        # self.workPath = f"/tmp/"
+        pass
 
     # runTask와 doServerStep등은 Task말고 별도로 빼자 remote.runTask를 호출할일은 없으니까
     def runTask(self, mygat):
@@ -1176,42 +1194,24 @@ class Main:
                     break
 
     def buildTask(self, mygat):
-        llw("build: building the app")
+        llw("buildTask: building the app")
         if hasattr(mygat, "buildTask"):
             return mygat.buildTask(util=g_util, local=g_local, remote=g_remote)
         else:
             lle("You should override buildTask method.")
 
-    # def taskSetup(self, target, serverName, subCmd):
     def taskSetup(self, server, subCmd, mygat, config):
-        # if not os.path.exists(target):
-        #     print("There is no target file[%s]" % target)
-        #     return
-
-        # server = g_config.configServerGet(serverName)
-        # if server is None:
-        #     return
+        llw("taskSetup: setting up the app...")
 
         # deprecated
-        # server["runImage"] = runImageFlag
         if subCmd not in ["run", "dev", "prod", "full", "init", ""]:
             raise Exception(f"Invalid sub command[{subCmd}] for setup task")
-
-        # global g_remote, g_data
-        # g_remote = Tasks(server)
-        # g_remote.runFlag = subCmd == "run"
-        # g_remote.runImageFlag = g_remote.runFlag  # deprecated
-        # g_remote.fullFlag = subCmd == "full"
-        # if "dkName" in server.dic:
-        #     g_remote = g_remote.dockerConn(server.dkName, dkId=server.get("dkId"))
 
         env = Conn(server, config)
         if "dkName" in server.dic:
             env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
 
-        # print("\n\n\n\nhahahaha")
         # print(env.config)
-        # print("\n\n\n\n")
 
         env.runFlag = False
         env.runProfile = None
@@ -1220,16 +1220,10 @@ class Main:
             if subCmd != "run":
                 env.runProfile = subCmd
 
-        # env.runImageFlag = env.runFlag  # deprecated
-
         env.fullFlag = subCmd == "full"
         env.initFlag = subCmd == "init"
 
-        # g_remote.data = g_data
-        # g_remote.util = g_util
         dicInit(server)
-
-        # expand env and variables
         expandVar(config)
 
         if not hasattr(mygat, "setupTask"):
@@ -1373,8 +1367,9 @@ class Main:
                             os.path.join(dest, cutpath(src, folder), ff),
                         )
 
-    # def taskDeploy(self, env, server, mygat, config):
     def taskDeploy(self, server, mygat, config):
+        llw("taskDeploy: deploy the app...")
+
         env = Conn(server, config)
         if "dkName" in server.dic:
             env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
@@ -1419,24 +1414,19 @@ class Main:
 
         max = config.deploy.maxRelease - 1
         cnt = len(releases)
-        llw(f"deploy: releases folders count is {cnt}")
+        llw(f"taskDeploy: releases folders count is {cnt}")
         if cnt > max:
-            llw(f"deploy: remove old {cnt - max} folders")
+            llw(f"taskDeploy: remove old {cnt - max} folders")
             removeList = releases[: cnt - max]
             for ff in removeList:
                 env.runOutput(f"{sudoCmd} rm -rf {deployRoot}/releases/{ff}")
 
         # if deploy / owner is defined,
         # create release folder as ssh user, upload, extract then change release folder to deploy / owner
-        res = env.runOutput(
-            f"cd {deployRoot}/releases"
-            + f"&& {sudoCmd} mkdir {todayName}"
-            + (
-                f"&& sudo chown {server.owner}: {todayName}"
-                if "owner" in server
-                else ""
-            )
-        )
+        cmd = f"cd {deployRoot}/releases && {sudoCmd} mkdir {todayName}"
+        if "owner" in server:
+            cmd += f" && {sudoCmd} chown {server.owner}: {todayName}"
+        res = env.runOutput(cmd)
 
         # upload files
         include = config.deploy.include
@@ -1543,7 +1533,7 @@ class Main:
 
         # shared links
         for pp in sharedLinks:
-            lld(f"deploy: sharedLinks - {pp}")
+            lld(f"taskDeploy: sharedLinks - {pp}")
             if pp.endswith("/"):
                 env.run(f"cd {deployRoot} && {sudoCmd} mkdir -p shared/{pp} ")
                 pp = pp[:-1]
@@ -1897,6 +1887,13 @@ def testMyArgv():
 
 
 def main():
+    mainDo()
+
+    for conn in reversed(g_connList):
+        conn.clearConn()
+
+
+def mainDo():
     # testMyArgv()
     # return
 
@@ -1982,6 +1979,9 @@ def main():
             if opt == "-v":
                 global g_logLv
                 g_logLv = 1
+            elif opt == "-f":
+                global g_force
+                g_force = True
             elif opt == "--git":
                 deployStrategy = "git"
             elif opt == "--zip":
@@ -2033,8 +2033,7 @@ def main():
         #     strategy = g_config.deploy.strategy
         #     if strategy == "git":
         #         g_config.srcPath = "./clone"
-        strategy = g_config.deploy.strategy
-        if strategy == "git":
+        if "deploy" in g_config and g_config.deploy.strategy == "git":
             g_config.srcPath = "./clone"
 
         if ma.cmd == "deploy":
