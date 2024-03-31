@@ -1730,286 +1730,332 @@ gat SERVER_NAME setup - Setups environment.
 gat SERVER_NAME run - Setup and Run the system.
 
 For system(GAT_FILE_NAME.py file should be exist),
-gat GAT_FILE_NAME PROFILE_NAME - Setup server defined in GAT_FILE.
+gat GAT_FILE_NAME SERVER_NAME - Setup server defined in GAT_FILE.
 """
     )
     if target is not None:
         print(f"\nThere is no {target} script file.")
 
 
+class MyArgv:
+    def __init__(self, argv, fileExists=None):
+        self.gatName = "gat_app.py"
+        self.serverName = ""
+        self.opts = []  # -v, --git, --zip
+        self.cmd = ""  # help, init | deploy, setup, run
+        self.args = []  # arguments
+
+        if fileExists is None:
+            fileExists = os.path.exists
+
+        removeIdxs = []
+        for i in range(len(argv)):
+            arg = argv[i]
+            if arg.startswith("-"):
+                self.opts.append(arg)
+                removeIdxs.append(i)
+        for i in reversed(removeIdxs):
+            argv.pop(i)
+
+        if "--help" in self.opts:
+            self.opts.remove("--help")
+            self.cmd = "help"
+            return
+
+        if len(argv) == 0:
+            raise Exception("missing gat command")
+
+        self.cmd = argv[0]
+        if self.cmd == "help":
+            return
+        elif self.cmd == "init":
+            if len(argv) < 2:
+                raise Exception("gat init app OR gat init sys FILE_NAME.")
+            self.args.append(argv[1])
+            if self.args[-1] == "sys":
+                if len(argv) < 3:
+                    raise Exception(
+                        "Please specify target file name to be generated.\n$ gat init sys FILE_NAME"
+                    )
+
+                self.args.append(argv[2])
+            return
+        # elif self.cmd == "test":
+        #     return
+        # elif self.cmd == "serve":
+        #     return
+
+        # 이제 용법은
+        # gat SERVER_NAME CMD - gat파일은 gat_app.py로 고정
+
+        # gat파일 명시
+        # gat GAT_FILE SERVER_NAME CMD
+        # gat GAT_FILE SERVER_NAME - cmd는 setup
+        # gat GAT_FILE CMD - server 하나
+        # gat GAT_FILE - server하나, CMD는 setup -- 시스템용
+
+        # xxx gat CMD - gat_app.py, server 하나
+
+        # SERVER_NAME에는 아래 예약된 명령어는 못쓴다
+        cmds = ["deploy", "setup", "run"]
+
+        pt = 0
+        name = argv[pt]
+        if not name.endswith(".py"):
+            name += ".py"
+        if fileExists(name):
+            self.gatName = name
+            pt += 1
+
+        # if pt >= len(argv):
+        #     raise Exception("Please specify SERVER_NAME")
+        if pt == len(argv):
+            self.cmd = "setup"
+            return
+
+        arg1 = argv[pt]
+        if arg1 in cmds:
+            self.cmd = arg1
+            pt += 1
+            # if pt >= len(argv):
+            #     raise Exception("No more arguments")
+            return
+
+        self.serverName = arg1
+        pt += 1
+
+        if pt >= len(argv):
+            self.cmd = "setup"
+            # raise Exception("Please specify CMD")
+        else:
+            self.cmd = argv[pt]
+
+        return
+
+
+def testMyArgv():
+    argv = ["help"]
+    aa = MyArgv(argv)
+    assert aa.cmd == "help"
+
+    argv = ["init", "app"]
+    aa = MyArgv(argv)
+    assert aa.cmd == "init"
+    assert aa.args == ["app"]
+
+    argv = ["init", "sys", "test"]
+    aa = MyArgv(argv)
+    assert aa.cmd == "init"
+    assert aa.args == ["sys", "test"]
+
+    try:
+        argv = ["init", "sys"]
+        aa = MyArgv(argv)
+        assert False
+    except Exception as e:
+        pass
+
+    # gat GAT_FILE [SERVER_NAME] [CMD]
+    argv = ["gat2", "ser1", "run"]
+    aa = MyArgv(argv, fileExists=lambda x: x == "gat2.py")
+    assert aa.gatName == "gat2.py"
+    assert aa.serverName == "ser1"
+    assert aa.cmd == "run"
+
+    argv = ["gat2", "ser1"]
+    aa = MyArgv(argv, fileExists=lambda x: x == "gat2.py")
+    assert aa.gatName == "gat2.py"
+    assert aa.serverName == "ser1"
+    assert aa.cmd == "setup"
+
+    argv = ["gat2", "run"]
+    aa = MyArgv(argv, fileExists=lambda x: x == "gat2.py")
+    assert aa.gatName == "gat2.py"
+    assert aa.serverName == ""
+    assert aa.cmd == "run"
+
+    argv = ["gat2.py", "deploy"]
+    aa = MyArgv(argv, fileExists=lambda x: x == "gat2.py")
+    assert aa.gatName == "gat2.py"
+    assert aa.serverName == ""
+    assert aa.cmd == "deploy"
+
+    argv = ["gat2"]
+    aa = MyArgv(argv, fileExists=lambda x: x == "gat2.py")
+    assert aa.gatName == "gat2.py"
+    assert aa.serverName == ""
+    assert aa.cmd == "setup"
+
+    # gat SERVER_NAME CMD
+    argv = ["prod", "run"]
+    aa = MyArgv(argv)
+    assert aa.gatName == "gat_app.py"
+    assert aa.serverName == "prod"
+    assert aa.cmd == "run"
+
+    print("test ok")
+
+
 def main():
+    # testMyArgv()
+    # return
+
+    ma = MyArgv(sys.argv[1:])
+    if ma.cmd == "help":
+        help(None)
+        return
+    elif ma.cmd == "init":
+        if len(ma.args) == 0:
+            lle("gat init app OR gat init sys FILE_NAME.")
+            return
+
+        type = ma.args[0]
+        if type != "app" and type != "sys":
+            lle("app or sys can be used for gat init command.")
+            return
+
+        if type == "app":
+            initSamples(type, "gat_app.py")
+        else:
+            if len(ma.args) < 2:
+                lle("Please specify target file name to be generated.")
+                return
+
+            target = ma.args[1]
+            if not target.endswith(".py"):
+                target += ".py"
+            initSamples(type, target)
+
+        return
+
     global g_cwd, g_scriptPath, g_mygat
     g_cwd = os.getcwd()
     g_scriptPath = os.path.dirname(os.path.realpath(__file__))
-    target = "gat_app.py"
-
-    cnt = len(sys.argv)
-    cmd = None
-    # setup or run의 argv를 받기 위한 변수
     deployStrategy = None
-    if cnt > 1:
-        cmd = sys.argv[1]
-
-        if cmd == "help" or cmd == "--help":
-            help(None)
-            return
-
-        elif cmd == "init":
-            if cnt < 3:
-                lle("gat init app OR gat init sys NAME.")
-                return
-
-            type = sys.argv[2]
-            if type != "app" and type != "sys":
-                lle("app or sys can be used for gat init command.")
-                return
-
-            if type == "app":
-                initSamples(type, "gat_app.py")
-
-            elif type == "sys":
-                if cnt < 4:
-                    lle("Please specify Target file name to be generated.")
-                    return
-
-                target = sys.argv[3]
-                if not target.endswith(".py"):
-                    target += ".py"
-                initSamples(type, target)
-
-            else:
-                lle(f"unknown init type[{type}]")
-
-            return
-
-        elif cmd == "test":
-            pass
-
-        elif cmd == "serve":
-            pass
-
-        # deploy도 아래 system 문법으로
-        # elif cmd == "deploy":
-        #     pass
-
-        else:
-            # 로칼에 gat_app.py가 있으면 configName생략 모드
-            if not os.path.exists(target):
-                target = None
-
-            # setup server system or deploy
-            cmd = "system"
-            if cnt < 2:
-                # can skip SERVER_NAME(if there is only one target), cmd(default setup)
-                print("gat SERVER_NAME CMD")
-                print("  CMD: init|deploy|setup|run")
-                return
-
-            removeIdx = []
-            for i in range(1, len(sys.argv)):
-                arg = sys.argv[i]
-                if arg == "--git":
-                    deployStrategy = "git"
-                    removeIdx.append(i)
-                elif arg == "--zip":
-                    deployStrategy = "zip"
-                    removeIdx.append(i)
-                elif arg == "-v":
-                    global g_logLv
-                    g_logLv = 1
-                    removeIdx.append(i)
-
-            for i in reversed(removeIdx):
-                sys.argv.pop(i)
-
-            p = 1
-            if target is None:
-                target = sys.argv[p]
-                if not target.endswith(".py"):
-                    target += ".py"
-                p += 1
-
-            runCmd = None
-            serverName = None
-            if cnt > p:
-                second = sys.argv[p]
-                # print(f"second:{second}")
-                if second in ["run", "deploy", "init", "setup"]:
-                    runCmd = second
-                else:
-                    # 아니면 Server이름
-                    serverName = second
-                p += 1
-
-                # print(f"cnt:{cnt}, p:{p}")
-                if cnt > p:
-                    if runCmd is not None:
-                        serverName = runCmd
-                    runCmd = sys.argv[p]
-                else:
-                    runCmd = "setup"
-
-                # print(f"target2 -- {runCmd}, {serverName}")
-            else:
-                runCmd = "setup"
-
-            # strategy 분기
-            # p += 1
-            # if (runCmd == "setup" or runCmd == "run") and cnt - 1 == p:
-            #     # print(f"========== 명령어 확인 : {sys.argv[p]} ==========")
-            #     if sys.argv[p] == "--git":
-            #         manualStrategyValue = "git"
-            #         # g_config.deploy.strategy = argv
-            #     elif sys.argv[p] == "--zip":
-            #         manualStrategyValue = "zip"
-            #         # g_config.deploy.strategy = argv
-            #     else:
-            #         raise Exception(f"{manualStrategyValue} is invalid command.")
-
-    else:
-        lle("missing gat command")
-        return
-
-    # check first
-    if not os.path.exists(target):  # or not os.path.exists("gat.yml"):
-        help(target)
-        return
 
     global g_config
     helper = Helper(g_config)
     sys.path.append(g_cwd)
-    pyFileName = target[:-3]
+    pyFileName = ma.gatName[:-3]
     mymod = __import__(pyFileName, fromlist=[""])
     g_mygat = mymod.myGat(helper=helper)
     # g_config 객체 생성 지점 -> 여기부터 설정 객체 사용 가능
-    if deployStrategy is not None:
-        g_config.deploy.strategy = deployStrategy
 
     cprint(f"gat-tool V{__version__}", "green")
     name = g_config.name
     type = g_config.get("type", "app")
     srcPath = g_config.srcPath
 
-    print(f"** config[type:{type}, name:{name}, srcPath:{srcPath}]")
-
     # load secret - 이걸 mygat init하는데서 수동으로 하게해놨는데..
     # 무조건 로드하게하고 추가 로드를 할수 있게할까? - 좀 애매하다
     global g_data
-    # secretPath = os.path.join(g_cwd, ".data.yml")
-    # if os.path.exists(secretPath):
-    #     print("load data...")
-    #     # TODO: encrypt with input key when changed
-    #     with open(secretPath, "r") as fp:
-    #         ss = fp.read()
-    #         g_data = Dict2(yaml.safe_load(ss))
-    #         print("data - ", g_data)
-    # if g_mygat.data is not None:
     if hasattr(g_mygat, "data"):
         g_data = g_mygat.data
 
     global g_local
     g_local = Conn(None, g_config)
-    # g_local.util = g_util
+    if not os.path.exists(ma.gatName):  # or not os.path.exists("gat.yml"):
+        help(ma.gatName)
+        return
 
-    # g_config.srcPath = "."
-    if cmd != "system":
+    print(f"** config[type:{type} name:{name} srcPath:{srcPath} cmd:{ma.cmd}]")
+
+    if ma.cmd == "test":
+        # serve
+        if type != "app":
+            lle("just gat command can be used for application type only.")
+            return
+        g_main.taskTest()
+
+    elif ma.cmd == "serve":
+        # serve
+        if type != "app":
+            lle("just gat command can be used for application type only.")
+            return
+        g_main.taskServe()
+
+    else:
+        if ma.cmd not in ["run", "setup", "deploy"]:
+            raise Exception(f"Invalid command[{ma.cmd}]")
+
+        for opt in ma.opts:
+            if opt == "-v":
+                global g_logLv
+                g_logLv = 1
+            elif opt == "--git":
+                deployStrategy = "git"
+            elif opt == "--zip":
+                deployStrategy = "zip"
+            else:
+                raise Exception(f"unknown option[{opt}]")
+
+        def checkServerName(serverName):
+            """
+            return: none(error), str(new serverName)
+            """
+            if serverName == "":
+                if len(g_config.servers) == 0:
+                    lle("\nThere is no server definition.")
+                    return
+
+                if len(g_config.servers) == 1:
+                    serverName = g_config.servers[0].name
+
+                else:
+                    ss = ""
+                    for it in g_config.servers:
+                        ss += it["name"] + "|"
+                    s2 = ss[:-1]
+                    lle(
+                        f"\nPlease specify the sever name is no server definition.[{s2}]"
+                    )
+                    return
+
+            else:
+                serverFound = False
+                for it in g_config.servers:
+                    if it.name == serverName:
+                        serverFound = True
+                if not serverFound:
+                    ss = ""
+                    for it in g_config.servers:
+                        ss += it.name + "|"
+
+                    lle(f"There is no server[{serverName}] in {ss[:-1]}")
+                    return
+            return serverName
+
+        if deployStrategy is not None:
+            g_config.deploy.strategy = deployStrategy
+
+        # g_config.srcPath = "."
+        # if cmd != "system":
+        #     strategy = g_config.deploy.strategy
+        #     if strategy == "git":
+        #         g_config.srcPath = "./clone"
         strategy = g_config.deploy.strategy
         if strategy == "git":
             g_config.srcPath = "./clone"
 
-    def checkServerName(serverName):
-        """
-        return: none(error), str(new serverName)
-        """
-        if serverName is None:
-            if len(g_config.servers) == 0:
-                lle("\nThere is no server definition.")
-                return
-
-            if len(g_config.servers) == 1:
-                serverName = g_config.servers[0].name
-
-            else:
-                ss = ""
-                for it in g_config.servers:
-                    ss += it["name"] + "|"
-                s2 = ss[:-1]
-                lle(f"\nPlease specify the sever name is no server definition.[{s2}]")
-                return
-
-        else:
-            serverFound = False
-            for it in g_config.servers:
-                if it.name == serverName:
-                    serverFound = True
-            if not serverFound:
-                ss = ""
-                for it in g_config.servers:
-                    ss += it.name + "|"
-
-                lle(f"There is no server[{serverName}] in {ss[:-1]}")
-                return
-        return serverName
-
-    if cmd == "system":
-        if runCmd == "deploy":
-            # g_util.deployOwner = g_config.get("deploy.owner", None)	# replaced by server.owner
-            # serverName = sys.argv[2] if cnt > 2 else None
-            # if serverName is None:
-            #     if len(g_config.servers) == 1:
-            #         serverName = g_config.servers[0]["name"]
-            #     else:
-            #         ss = ""
-            #         for it in g_config.servers:
-            #             ss += it["name"] + "|"
-            #         print(f"\nPlease specify server name.[{ss[:-1]}]")
-            #         return
-            serverName = checkServerName(serverName)
+        if ma.cmd == "deploy":
+            serverName = checkServerName(ma.serverName)
             if serverName is None:
                 return
 
             server = g_config.configServerGet(serverName)
-
-            # env = Tasks(server)
-            # if "dkName" in server.dic:
-            #     env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
-
-            # g_main.taskDeploy(env, server, g_mygat, g_config)
             g_main.taskDeploy(server, g_mygat, g_config)
             return
 
-        subCmd = ""
-        if runCmd in ["run", "full", "init"]:
-            subCmd = runCmd
+        subCmd = "run" if ma.cmd == "run" else ""
 
-        serverName = checkServerName(serverName)
+        serverName = checkServerName(ma.serverName)
         if serverName is None:
             return
 
-        llw(f"systemSetup - target:{target}, server:{serverName}, subCmd:{subCmd}")
+        llw(f"systemSetup - target:{ma.gatName}, server:{serverName}, subCmd:{subCmd}")
         server = g_config.configServerGet(serverName)
 
         g_main.taskSetup(server, subCmd, g_mygat, g_config)
-        return
-
-    elif cmd == "test":
-        # serve
-        if type != "app":
-            lle("just gat command can be used for application type only.")
-            return
-
-        g_main.taskTest()
-
-    elif cmd == "serve":
-        # serve
-        if type != "app":
-            lle("just gat command can be used for application type only.")
-            return
-
-        g_main.taskServe()
-
-    else:
-        print("unknown command mode[%s]" % cmd)
 
 
 if __name__ == "__main__":
