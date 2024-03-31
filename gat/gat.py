@@ -317,9 +317,12 @@ class Conn:
         return self.tempPath
 
     def tempPathClear(self):
-        if self.tempPath is not None:
-            self.run(f"rm -rf {self.tempPath}")
-            self.tempPath = None
+        pp = self.tempPathGet()
+        self.run(f"rm -rf {pp}", printLog=False)
+        self.tempPath = None
+
+        if self.dkTunnel is not None:
+            self.dkTunnel.tempPathClear()
 
     def log(self, msg):
         print(f"[{self.logName}]: {msg}")
@@ -732,7 +735,7 @@ class Conn:
             pp = f"{self.tempPathGet()}/upload.tmp"
             self.dkTunnel.ssh.uploadFile(src, pp)
             self.dkTunnel.ssh.run(
-                f"sudo docker cp {pp} {self.dkName}:{dest} && rm {pp}"
+                f"sudo docker cp {pp} {self.dkName}:{dest} && rm -f {pp}"
             )
         elif self.ssh is None:
             self.run(f"cp {src} {dest}")
@@ -787,7 +790,9 @@ class Conn:
             if not self._uploadHelper:
                 if self.dkTunnel is not None:
                     self.dkTunnel.uploadFile(src, pp2)
-                    self.dkTunnel.ssh.run(f"sudo docker cp {pp2} {self.dkName}:{pp2}")
+                    self.dkTunnel.ssh.run(
+                        f"sudo docker cp {pp2} {self.dkName}:{pp2} && rm -f {pp2}"
+                    )
                 else:
                     self.uploadFile(src, pp2)
 
