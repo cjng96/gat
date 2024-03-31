@@ -300,6 +300,10 @@ class Conn:
         self.run("rm -f /tmp/gatHelper.py", printLog=False)
         self.tempPathClear()
 
+        if self._uploadHelper:
+            self.run("rm -f /tmp/gatHelper.py", printLog=False)
+            self._uploadHelper = False
+
     def tempPathGet(self):
         if self.tempPath is None:
             pp = f"/tmp/gat-{self.config.name}"
@@ -789,9 +793,10 @@ class Conn:
         else:
             if not self._uploadHelper:
                 if self.dkTunnel is not None:
-                    self.dkTunnel.uploadFile(src, pp2)
+                    pp3 = f"/tmp/gatHelperDk.py"
+                    self.dkTunnel.uploadFile(src, pp3)
                     self.dkTunnel.ssh.run(
-                        f"sudo docker cp {pp2} {self.dkName}:{pp2} && rm -f {pp2}"
+                        f"sudo docker cp {pp3} {self.dkName}:{pp2} && rm -f {pp3}"
                     )
                 else:
                     self.uploadFile(src, pp2)
@@ -800,12 +805,12 @@ class Conn:
 
         # ss = str2arg(json.dumps(args, cls=ObjectEncoder))
         ss = json.dumps(args, cls=ObjectEncoder)
-        ss2 = zlib.compress(
-            ss.encode()
-        )  # 1/3이나 절반 - 사이즈가 문제가 아니라 escape때문에
+        # 1/3이나 절반 - 사이즈가 문제가 아니라 escape때문에
+        ss2 = zlib.compress(ss.encode())
         ss = base64.b64encode(ss2).decode()
+        sudo = "sudo " if sudo else ""
         self.run(
-            '%spython3 %s runBin "%s"' % ("sudo " if sudo else "", pp2, ss),
+            f'{sudo}python3 {pp2} runBin "{ss}"',
             expandVars=False,
             printLog=False,
         )
