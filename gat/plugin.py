@@ -1661,16 +1661,16 @@ CMD ["/start"]
 """,
             "/tmp/docker-sv/Dockerfile",
         )
-        env.run(
-            f". ~/.profile && sudo docker build -t {image} /tmp/docker-sv && rm -rf /tmp/docker-sv"
+        env.runProf(
+            f"sudo docker build -t {image} /tmp/docker-sv && rm -rf /tmp/docker-sv"
         )  # --no-cache
 
     cmd = dockerRunCmd(name, image, port, mountBase)
-    env.run(". ~/.profile && " + cmd)
+    env.runProf(cmd)
 
     # leave cmd as a file
     env.makeFile(cmd, "/tmp/dockerCmd")
-    env.run(f". ~/.profile && sudo docker cp /tmp/dockerCmd {name}:/cmd")
+    env.runProf(f"sudo docker cp /tmp/dockerCmd {name}:/cmd")
 
 
 def writeRunScript(env, cmd):
