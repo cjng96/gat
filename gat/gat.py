@@ -297,7 +297,6 @@ class Conn:
         g_connList.append(self)
 
     def clearConn(self):
-        self.run("rm -f /tmp/gatHelper.py", printLog=False)
         self.tempPathClear()
 
         if self._uploadHelper:
@@ -321,9 +320,15 @@ class Conn:
         return self.tempPath
 
     def tempPathClear(self):
-        pp = self.tempPathGet()
-        self.run(f"rm -rf {pp}", printLog=False)
-        self.tempPath = None
+        if self.tempPath is None:
+            try:
+                pp = self.tempPathGet()
+                self.run(f"rm -rf {pp}", printLog=False)
+                self.tempPath = None
+            except Exception as e:
+                if "No such container:" in str(e):
+                    # ignore it
+                    return
 
         if self.dkTunnel is not None:
             self.dkTunnel.tempPathClear()
@@ -1549,8 +1554,7 @@ class Main:
                 pp = pp[:-1]
 
             env.run(
-                "%s ln -rsf %s/shared/%s %s/releases/%s/%s"
-                % (sudoCmd, deployRoot, pp, deployRoot, todayName, pp)
+                f"{sudoCmd} ln -rsf {deployRoot}/shared/{pp} {deployRoot}/releases/{todayName}/{pp}"
             )
 
             # ssh user용으로 변경해놔야 post process에서 쉽게 접근 가능

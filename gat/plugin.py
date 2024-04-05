@@ -1551,7 +1551,7 @@ def dockerRunCmd(
     """
     port: "3306:3306", "9018-9019:9018-9019", ["9018-9019:9018-9019"]
     """
-    print("port", port)
+    # print("port", port)
 
     # if portCnt != 1:
     # 	portCmd = '-p {0}-{1}:{0}-{1}'.format(port, port+portCnt-1)
@@ -1673,18 +1673,23 @@ CMD ["/start"]
     env.runProf(f"sudo docker cp /tmp/dockerCmd {name}:/cmd")
 
 
-def writeRunScript(env, cmd):
+def writeRunScript(env, cmd, targetPath="/app/current"):
     env.log(f">> writeRunScript: {cmd}")
 
+    pp = "/etc/service/app" if targetPath is None else targetPath
+
+    env.run("mkdir -p /etc/service/app")
     env.makeFile(
         f"""\
 #!/bin/sh
 {upcntRunStr()}
 {cmd}
 """,
-        "/app/current/run",
+        f"{pp}/run",
     )
-    env.run("mkdir -p /etc/service/app && ln -sf /app/current/run /etc/service/app/run")
+    if targetPath is not None:
+        env.run(f"ln -sf {pp}/run /etc/service/app/run")
+
     writeSvHelper(env)
 
 
@@ -2117,6 +2122,29 @@ autostart=true
     env.run("sudo supervisorctl restart mongodb")
 
 
+def installGitea(env):
+    # cmd = "sudo apt install git"
+    # env.run(cmd)
+
+    # https://docs.gitea.com/installation/install-from-binary
+    # cmd = "wget -O gitea https://dl.gitea.com/gitea/1.21.7/gitea-1.21.7-linux-amd64 && chmod +x gitea"
+    if not env.runSafe("command -v gitea"):
+        cmd = "curl -L -o gitea https://dl.gitea.com/gitea/1.21.7/gitea-1.21.7-linux-amd64 && chmod +x gitea"
+        env.run(cmd)
+        env.run("mv gitea /usr/local/bin/gitea")
+
+    env.run("mkdir -p /var/lib/gitea/{custom,data,log}")
+    env.run("chown -R git:git /var/lib/gitea/")
+    env.run("chmod -R 750 /var/lib/gitea/")
+
+    env.run("mkdir /etc/gitea")
+    env.run("chown root:git /etc/gitea")
+    env.run("chmod 770 /etc/gitea")
+
+    # env.run('chmod 750 /etc/gitea')
+    # env.run('chmod 640 /etc/gitea/app.ini')
+
+
 def installMariaDb(env, dataDir="/var/lib/mysql", port=3306, repo=None):
     """
     repo = "deb [arch=amd64,arm64,ppc64el,s390x] https://mirror.yongbok.net/mariadb/repo/10.5/ubuntu focal main"
@@ -2434,6 +2462,7 @@ def installDocker(env, arch=None):
     os = env.getOS()
 
     if os == "ubuntu":
+        # docker.io로 설치가 더 편한데, 좀 애매하다...
         env.run(
             "sudo apt install --no-install-recommends -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common"
         )

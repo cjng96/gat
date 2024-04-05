@@ -1,93 +1,90 @@
-sampleApp = """
-# https://
-config='''
-type: app	# it's default
+sampleApp = '''
+config="""
 name: sample
+type: app	
 #cmd: [ python3, sample.py ]
 
 serve:
-  patterns: [ "*.go", "*.json", "*.graphql" ]
+    patterns: [ "*.go", "*.json", "*.graphql" ]
 
 deploy:
-  strategy: zip
-  maxRelease: 3
-  include:
-    #- "*"
-    - "{{name}}"
-    - config
-    - pm2.json
-    - src: ../build
-      target: build
-  exclude:
-    - config/my.json
-  sharedLinks:
-    - config/my.json
-  gitRepo: <your remote repo>
+    strategy: zip
+    maxRelease: 3
+    include:
+        #- "*"
+        - "{{name}}"
+        - config
+        - pm2.json
+        - src: ../build
+          target: build
+    exclude:
+        - config/my.json
+    sharedLinks:
+        - config/my.json
+    gitRepo: <your remote repo>
 
 servers:
-  - name: test
-    host: test.com
-    port: 22
-    id: test      # ssh worker user id
-    #dkName: con  #
-    #dkId: test
-    owner: engt   # opt, generated files owner
+    - name: test
+      host: test.com
+      port: 22
+      id: test      # ssh worker user id
+      #dkName: con
+      #dkId: test
+      owner: engt   # opt, generated files owner
       # you don't need sudo right if it's not specified.
       # if you need the operation needed sudo right, should specify it.
-    deployRoot: ~/test  # deployment target path
-    gitBranch: <your remote repo branch>
-'''
-
-class myGat:
-	def __init__(self, helper, **_):
-		helper.configStr("yaml", config)	# helper.configFile("yaml", "gat.yaml")
-
-	def buildTask(self, util, local, **_):
-		#local.gqlGen()
-		local.goBuild()
-
-	# it's default operation and you can override running cmd
-	#def getRunCmd(self, util, local, **_):
-	#	return [util.config.config.name]
-
-	def deployPreTask(self, util, remote, local, **_):
-		#print('deploy to {{server.name}}) # remote.server.name
-		#local.run("npm run build")
-		pass
-
-	def deployPostTask(self, util, remote, local, **_):
-		#remote.pm2Register():
-		#local.run("cd {{deployRoot}}/current && echo 'finish'") # util.dic.deployRoot
-		pass
-
+      deployRoot: ~/test  # deployment target path
+      gitBranch: <your remote repo branch>
 """
 
-sampleSys = """
-# https://
-config='''
-type: sys
-name: test	# hostname
+class myGat:
+    def __init__(self, helper, **_):
+        helper.configStr("yaml", config)	# helper.configFile("yaml", "gat.yaml")
 
-s3:
-  key: ${aws_key}
-  secret: ${aws_secret}
+    def buildTask(self, util, local, **_):
+        #local.gqlGen()
+        local.goBuild()
+
+    # it's default operation and you can override running cmd
+    #def getRunCmd(self, util, local, **_):
+    #	return [util.config.config.name]
+
+    def deployPreTask(self, util, remote, local, **_):
+        #print('deploy to {{server.name}}) # remote.server.name
+        #local.run("npm run build")
+        pass
+
+    def deployPostTask(self, util, remote, local, **_):
+        #remote.pm2Register():
+        #local.run("cd {{deployRoot}}/current && echo 'finish'") # util.dic.deployRoot
+        pass
+'''
+
+sampleSys = '''
+config="""
+name: sample
+type: sys
+
+# s3:
+#   key: ${aws_key}
+#   secret: ${aws_secret}
 
 servers:
-  - name: test
-    host: test.com
-    port: 22
-		#dkName: name
-    id: test
-	vars:
-	  hello: test
-'''
+    - name: test
+      host: test.com
+      port: 22
+      id: test  # ssh worker user id
+      #dkName: name
+      vars:
+        hello: test
+"""
 
 class myGat:
-	def __init__(self, helper, **_):
-		helper.configStr("yaml", config)	# helper.configFile("yaml", "gat.yaml")
+    def __init__(self, helper, **_):
+        helper.configStr("yaml", config)	# helper.configFile("yaml", "gat.yaml")
 
-	def setupTask(self, util, local, remote, **_):
-		#remote.pm2Register():
-		#remote.run("cd %%s/current && echo 'finish'" %% remote.vars.deployRoot)
+    def setupTask(self, util, local, remote, **_):
+        #remote.pm2Register():
+        #remote.run("cd %%s/current && echo 'finish'" %% remote.vars.deployRoot)
 
-"""
+'''
