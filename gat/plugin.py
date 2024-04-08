@@ -1904,6 +1904,8 @@ def mysqlUserDel(env, id, host):
 def mysqlUserGen(env, id, pw, host, priv, unixSocket=False):
     """
     priv: "*.*:ALL,GRANT", "*.*:RELOAD,PROCESS,LOCK TABLES,REPLICATION CLIENT"
+    앞에께 ON 대상, 뒤에껀 권한인데 - ALL PRIVILEGES를 주면 전체 권한이 된다
+
     """
     # pw = str2arg(pw).replace(';', '\\;').replace('`', '``').replace("'", "\\'")
     pw = env.str2arg(pw).replace("'", "''")
@@ -1928,7 +1930,7 @@ def mysqlUserGen(env, id, pw, host, priv, unixSocket=False):
         if "GRANT" in lst:
             lst.remove("GRANT")
             grantOper = "WITH GRANT OPTION"
-            oper = ",".join(lst)
+        oper = ",".join(lst)
 
         env.run(
             f'''sudo mysql -e "GRANT {oper} ON {priv2} TO '{id}'@'{host}' {grantOper};"'''
@@ -2133,11 +2135,13 @@ def installGitea(env):
         env.run(cmd)
         env.run("mv gitea /usr/local/bin/gitea")
 
-    env.run("mkdir -p /var/lib/gitea/{custom,data,log}")
-    env.run("chown -R git:git /var/lib/gitea/")
-    env.run("chmod -R 750 /var/lib/gitea/")
 
-    env.run("mkdir /etc/gitea")
+def initGitea(env, dataDir="/var/lib/gitea"):
+    env.run(f"mkdir -p {dataDir}/{{custom,data,log}}")
+    env.run(f"chown -R git:git {dataDir}/")
+    env.run(f"chmod -R 750 {dataDir}/")
+
+    env.run("mkdir -p /etc/gitea")
     env.run("chown root:git /etc/gitea")
     env.run("chmod 770 /etc/gitea")
 
