@@ -306,7 +306,7 @@ class Conn:
     def tempPathGet(self):
         if self.tempPath is None:
             pp = f"/tmp/gat-{self.config.name}"
-            ss = self.runOutput(f"test -d ${pp}; echo $?")
+            ss = self.runOutput(f"test -d ${pp}; echo $?", printLog=false)
             if ss == "0":
                 if not g_force:
                     raise Exception(
