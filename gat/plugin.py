@@ -2489,7 +2489,8 @@ def installDocker(env, arch=None):
         env.run(
             "sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo"
         )
-        env.run("sudo yum makecache fast")
+        # env.run("sudo yum makecache fast")
+        env.run("sudo yum makecache")
         env.run("yum list docker-ce --showduplicates | sort -r")
         env.run("sudo yum install -y docker-ce docker-ce-cli containerd.io")
         env.run("sudo systemctl start docker")
