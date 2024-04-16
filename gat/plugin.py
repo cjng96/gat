@@ -358,6 +358,8 @@ def nginxNextcloud(
     proxy="next:9000",
     nginxCfgPath="/data/nginx",
     localBind=False,
+    selfSign=False,  # true: 사설 인증서 사용
+    selfSignPort=443,
 ):
     # https://www.reddit.com/r/selfhosted/comments/rvqv3l/nextcloud_behind_nginx_proxy_manager_nextcloud
     # https://github.com/nextcloud/docker/blob/master/.examples/docker-compose/insecure/mariadb/fpm/web/nginx.conf
@@ -365,6 +367,29 @@ def nginxNextcloud(
     listen = port
     # if localBind:
     #     listen = f'127.0.0.1:{port}'
+    extra1 = ""
+    extra2 = ""
+
+    if selfSign:
+        env.run("apt install -y openssl")
+        env.run("mkdir -p /data/ssl")
+        if not env.runSafe("test -f /data/ssl/nginx.key"):
+            env.run(
+                "openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout /data/ssl/nginx.key -out /data/ssl/nginx.crt  -subj '/C=KR'"
+            )
+
+        listen = f"{selfSignPort} ssl"
+        extra1 = """
+ssl_certificate /data/ssl/nginx.crt;
+ssl_certificate_key /data/ssl/nginx.key;
+"""
+        extra2 = f"""
+server {{
+    listen 80;
+    server_name {domain};
+    return 301 https://$host$request_uri;
+}}
+"""
 
     env.makeFile(
         f"""\
@@ -372,6 +397,8 @@ server {{
 	listen			{listen};
 	server_name		{domain};
 	root			/data/{name};
+
+    {extra1}
 
 	#access_log		/var/log/nginx/{name}.log;
 	error_log		/var/log/nginx/error.log;
@@ -432,13 +459,14 @@ server {{
         try_files $uri $uri/ /index.php$request_uri;
     }}
 }}
+{extra2}
 """,
         path=f"{nginxCfgPath}/{name}",
         sudo=True,
         mode=664,
     )
 
-    if prot == "https":
+    if prot == "https" and not selfSign:
         certbotSetup(
             env,
             domainStr=domain,
@@ -451,7 +479,7 @@ server {{
 
 def dockerNextcloudFpm(
     env,
-    srcPath,
+    dataPath,
     domain,
     name="next",
     prot="https",
@@ -459,7 +487,7 @@ def dockerNextcloudFpm(
     dbName="next",
     dbId="next",
     dbPw="1234",
-    publishPort=0,
+    # publishPort=0,
     restart="unless-stopped",
 ):
     """
@@ -490,7 +518,9 @@ def dockerNextcloudFpm(
     # env.run(f'sudo mount --bind {srcPath} /data/web/{name}')
     env.run(f"sudo mkdir -p /data/web/{name}")
 
-    publishPortCmd = "" if publishPort == 0 else f"-p {publishPort}:9000"
+    # 어차피 web통해서 접근해서 이거 필요없는거 같은데..
+    # publishPortCmd = "" if publishPort == 0 else f"-p {publishPort}:9000"
+    publishPortCmd = ""
 
     # web쪽에 /data/next로 별도로 마운팅하지 않으려면 web쪽꺼를 가져다 쓸수밖에 없다
     env.run(
@@ -506,12 +536,13 @@ sudo docker run -d --name {name} \
   -e OVERWRITEHOST={domain} \
   -e OVERWRITECLIURL={prot}://{domain} \
   -v /data/web/{name}:/var/www/html \
-  -v {srcPath}:/var/www/html/data \
+  -v {dataPath}:/var/www/html/data \
   nextcloud:fpm
 """
     )
     env.run(f"docker network connect net {name}")
 
+    env.runSafe(f"sudo docker rm -f {name}Cron")
     env.run(
         f"""\
 sudo docker run -d --name {name}Cron \
@@ -522,7 +553,7 @@ sudo docker run -d --name {name}Cron \
   -e MYSQL_USER={dbId} \
   -e MYSQL_PASSWORD={dbPw} \
   -v /data/web/{name}:/var/www/html \
-  -v {srcPath}:/var/www/html/data \
+  -v {dataPath}:/var/www/html/data \
   nextcloud:fpm
 """
     )
