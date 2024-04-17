@@ -480,7 +480,7 @@ server {{
 def dockerNextcloudFpm(
     env,
     dataPath,
-    domain,
+    domain, # None이면 overwrite안한다
     name="next",
     prot="https",
     dbHost="sql",
@@ -523,6 +523,14 @@ def dockerNextcloudFpm(
     publishPortCmd = ""
 
     # web쪽에 /data/next로 별도로 마운팅하지 않으려면 web쪽꺼를 가져다 쓸수밖에 없다
+    overwrite = ""
+    if domain is not None:
+      overwrite = f"""\
+  -e OVERWRITEPROTOCOL={prot} \
+  -e OVERWRITEHOST={domain} \
+  -e OVERWRITECLIURL={prot}://{domain} \
+  """
+      
     env.run(
         f"""\
 sudo docker run -d --name {name} \
@@ -532,9 +540,7 @@ sudo docker run -d --name {name} \
   -e MYSQL_HOST={dbHost} \
   -e MYSQL_USER={dbId} \
   -e MYSQL_PASSWORD={dbPw} \
-  -e OVERWRITEPROTOCOL={prot} \
-  -e OVERWRITEHOST={domain} \
-  -e OVERWRITECLIURL={prot}://{domain} \
+  {overwrite} \
   -v /data/web/{name}:/var/www/html \
   -v {dataPath}:/var/www/html/data \
   nextcloud:fpm

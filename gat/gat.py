@@ -306,7 +306,7 @@ class Conn:
     def tempPathGet(self):
         if self.tempPath is None:
             pp = f"/tmp/gat-{self.config.name}"
-            ss = self.runOutput(f"test -d ${pp}; echo $?", printLog=false)
+            ss = self.runOutput(f"test -d ${pp}; echo $?", printLog=False)
             if ss == "0":
                 if not g_force:
                     raise Exception(
@@ -549,20 +549,21 @@ class Conn:
         )
         # self.run(f'echo "{content}" > {path}')
 
-    def runOutput(self, cmd, expandVars=True):
+    def runOutput(self, cmd, expandVars=True, printLog=True):
         """
         cmd: string or array
         expandVars:
         return: stdout string
         exception: subprocess.CalledProcessError(returncode, output)
         """
-        ss = cmd[:100] + "..." if g_logLv == 0 and len(cmd) > 100 else cmd
-        self.log(f"runOutput [{ss}]")
+        if printLog:
+            ss = cmd[:100] + "..." if g_logLv == 0 and len(cmd) > 100 else cmd
+            self.log(f"runOutput [{ss}]")
 
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
 
-        log = g_logLv > 0
+        log = g_logLv > 0 and printLog
 
         out = ""
         if self.dkTunnel is not None:
@@ -578,8 +579,9 @@ class Conn:
                 cmd, shell=True, executable="/bin/bash"
             ).decode()
 
-        if g_logLv > 0:
+        if log:
             print("  -> output:%s" % (out))
+            
         return out
 
     # return os name of remote server
