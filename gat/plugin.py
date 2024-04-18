@@ -480,14 +480,14 @@ server {{
 def dockerNextcloudFpm(
     env,
     dataPath,
-    overwriteDomain,  # None이면 overwrite안한다
     name="next",
-    prot="https",
+    overwriteProt="https",
+    overwriteDomain=None,  # None이면 overwrite안한다
     dbHost="sql",
     dbName="next",
     dbId="next",
     dbPw="1234",
-    # publishPort=0,
+    publishPort=0,
     restart="unless-stopped",
 ):
     """
@@ -519,16 +519,16 @@ def dockerNextcloudFpm(
     env.run(f"sudo mkdir -p /data/web/{name}")
 
     # 어차피 web통해서 접근해서 이거 필요없는거 같은데..
-    # publishPortCmd = "" if publishPort == 0 else f"-p {publishPort}:9000"
-    publishPortCmd = ""
+    publishPortCmd = "" if publishPort == 0 else f"-p {publishPort}:9000"
+    # publishPortCmd = ""
 
     # web쪽에 /data/next로 별도로 마운팅하지 않으려면 web쪽꺼를 가져다 쓸수밖에 없다
     overwrite = ""
-    if domain is not None:
+    if overwriteDomain is not None:
         overwrite = f"""\
-  -e OVERWRITEPROTOCOL={prot} \
-  -e OVERWRITEHOST={domain} \
-  -e OVERWRITECLIURL={prot}://{domain} \
+  -e OVERWRITEPROTOCOL={overwriteProt} \
+  -e OVERWRITEHOST={overwriteDomain} \
+  -e OVERWRITECLIURL={overwriteProt}://{overwriteDomain} \
   """
 
     env.run(
