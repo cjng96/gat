@@ -480,7 +480,7 @@ server {{
 def dockerNextcloudFpm(
     env,
     dataPath,
-    domain, # None이면 overwrite안한다
+    overwriteDomain,  # None이면 overwrite안한다
     name="next",
     prot="https",
     dbHost="sql",
@@ -525,12 +525,12 @@ def dockerNextcloudFpm(
     # web쪽에 /data/next로 별도로 마운팅하지 않으려면 web쪽꺼를 가져다 쓸수밖에 없다
     overwrite = ""
     if domain is not None:
-      overwrite = f"""\
+        overwrite = f"""\
   -e OVERWRITEPROTOCOL={prot} \
   -e OVERWRITEHOST={domain} \
   -e OVERWRITECLIURL={prot}://{domain} \
   """
-      
+
     env.run(
         f"""\
 sudo docker run -d --name {name} \
@@ -2975,7 +2975,8 @@ server {{
         env.run("sudo nginx -s reload")
 
 
-#
+# 단순 proxy로 쓰려면 privateApi, root없이 쓰자. publicApi는 '/'
+# proxyUrl: http://192.168.1.105
 def setupWebApp(
     env,
     name,
