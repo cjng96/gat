@@ -489,6 +489,7 @@ def dockerNextcloudFpm(
     dbPw="1234",
     publishPort=0,
     restart="unless-stopped",
+    imgTag="fpm",
 ):
     """
     sudo docker exec -ti --user www-data next /var/www/html/occ files:scan --all
@@ -543,7 +544,7 @@ sudo docker run -d --name {name} \
   {overwrite} \
   -v /data/web/{name}:/var/www/html \
   -v {dataPath}:/var/www/html/data \
-  nextcloud:fpm
+  nextcloud:{imgTag}
 """
     )
     env.run(f"docker network connect net {name}")
@@ -560,7 +561,7 @@ sudo docker run -d --name {name}Cron \
   -e MYSQL_PASSWORD={dbPw} \
   -v /data/web/{name}:/var/www/html \
   -v {dataPath}:/var/www/html/data \
-  nextcloud:fpm
+  nextcloud:{imgTag}
 """
     )
     env.run(f"docker network connect net {name}Cron")
