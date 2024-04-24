@@ -7,8 +7,6 @@ import collections
 # except AttributeError:
 #     collectionsAbc = collections
 
-collectionsAbc = getattr(collections, "abc", collections)
-
 
 def dictGet(dic, pp, default):
     lst = pp.split(".")
@@ -30,6 +28,9 @@ def dictGetTest():
 
 
 # dictGetTest()
+
+
+collectionsAbc = getattr(collections, "abc", collections)
 
 
 # https://gist.github.com/angstwad/bf22d1822c38a92ec0a9

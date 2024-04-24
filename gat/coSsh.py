@@ -186,6 +186,10 @@ class CoSsh:
         name = os.path.split(srcPath)[1]
         self.uploadFile(srcPath, os.path.join(destFolder, name))
 
+    def downloadFile(self, srcPath, destPath):
+        print("sftp: download file %s -> %s" % (srcPath, destPath))
+        self.sftp.get(srcPath, destPath)
+
     # sftp 상에 파일을 업로드한다.
     # src_path에 dest_path로 업로드한다. 두개 모두 file full path여야 한다.
     def uploadFile(self, srcPath, destPath):

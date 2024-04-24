@@ -514,6 +514,7 @@ class Conn:
             os.chdir(pp)
 
     # 이거 좀 애매한데 uploadFile인데 사실상...
+    # 이건 텍스트 전용
     def copyFile(self, srcPath, targetPath, sudo=False, mode=755, makeFolder=False):
         srcPath = os.path.expanduser(srcPath)
         srcPath = os.path.abspath(srcPath)
@@ -581,7 +582,7 @@ class Conn:
 
         if log:
             print("  -> output:%s" % (out))
-            
+
         return out
 
     # return os name of remote server
@@ -733,6 +734,16 @@ class Conn:
         except subprocess.CalledProcessError as e:
             print("run: failed %d\n -- %s\n" % (e.returncode, e.output))
             return False
+
+    def downloadFile(self, src, dest):
+        src = os.path.expanduser(src)
+        dest = os.path.expanduser(dest)
+        if self.dkTunnel is not None:
+            raise Exception("not supported")
+        elif self.ssh is None:
+            self.run(f"cp {src} {dest}")
+        else:
+            self.ssh.downloadFile(src, dest)
 
     def uploadFile(self, src, dest):
         """
