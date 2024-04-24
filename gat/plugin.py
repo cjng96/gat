@@ -1274,7 +1274,15 @@ def deployCheckVersion(env, util, imgName, prefix):
 
 
 def dockerUpdateImage(
-    env, baseName, baseVer, newName, newVer, hash, func, net=None, userId=None
+    env,
+    baseName,
+    baseVer,
+    newName,
+    newVer,
+    hash,
+    func,
+    net=None,
+    userId=None,
 ):
     """
     return: true(created new one), false(already exists)
@@ -1286,17 +1294,19 @@ def dockerUpdateImage(
     # 해당 버젼이 이미 있으면 생략
     ret = env.runOutputProf(f"sudo docker images -q {newName}:{newVer}").strip()
     if ret != "":
-        # 해당부모가 동일한지 확인
-        baseHash = env.runOutputProf(
-            f"sudo docker images -q {baseName}:{baseVer}"
-        ).strip()
-        ret = env.runOutputProf(f"sudo docker image history -q {newName}:{newVer}")
-        lst = ret.split()
-        if baseHash not in lst:
-            raise Exception("no matched parent")
-
         # 기존 이미지와 hash label이 동일한지 확인 - 다르면 다시 생성
+        def checkParentRev():
+            # 해당부모가 동일한지 확인
+            baseHash = env.runOutputProf(
+                f"sudo docker images -q {baseName}:{baseVer}"
+            ).strip()
+            ret = env.runOutputProf(f"sudo docker image history -q {newName}:{newVer}")
+            lst = ret.split()
+            if baseHash not in lst:
+                raise Exception(f"no matched parent[bashHash:{baseHash}]")
+
         if hash is None:
+            checkParentRev()
             return False
 
         # we should use sudo for docker?
@@ -1308,6 +1318,7 @@ def dockerUpdateImage(
             print(f"Regenerated image[{newName}:{newVer} whose hash is not match.")
             env.run(f"docker rmi -f {newName}:{newVer}")
         else:
+            checkParentRev()
             return False
 
     env.run(f"sudo docker rm -f {newName}-con")
@@ -1648,13 +1659,15 @@ def dockerRunCmd(
     cmd += f" {image}"
 
     if env is not None:
-        if dockerContainerExists(env, env.vars.dkName):
+        # if dockerContainerExists(env, env.vars.dkName):
+        if dockerContainerExists(env, name):
             env.run(f"sudo docker start {name}")
             dk = env.dockerConn(name)
             # 이 부분에서도 에러 발생
             dk.run("! test -f /update || /update")
 
-        env.run(f"sudo docker rm -f {env.vars.dkName}")
+        # env.run(f"sudo docker rm -f {env.vars.dkName}")
+        env.run(f"sudo docker rm -f {name}")
         # env.run(f"sudo mkdir -p /data/{name}/tmp")
         env.run(cmd)
         dk = env.dockerConn(name)
@@ -3569,6 +3582,12 @@ docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}({{.RunningFor}})\t
     env.makeFile(path="/usr/local/bin/di", content="""docker images """, sudo=True)
 
     env.makeFile(path="/usr/local/bin/dr", content="""docker rm -f "$@" """, sudo=True)
+    # dri bsone:*
+    env.makeFile(
+        path="/usr/local/bin/dri",
+        content="""docker rmi $(docker images -q "$@") """,
+        sudo=True,
+    )
     # env.makeFile(path="/usr/local/bin/dri", content="""docker rmi "$@" """, sudo=True)
 
     # docker backup script - 잘 안쓴다
