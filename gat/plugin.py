@@ -1724,12 +1724,12 @@ CMD ["/start"]
     env.runProf(f"sudo docker cp /tmp/dockerCmd {name}:/cmd")
 
 
-def writeRunScript(env, cmd, targetPath="/app/current"):
+def writeRunScript(env, cmd, targetPath="/app/current", appName="app"):
     env.log(f">> writeRunScript: {cmd}")
 
-    pp = "/etc/service/app" if targetPath is None else targetPath
+    pp = f"/etc/service/{appName}" if targetPath is None else targetPath
 
-    env.run("mkdir -p /etc/service/app")
+    env.run(f"mkdir -p /etc/service/{appName}")
     env.makeFile(
         f"""\
 #!/bin/sh
@@ -1739,7 +1739,7 @@ def writeRunScript(env, cmd, targetPath="/app/current"):
         f"{pp}/run",
     )
     if targetPath is not None:
-        env.run(f"ln -sf {pp}/run /etc/service/app/run")
+        env.run(f"ln -sf {pp}/run /etc/service/{appName}/run")
 
     writeSvHelper(env)
 
