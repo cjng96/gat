@@ -1,9 +1,11 @@
 import os
+import sys
 import time
 import paramiko
 import socket
 import subprocess
 import signal
+import getpass
 
 from .coPath import cutpath, path2folderList
 
@@ -57,10 +59,19 @@ class CoSsh:
         self.ssh = paramiko.SSHClient()
         # ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.ssh.set_missing_host_key_policy(SshAllowAllKeys())
-        self.ssh.connect(
-            host, port=port, username=id, password=pw, key_filename=keyFile
-        )
+        # self.ssh.connect(
+        #     host, port=port, username=id, password=pw, key_filename=keyFile
+        # )
         # , password='lol')
+        try:
+            self.ssh.connect(
+                host, port=port, username=id, key_filename=keyFile
+            )  # , password='lol')
+        except paramiko.PasswordRequiredException:
+            pw = getpass.getpass("key password: ")
+            self.ssh.connect(
+                host, port=port, username=id, key_filename=keyFile, passphrase=pw
+            )
 
         self.sftp = paramiko.SFTPClient.from_transport(self.ssh.get_transport())
 
@@ -97,6 +108,7 @@ class CoSsh:
                 pass
 
         ret = chan.recv_exit_status()
+        chan.close()
 
         if log:
             g = time.time() - s
@@ -104,8 +116,8 @@ class CoSsh:
             ss = f"{g}ms" if g < 10000 else f"{int(g/1000)}s"
             print(f"  -> ({ss}) ret:{ret} ")
 
-        chan.close()
         if ret != 0:
+            sys.stdout.flush()
             # raise CalledProcessError("ssh command failed with ret:%d" % ret)
             ss = "" if arg is None else arg[0]
             raise MyCalledProcessError(ret, cmd, ss)

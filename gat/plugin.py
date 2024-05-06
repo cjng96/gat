@@ -1045,11 +1045,70 @@ def registerAuthPub(env, pub, id=None):
     registerAuthPubs(env, [pub], id)
 
 
-def makeUser(
-    env, id, home=None, shell=None, genSshKey=True, grantSudo=False, authPubs=None
+def userDel(env, id):
+    env.log(f">> userDel - id:{id}")
+    cmd = f"sudo deluser {id}"
+    env.run(cmd)
+
+
+def userAddRaw(
+    env,
+    id,
+    genHome=True,
+    shell=None,
+    uid=None,
+    gid=None,
+    unique=True,
+    system=False,
+):
+    env.log(f">> userAdd - id:{id} system:{system} shell:{shell}")
+
+    # if env.runSafe('cat /etc/passwd | grep -e "^%s:"' % id):
+    if env.runSafe(f'grep -c "^{id}:" /etc/passwd'):
+        print(f"  -> userAdd - exist user[{id}]")
+        return
+
+    # if not existOk or runRet("id -u %s" % name) != 0:
+    # 	run("useradd %s -m -s /bin/bash" % (name))
+    cmd = "sudo useradd -M "
+    if shell is not None:
+        cmd += f" --shell {shell}"
+
+    if system:
+        cmd += " --system"
+
+    if genHome:
+        cmd += " -m"
+    else:
+        cmd += " -M -d /nonexistent"
+
+    if uid is not None:
+        cmd += f" --uid {uid}"
+    if gid is not None:
+        cmd += f" --gid {gid}"
+    if unique is False:
+        cmd += " -o"
+
+    cmd += f" {id}"
+    print(f"gen user - {cmd}")
+    env.run(cmd)
+
+
+def userAdd(
+    env,
+    id,
+    home=None,
+    shell=None,
+    genSshKey=True,
+    grantSudo=False,
+    authPubs=None,
+    uid=None,
+    gid=None,
+    unique=True,
+    system=False,
 ):
     env.log(
-        f">> makeUser - id:{id} home:{home} shell:{shell} genKey:{genSshKey} grantSudo:{grantSudo} authPubs:{authPubs}"
+        f">> userMake - id:{id} home:{home} shell:{shell} genKey:{genSshKey} grantSudo:{grantSudo} authPubs:{authPubs}"
     )
 
     # if env.runSafe('cat /etc/passwd | grep -e "^%s:"' % id):
@@ -1067,7 +1126,19 @@ def makeUser(
         cmd += f" --home {home}"
     if shell is not None:
         cmd += f" --shell {shell}"
+
+    if system:
+        cmd += " --system"
+
+    if uid is not None:
+        cmd += f" --uid {uid}"
+    if gid is not None:
+        cmd += f" --gid {gid}"
+    if unique is False:
+        cmd += " -o"
+
     cmd += f" {id}"
+    # print(f"gen user - {cmd}")
     env.run(cmd)
 
     if grantSudo:
@@ -1083,6 +1154,9 @@ def makeUser(
 
     if genSshKey:
         sshKeyGen(env, id, authPubs)
+
+
+makeUser = userAdd
 
 
 def sshKeyGen(env, id, authPubs=None):
@@ -1273,6 +1347,78 @@ def deployCheckVersion(env, util, imgName, prefix):
     return f"{prefix}{ver}", hash
 
 
+def podmanUpdateImage(
+    env,
+    baseName,
+    baseVer,
+    newName,
+    newVer,
+    hash,
+    func,
+    net=None,
+    userId=None,
+):
+    """
+    return: true(created new one), false(already exists)
+    """
+    print(f"podmanUpdateImage: {newName}:{newVer} from {baseName}:{baseVer}")
+    # baseVer = verStr(baseVer)
+    # newVer = verStr(newVer)
+
+    # 해당 버젼이 이미 있으면 생략
+    ret = env.runOutputProf(f"podman images -q {newName}:{newVer}").strip()
+    if ret != "":
+        # 기존 이미지와 hash label이 동일한지 확인 - 다르면 다시 생성
+        def checkParentRev():
+            # 해당부모가 동일한지 확인
+            baseHash = env.runOutputProf(
+                f"podman images -q {baseName}:{baseVer}"
+            ).strip()
+            ret = env.runOutputProf(f"podman image history -q {newName}:{newVer}")
+            lst = ret.split()
+            if baseHash not in lst:
+                raise Exception(f"no matched parent[bashHash:{baseHash}]")
+
+        if hash is None:
+            checkParentRev()
+            return False
+
+        # we should use sudo for docker?
+        ret = env.runOutput(
+            f"""podman image inspect -f '{{{{index .Config.Labels "hash"}}}}' {newName}:{newVer}"""
+        ).strip()
+        # print(f"hash - {hash} {ret}")
+        if ret != hash:
+            print(f"Regenerated image[{newName}:{newVer} whose hash is not match.")
+            env.run(f"podman rmi -f {newName}:{newVer}")
+        else:
+            checkParentRev()
+            return False
+
+    env.run(f"podman rm -if {newName}-con")
+
+    # Dockerfile에 직접 명시해도 되지만, 편의를 위해서 다시 이미지를 만든다
+    extra = ""
+    if net is not None:
+        extra = f"--network {net}"
+
+    env.run(f"podman run -itd {extra} --name {newName}-con {baseName}:{baseVer}")
+    dk = env.dockerConn(f"{newName}-con", dkId=userId)
+
+    func(dk)
+    dk.clearConn()
+
+    # 이미지 생성 및 리소스 제거
+    extra = ""
+    if hash is not None:
+        extra = f"""-c 'LABEL hash="{hash}"'"""
+
+    env.run(f"""podman commit {extra} {newName}-con {newName}:{newVer}""")
+    # env.run(f"sudo docker tag {newName}:{newVer} {newName}:latest")
+    env.run(f"podman rm -f {newName}-con")
+    return True
+
+
 def dockerUpdateImage(
     env,
     baseName,
@@ -1342,6 +1488,78 @@ def dockerUpdateImage(
     env.run(f"""sudo docker commit {extra} {newName}-con {newName}:{newVer}""")
     # env.run(f"sudo docker tag {newName}:{newVer} {newName}:latest")
     env.run(f"sudo docker rm -f {newName}-con")
+    return True
+
+
+def podmanUpdateImage(
+    env,
+    baseName,
+    baseVer,
+    newName,
+    newVer,
+    hash,
+    func,
+    net=None,
+    userId=None,
+):
+    """
+    return: true(created new one), false(already exists)
+    """
+    print(f"podmanUpdateImage: {newName}:{newVer} from {baseName}:{baseVer}")
+    # baseVer = verStr(baseVer)
+    # newVer = verStr(newVer)
+
+    # 해당 버젼이 이미 있으면 생략
+    ret = env.runOutputProf(f"podman images -q {newName}:{newVer}").strip()
+    if ret != "":
+        # 기존 이미지와 hash label이 동일한지 확인 - 다르면 다시 생성
+        def checkParentRev():
+            # 해당부모가 동일한지 확인
+            baseHash = env.runOutputProf(
+                f"podman images -q {baseName}:{baseVer}"
+            ).strip()
+            ret = env.runOutputProf(f"podman image history -q {newName}:{newVer}")
+            lst = ret.split()
+            if baseHash not in lst:
+                raise Exception(f"no matched parent[bashHash:{baseHash}]")
+
+        if hash is None:
+            checkParentRev()
+            return False
+
+        # we should use sudo for docker?
+        ret = env.runOutput(
+            f"""podman image inspect -f '{{{{index .Config.Labels "hash"}}}}' {newName}:{newVer}"""
+        ).strip()
+        # print(f"hash - {hash} {ret}")
+        if ret != hash:
+            print(f"Regenerated image[{newName}:{newVer} whose hash is not match.")
+            env.run(f"podman rmi -f {newName}:{newVer}")
+        else:
+            checkParentRev()
+            return False
+
+    env.run(f"podman rm -if {newName}-con")
+
+    # Dockerfile에 직접 명시해도 되지만, 편의를 위해서 다시 이미지를 만든다
+    extra = ""
+    if net is not None:
+        extra = f"--network {net}"
+
+    env.run(f"podman run -itd {extra} --name {newName}-con {baseName}:{baseVer}")
+    dk = env.dockerConn(f"{newName}-con", dkId=userId)
+
+    func(dk)
+    dk.clearConn()
+
+    # 이미지 생성 및 리소스 제거
+    extra = ""
+    if hash is not None:
+        extra = f"""-c 'LABEL hash="{hash}"'"""
+
+    env.run(f"""podman commit {extra} {newName}-con {newName}:{newVer}""")
+    # env.run(f"sudo docker tag {newName}:{newVer} {newName}:latest")
+    env.run(f"podman rm -f {newName}-con")
     return True
 
 
@@ -1451,6 +1669,49 @@ RUN apt update && \\
     env.runProf(
         f"sudo docker build -t {name}:{version} /tmp/docker && rm -rf /tmp/docker"
     )
+    # --squash --no-cache
+    # env.run(f"sudo docker tag {name}:{version} {name}:latest")
+
+    return name, version
+
+
+def podmanBaseImage(env):
+    name = "baseimg"
+    version = 1
+    # 이게 서버에 동일한 버젼이 있었던 경우가 유일한 취약점이다
+    # version = _skipSameVersion(env, f"{name}:", version)
+
+    # version = verStr(version)
+
+    # 해당 버젼이 이미 있으면 생략
+    ret = env.runOutputProf(f"podman images -q {name}:{version}")
+    if ret.strip() != "":
+        return name, version
+
+    # 이미지가 지정되어 있지 않으면 기본 이미지로 같은 이름으로 만든다.
+    installDocker(env, arch="amd64")
+
+    # make docker image
+    env.run("rm -rf /tmp/podman && mkdir /tmp/podman")
+    # https://github.com/phusion/baseimage-docker/releases
+    env.makeFile(
+        """\
+# FROM phusion/baseimage:focal-1.0.0
+FROM docker.io/phusion/baseimage:jammy-1.0.4
+LABEL title="gattool"
+CMD ["/sbin/my_init"]
+RUN mkdir -p /data && mkdir -p /work
+RUN apt update && \\
+    apt upgrade -y -o Dpkg::Options::="--force-confold" && \\
+    apt purge -y vim-tiny && \\
+    apt install -y sudo vim net-tools inetutils-ping rsync unzip zstd
+# RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+""",
+        "/tmp/podman/Dockerfile",
+    )
+    # upgrade -> add 110MB
+
+    env.runProf(f"podman build -t {name}:{version} /tmp/podman && rm -rf /tmp/podman")
     # --squash --no-cache
     # env.run(f"sudo docker tag {name}:{version} {name}:latest")
 
@@ -2554,6 +2815,30 @@ def installDocker(env, arch=None):
     time.sleep(3)  # boot up
 
 
+def installPodman(env, arch=None):
+    """
+    arch: amd64 | arm64
+    """
+    if arch is None:
+        arch = getArch(env)
+
+    # if env.runRet('which docker > /dev/null') != 0:
+    if env.runSafe("command -v podman"):
+        return
+
+    os = env.getOS()
+    if os == "ubuntu":
+        env.run("sudo apt update")
+        env.run("sudo apt install -y podman")
+    elif os == "centos":
+        env.run("sudo dnf update")
+        env.run("sudo dnf install -y podman")
+    else:
+        raise Exception(f"Unsupported Operating System - {os}")
+
+    time.sleep(3)  # boot up
+
+
 def installRestic(env, version, arch=None):
     """
     version: 0.12.1
@@ -3633,4 +3918,77 @@ time zstd -d $fn -c | docker import --change 'CMD ["/start"]' - $image
         srcPath=saYml,
         targetPath="/etc/sa.yml",
         sudo=True,
+    )
+
+
+def scriptPodman(env, saYml="./resource/sa.yml"):
+    env.run("mkdir -p ~/.local/bin")
+    env.makeFile(path="~/.local/bin/pe", content="""podman exec -it "$@" bash -l """)
+    env.makeFile(path="~/.local/bin/pl", content="""podman logs --tail 3000 "$@" """)
+    env.makeFile(
+        path="~/.local/bin/plf",
+        content="""podman logs ---tail 500 -f "$@" """,
+    )
+    env.makeFile(
+        path="~/.local/bin/plg",
+        content="""A=`podman inspect --format '{{.LogPath}}' "$@"`\necho $A\nvi $A""",
+    )
+
+    # https://www.jorgeanaya.dev/en/bin/docker-ps-prettify/
+    # 위에꺼 이름이 길거나 하면 잘 안된다. 보기 안좋다
+    env.makeFile(
+        path="~/.local/bin/dp",
+        content="""
+#docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Networks}}\t{{.Ports}}' "$@" | less -N -S
+docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}({{.RunningFor}})\t{{.ID}} {{.Networks}}' -a "$@" """,
+    )
+    env.makeFile(path="~/.local/bindi", content="""docker images """)
+
+    env.makeFile(path="~/.local/bin/dr", content="""docker rm -f "$@" """)
+    # dri bsone:*
+    env.makeFile(
+        path="~/.local/bin/dri",
+        content="""docker rmi $(docker images -q "$@") """,
+    )
+    # env.makeFile(path="/usr/local/bin/dri", content="""docker rmi "$@" """, sudo=True)
+
+    # docker backup script - 잘 안쓴다
+    env.makeFile(
+        """\
+#!/bin/bash
+if [ "$#" -ne 1 ]; then
+  echo 'Please docker_backup CONTAINER_NAME'
+  exit 1
+fi
+name=$1
+mkdir -p ~/backup
+time nice docker export $(docker inspect --format="\{{.Id}}" $name) | zstd -o ~/backup/$name-$(date +%y-%m%d_%H%M%S).zst
+""",
+        "~/.local/bin/docker_backup",
+    )
+
+    # run할때 쓰는 cmd, port, volumes를 잃어버린다. run할때 해야 함
+    env.makeFile(
+        """\
+#!/bin/bash
+if [ "$#" -ne 2 ]; then
+  echo 'Please docker_restore BACKUP_FILE IMAGE_NAME'
+  exit 1
+fi
+fn=$1
+image=$2
+time zstd -d $fn -c | docker import --change 'CMD ["/start"]' - $image
+""",
+        "~/.local/bin/docker_restore",
+    )
+
+    pp = os.path.dirname(os.path.abspath(__file__))
+    env.copyFile(
+        srcPath=f"{pp}/sa.py",
+        targetPath="~/.local/bin/sa",
+    )
+
+    env.copyFile(
+        srcPath=saYml,
+        targetPath="~/.local/share/sa.yml",
     )
