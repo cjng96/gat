@@ -1968,11 +1968,15 @@ def mainDo():
 
     global g_config
     helper = Helper(g_config)
+
     sys.path.append(g_cwd)
     pyFileName = ma.gatName[:-3]
     mymod = __import__(pyFileName, fromlist=[""])
     g_mygat = mymod.myGat(helper=helper)
     # g_config 객체 생성 지점 -> 여기부터 설정 객체 사용 가능
+
+    # print(f"pod1 - {g_config.podman}")
+    g_config.podman = g_config.get("podman", False)
 
     cprint(f"gat-tool V{__version__}", "green")
     name = g_config.name

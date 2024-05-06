@@ -1244,7 +1244,11 @@ def _skipSameVersion(env, prefix, ver):
         #     f". ~/.{cmdBash}profile && sudo docker images -q {prefix}{ver}"
         # ).strip()
 
-        ret = env.runOutputProf(f"sudo docker images -q {prefix}{ver}").strip()
+        cmd = f"podman images -q {prefix}{ver}"
+        if not env.config.podman:
+            cmd = f"sudo docker images -q {prefix}{ver}"
+
+        ret = env.runOutputProf(cmd).strip()
         if ret == "":
             okFlag = True
             break
@@ -1347,7 +1351,7 @@ def deployCheckVersion(env, util, imgName, prefix):
     return f"{prefix}{ver}", hash
 
 
-def podmanUpdateImage(
+def containerUpdateImage(
     env,
     baseName,
     baseVer,
@@ -1361,20 +1365,25 @@ def podmanUpdateImage(
     """
     return: true(created new one), false(already exists)
     """
-    print(f"podmanUpdateImage: {newName}:{newVer} from {baseName}:{baseVer}")
+    print(f"containerUpdateImage: {newName}:{newVer} from {baseName}:{baseVer}")
     # baseVer = verStr(baseVer)
     # newVer = verStr(newVer)
 
+    prog = "podman"
+    if not env.config.podman:
+        prog = "sudo docker"
+
     # 해당 버젼이 이미 있으면 생략
-    ret = env.runOutputProf(f"podman images -q {newName}:{newVer}").strip()
+    ret = env.runOutputProf(f"{prog} images -q {newName}:{newVer}").strip()
     if ret != "":
         # 기존 이미지와 hash label이 동일한지 확인 - 다르면 다시 생성
         def checkParentRev():
             # 해당부모가 동일한지 확인
             baseHash = env.runOutputProf(
-                f"podman images -q {baseName}:{baseVer}"
+                f"{prog} images -q {baseName}:{baseVer}"
             ).strip()
-            ret = env.runOutputProf(f"podman image history -q {newName}:{newVer}")
+
+            ret = env.runOutputProf(f"{prog} image history -q {newName}:{newVer}")
             lst = ret.split()
             if baseHash not in lst:
                 raise Exception(f"no matched parent[bashHash:{baseHash}]")
@@ -1385,79 +1394,7 @@ def podmanUpdateImage(
 
         # we should use sudo for docker?
         ret = env.runOutput(
-            f"""podman image inspect -f '{{{{index .Config.Labels "hash"}}}}' {newName}:{newVer}"""
-        ).strip()
-        # print(f"hash - {hash} {ret}")
-        if ret != hash:
-            print(f"Regenerated image[{newName}:{newVer} whose hash is not match.")
-            env.run(f"podman rmi -f {newName}:{newVer}")
-        else:
-            checkParentRev()
-            return False
-
-    env.run(f"podman rm -if {newName}-con")
-
-    # Dockerfile에 직접 명시해도 되지만, 편의를 위해서 다시 이미지를 만든다
-    extra = ""
-    if net is not None:
-        extra = f"--network {net}"
-
-    env.run(f"podman run -itd {extra} --name {newName}-con {baseName}:{baseVer}")
-    dk = env.dockerConn(f"{newName}-con", dkId=userId)
-
-    func(dk)
-    dk.clearConn()
-
-    # 이미지 생성 및 리소스 제거
-    extra = ""
-    if hash is not None:
-        extra = f"""-c 'LABEL hash="{hash}"'"""
-
-    env.run(f"""podman commit {extra} {newName}-con {newName}:{newVer}""")
-    # env.run(f"sudo docker tag {newName}:{newVer} {newName}:latest")
-    env.run(f"podman rm -f {newName}-con")
-    return True
-
-
-def dockerUpdateImage(
-    env,
-    baseName,
-    baseVer,
-    newName,
-    newVer,
-    hash,
-    func,
-    net=None,
-    userId=None,
-):
-    """
-    return: true(created new one), false(already exists)
-    """
-    print(f"dockerUpdateImage: {newName}:{newVer} from {baseName}:{baseVer}")
-    # baseVer = verStr(baseVer)
-    # newVer = verStr(newVer)
-
-    # 해당 버젼이 이미 있으면 생략
-    ret = env.runOutputProf(f"sudo docker images -q {newName}:{newVer}").strip()
-    if ret != "":
-        # 기존 이미지와 hash label이 동일한지 확인 - 다르면 다시 생성
-        def checkParentRev():
-            # 해당부모가 동일한지 확인
-            baseHash = env.runOutputProf(
-                f"sudo docker images -q {baseName}:{baseVer}"
-            ).strip()
-            ret = env.runOutputProf(f"sudo docker image history -q {newName}:{newVer}")
-            lst = ret.split()
-            if baseHash not in lst:
-                raise Exception(f"no matched parent[bashHash:{baseHash}]")
-
-        if hash is None:
-            checkParentRev()
-            return False
-
-        # we should use sudo for docker?
-        ret = env.runOutput(
-            f"""sudo docker image inspect -f '{{{{index .Config.Labels "hash"}}}}' {newName}:{newVer}"""
+            f"""{prog} image inspect -f '{{{{index .Config.Labels "hash"}}}}' {newName}:{newVer}"""
         ).strip()
         # print(f"hash - {hash} {ret}")
         if ret != hash:
@@ -1467,14 +1404,17 @@ def dockerUpdateImage(
             checkParentRev()
             return False
 
-    env.run(f"sudo docker rm -f {newName}-con")
+    if env.config.podman:
+        env.run(f"{prog} rm -if {newName}-con")
+    else:
+        env.run(f"{prog} rm -f {newName}-con")
 
     # Dockerfile에 직접 명시해도 되지만, 편의를 위해서 다시 이미지를 만든다
     extra = ""
     if net is not None:
         extra = f"--network {net}"
 
-    env.run(f"sudo docker run -itd {extra} --name {newName}-con {baseName}:{baseVer}")
+    env.run(f"{prog} run -itd {extra} --name {newName}-con {baseName}:{baseVer}")
     dk = env.dockerConn(f"{newName}-con", dkId=userId)
 
     func(dk)
@@ -1485,86 +1425,17 @@ def dockerUpdateImage(
     if hash is not None:
         extra = f"""-c 'LABEL hash="{hash}"'"""
 
-    env.run(f"""sudo docker commit {extra} {newName}-con {newName}:{newVer}""")
+    env.run(f"{prog} commit {extra} {newName}-con {newName}:{newVer}")
     # env.run(f"sudo docker tag {newName}:{newVer} {newName}:latest")
-    env.run(f"sudo docker rm -f {newName}-con")
+    env.run(f"{prog} rm -f {newName}-con")
     return True
 
 
-def podmanUpdateImage(
-    env,
-    baseName,
-    baseVer,
-    newName,
-    newVer,
-    hash,
-    func,
-    net=None,
-    userId=None,
-):
-    """
-    return: true(created new one), false(already exists)
-    """
-    print(f"podmanUpdateImage: {newName}:{newVer} from {baseName}:{baseVer}")
-    # baseVer = verStr(baseVer)
-    # newVer = verStr(newVer)
-
-    # 해당 버젼이 이미 있으면 생략
-    ret = env.runOutputProf(f"podman images -q {newName}:{newVer}").strip()
-    if ret != "":
-        # 기존 이미지와 hash label이 동일한지 확인 - 다르면 다시 생성
-        def checkParentRev():
-            # 해당부모가 동일한지 확인
-            baseHash = env.runOutputProf(
-                f"podman images -q {baseName}:{baseVer}"
-            ).strip()
-            ret = env.runOutputProf(f"podman image history -q {newName}:{newVer}")
-            lst = ret.split()
-            if baseHash not in lst:
-                raise Exception(f"no matched parent[bashHash:{baseHash}]")
-
-        if hash is None:
-            checkParentRev()
-            return False
-
-        # we should use sudo for docker?
-        ret = env.runOutput(
-            f"""podman image inspect -f '{{{{index .Config.Labels "hash"}}}}' {newName}:{newVer}"""
-        ).strip()
-        # print(f"hash - {hash} {ret}")
-        if ret != hash:
-            print(f"Regenerated image[{newName}:{newVer} whose hash is not match.")
-            env.run(f"podman rmi -f {newName}:{newVer}")
-        else:
-            checkParentRev()
-            return False
-
-    env.run(f"podman rm -if {newName}-con")
-
-    # Dockerfile에 직접 명시해도 되지만, 편의를 위해서 다시 이미지를 만든다
-    extra = ""
-    if net is not None:
-        extra = f"--network {net}"
-
-    env.run(f"podman run -itd {extra} --name {newName}-con {baseName}:{baseVer}")
-    dk = env.dockerConn(f"{newName}-con", dkId=userId)
-
-    func(dk)
-    dk.clearConn()
-
-    # 이미지 생성 및 리소스 제거
-    extra = ""
-    if hash is not None:
-        extra = f"""-c 'LABEL hash="{hash}"'"""
-
-    env.run(f"""podman commit {extra} {newName}-con {newName}:{newVer}""")
-    # env.run(f"sudo docker tag {newName}:{newVer} {newName}:latest")
-    env.run(f"podman rm -f {newName}-con")
-    return True
+dockerUpdateImage = containerUpdateImage
 
 
 # nodeVer는 coimg에 포함된거라 매번 바뀌지 않는다
-def dockerCoImage(env, nodeVer="16.13.1", dartVer="3.2.3"):
+def containerCoImage(env, nodeVer="16.13.1", dartVer="3.2.3"):
     baseName, baseVer = dockerBaseImage(env)
 
     newName = "coimg"
@@ -1618,7 +1489,7 @@ def dockerCoImage(env, nodeVer="16.13.1", dartVer="3.2.3"):
         # lastest가 3.1.0인데 컴포넌트들이 아직 지원이 안된다
         installDart(env, ver=dartVer)
 
-    dockerUpdateImage(
+    containerUpdateImage(
         env,
         baseName=baseName,
         baseVer=baseVer,
@@ -1630,7 +1501,10 @@ def dockerCoImage(env, nodeVer="16.13.1", dartVer="3.2.3"):
     return newName, newVer
 
 
-def dockerBaseImage(env):
+dockerCoImage = containerCoImage
+
+
+def containerBaseImage(env):
     name = "baseimg"
     version = 1
     # 이게 서버에 동일한 버젼이 있었던 경우가 유일한 취약점이다
@@ -1638,8 +1512,12 @@ def dockerBaseImage(env):
 
     # version = verStr(version)
 
+    prog = "podman"
+    if not env.config.podman:
+        prog = "sudo docker"
+
     # 해당 버젼이 이미 있으면 생략
-    ret = env.runOutputProf(f"sudo docker images -q {name}:{version}")
+    ret = env.runOutputProf(f"{prog} images -q {name}:{version}")
     if ret.strip() != "":
         return name, version
 
@@ -1666,56 +1544,14 @@ RUN apt update && \\
     )
     # upgrade -> add 110MB
 
-    env.runProf(
-        f"sudo docker build -t {name}:{version} /tmp/docker && rm -rf /tmp/docker"
-    )
+    env.runProf(f"{prog} build -t {name}:{version} /tmp/docker && rm -rf /tmp/docker")
     # --squash --no-cache
     # env.run(f"sudo docker tag {name}:{version} {name}:latest")
 
     return name, version
 
 
-def podmanBaseImage(env):
-    name = "baseimg"
-    version = 1
-    # 이게 서버에 동일한 버젼이 있었던 경우가 유일한 취약점이다
-    # version = _skipSameVersion(env, f"{name}:", version)
-
-    # version = verStr(version)
-
-    # 해당 버젼이 이미 있으면 생략
-    ret = env.runOutputProf(f"podman images -q {name}:{version}")
-    if ret.strip() != "":
-        return name, version
-
-    # 이미지가 지정되어 있지 않으면 기본 이미지로 같은 이름으로 만든다.
-    installDocker(env, arch="amd64")
-
-    # make docker image
-    env.run("rm -rf /tmp/podman && mkdir /tmp/podman")
-    # https://github.com/phusion/baseimage-docker/releases
-    env.makeFile(
-        """\
-# FROM phusion/baseimage:focal-1.0.0
-FROM docker.io/phusion/baseimage:jammy-1.0.4
-LABEL title="gattool"
-CMD ["/sbin/my_init"]
-RUN mkdir -p /data && mkdir -p /work
-RUN apt update && \\
-    apt upgrade -y -o Dpkg::Options::="--force-confold" && \\
-    apt purge -y vim-tiny && \\
-    apt install -y sudo vim net-tools inetutils-ping rsync unzip zstd
-# RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-""",
-        "/tmp/podman/Dockerfile",
-    )
-    # upgrade -> add 110MB
-
-    env.runProf(f"podman build -t {name}:{version} /tmp/podman && rm -rf /tmp/podman")
-    # --squash --no-cache
-    # env.run(f"sudo docker tag {name}:{version} {name}:latest")
-
-    return name, version
+dockerBaseImage = containerBaseImage
 
 
 def dockerImageForSupervisor(env, name, version, userId, func):
@@ -1845,7 +1681,7 @@ Environment="AWS_SECRET_ACCESS_KEY={secretKey}"''',
     conn.run("sudo systemctl restart docker")
 
 
-def dockerRunCmd(
+def containerRunCmd(
     name,
     image,
     port=None,
@@ -1863,15 +1699,16 @@ def dockerRunCmd(
     """
     # print("port", port)
 
+    prog = "podman"
+    if not env.config.podman:
+        prog = "sudo docker"
+
     # if portCnt != 1:
     # 	portCmd = '-p {0}-{1}:{0}-{1}'.format(port, port+portCnt-1)
     # else:
     # 	portCmd = '-p {0}:{0}'.format(port)
 
-    cmd = (
-        "sudo docker run -itd --restart unless-stopped "
-        f"--name {name} --hostname {name} "
-    )
+    cmd = f"{prog} run -itd --restart unless-stopped --name {name} --hostname {name} "
 
     if net is not None:
         # host, bridge(default)
@@ -1913,7 +1750,7 @@ def dockerRunCmd(
     else:
         cmd += "--log-opt max-size=30m --log-opt max-file=3 "
 
-    if useHost:
+    if useHost and not env.config.podman:
         cmd += "--add-host=host.docker.internal:host-gateway "
 
     cmd += extra
@@ -1921,14 +1758,14 @@ def dockerRunCmd(
 
     if env is not None:
         # if dockerContainerExists(env, env.vars.dkName):
-        if dockerContainerExists(env, name):
-            env.run(f"sudo docker start {name}")
+        if containerExists(env, name):
+            env.run(f"{prog} start {name}")
             dk = env.dockerConn(name)
             # 이 부분에서도 에러 발생
             dk.run("! test -f /update || /update")
 
         # env.run(f"sudo docker rm -f {env.vars.dkName}")
-        env.run(f"sudo docker rm -f {name}")
+        env.run(f"{prog} rm -f {name}")
         # env.run(f"sudo mkdir -p /data/{name}/tmp")
         env.run(cmd)
         dk = env.dockerConn(name)
@@ -1937,8 +1774,15 @@ def dockerRunCmd(
     return cmd
 
 
-def dockerContainerExists(env, name):
-    ret = env.runOutputProf(f'sudo docker ps -aqf name="^{name}$"')
+dockerRunCmd = containerRunCmd
+
+
+def containerExists(env, name):
+    prog = "podman"
+    if not env.config.podman:
+        prog = "sudo docker"
+
+    ret = env.runOutputProf(f'{prog} ps -aqf name="^{name}$"')
     return ret.strip() != ""
 
 
@@ -1946,6 +1790,9 @@ def makeDockerContainer(env, name, image=None, port=None, mountBase=True):
     """
     image: None(create image directly), string(using that image)
     """
+    prog = "podman"
+    if not env.config.podman:
+        prog = "sudo docker"
 
     print(f"makeDockerContainer: name:{name}, image:{image}, port:{port}")
     # 이건 image도 나온다.
@@ -1953,16 +1800,19 @@ def makeDockerContainer(env, name, image=None, port=None, mountBase=True):
     # ret = env.runOutput(f'. ~/.profile && sudo docker ps -qf name="^{name}$"')
     # if ret.strip() != "":
     #     return
-    if dockerContainerExists(env, name):
+    if containerExists(env, name):
         return
 
     if image is None:
         # 이미지가 지정되어 있지 않으면 기본 이미지로 같은 이름으로 만든다.
         image = name
-        installDocker(env, arch="amd64")
+        if env.config.podman:
+            installPodman(env)
+        else:
+            installDocker(env, arch="amd64")
 
         # make docker image
-        env.run("rm -rf /tmp/docker-sv && mkdir /tmp/docker-sv")
+        env.run("rm -rf /tmp/container-sv && mkdir /tmp/container-sv")
         env.makeFile(
             """\
 FROM ubuntu:18.04
@@ -1971,10 +1821,10 @@ RUN echo "#!/bin/bash\\\\nexec /bin/bash" > /start && chmod 755 /start
 RUN mkdir -p /data && mkdir -p /work/log && ln -sf /work/log /var/log
 CMD ["/start"]
 """,
-            "/tmp/docker-sv/Dockerfile",
+            "/tmp/container-sv/Dockerfile",
         )
         env.runProf(
-            f"sudo docker build -t {image} /tmp/docker-sv && rm -rf /tmp/docker-sv"
+            f"{prog} build -t {image} /tmp/container-sv && rm -rf /tmp/container-sv"
         )  # --no-cache
 
     cmd = dockerRunCmd(name, image, port, mountBase)
@@ -1982,7 +1832,7 @@ CMD ["/start"]
 
     # leave cmd as a file
     env.makeFile(cmd, "/tmp/dockerCmd")
-    env.runProf(f"sudo docker cp /tmp/dockerCmd {name}:/cmd")
+    env.runProf(f"{prog} cp /tmp/dockerCmd {name}:/cmd")
 
 
 def writeRunScript(env, cmd, targetPath="/app/current", appName="app"):
