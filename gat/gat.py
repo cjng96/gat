@@ -570,9 +570,9 @@ class Conn:
         if self.dkTunnel is not None:
             dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
             cmd = str2arg(cmd)
-            cmd = f'podman exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
-            if g_config.get("podman") != True:
-                cmd = f'sudo docker exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
+            prog = "podman" if g_config.podman else "sudo docker"
+
+            cmd = f'{prog} exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
             # alias defined in .bashrc is working but -l should be used for something in /etc/profile.d and .profile
             out = self.dkTunnel.ssh.runOutput(cmd, log=log)
         elif self.ssh is not None:
@@ -676,9 +676,8 @@ class Conn:
             dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
             cmd = str2arg(cmd)
             # sudo docker로 하면 cmd에 '가 있으면 centos에서 실행이 안된다
-            cmd = f'podman exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
-            if g_config.get("podman") != True:
-                cmd = f'docker exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
+            prog = "podman" if g_config.podman else "sudo docker"
+            cmd = f'{prog} exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
             # print("run cmd(dk) - %s" % cmd)
             return self.dkTunnel.ssh.run(cmd)
         elif self.ssh is not None:
@@ -762,9 +761,8 @@ class Conn:
             # pp = f'/tmp/upload-{g_main.uid}.tmp'
             pp = f"{self.tempPathGet()}/upload.tmp"
             self.dkTunnel.ssh.uploadFile(src, pp)
-            cmd = f"podman cp {pp} {self.dkName}:{dest} && rm -f {pp}"
-            if g_config.get("podman") != True:
-                cmd = f"sudo docker cp {pp} {self.dkName}:{dest} && rm -f {pp}"
+            prog = "podman" if g_config.podman else "sudo docker"
+            cmd = f"{prog} cp {pp} {self.dkName}:{dest} && rm -f {pp}"
 
             self.dkTunnel.ssh.run(cmd)
         elif self.ssh is None:
@@ -798,9 +796,8 @@ class Conn:
                     )
 
             self.run(f"rm -rf {dest}")
-            cmd = f"podman cp /tmp/gat_upload {self.dkName}:{dest} && rm -rf /tmp/gat_upload"
-            if g_config.get("podman") != True:
-                cmd = f"sudo docker cp /tmp/gat_upload {self.dkName}:{dest} && rm -rf /tmp/gat_upload"
+            prog = "podman" if g_config.podman else "sudo docker"
+            cmd = f"{prog} cp /tmp/gat_upload {self.dkName}:{dest} && rm -rf /tmp/gat_upload"
             self.dkTunnel.ssh.run(cmd)
         else:
             self.ssh.uploadFolder(src, dest)
@@ -821,9 +818,9 @@ class Conn:
                 if self.dkTunnel is not None:
                     pp3 = f"/tmp/gatHelperDk.py"
                     self.dkTunnel.uploadFile(src, pp3)
-                    cmd = f"podman cp {pp3} {self.dkName}:{pp2} && rm -f {pp3}"
-                    if g_config.get("podman") != True:
-                        cmd = f"sudo docker cp {pp3} {self.dkName}:{pp2} && rm -f {pp3}"
+
+                    prog = "podman" if g_config.podman else "sudo docker"
+                    cmd = f"{prog} cp {pp3} {self.dkName}:{pp2} && rm -f {pp3}"
                     self.dkTunnel.ssh.run(cmd)
                 else:
                     self.uploadFile(src, pp2)

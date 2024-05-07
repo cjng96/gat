@@ -1764,8 +1764,9 @@ def containerRunCmd(
             # 이 부분에서도 에러 발생
             dk.run("! test -f /update || /update")
 
-        # env.run(f"sudo docker rm -f {env.vars.dkName}")
-        env.run(f"{prog} rm -f {name}")
+            # env.run(f"sudo docker rm -f {env.vars.dkName}")
+            env.run(f"{prog} rm -f {name}")
+
         # env.run(f"sudo mkdir -p /data/{name}/tmp")
         env.run(cmd)
         dk = env.dockerConn(name)
