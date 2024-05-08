@@ -1436,7 +1436,7 @@ dockerUpdateImage = containerUpdateImage
 
 # nodeVer는 coimg에 포함된거라 매번 바뀌지 않는다
 def containerCoImage(env, nodeVer="16.13.1", dartVer="3.2.3"):
-    baseName, baseVer = dockerBaseImage(env)
+    baseName, baseVer = containerBaseImage(env)
 
     newName = "coimg"
     newVer = 5
@@ -1527,10 +1527,13 @@ def containerBaseImage(env):
     # make docker image
     env.run("rm -rf /tmp/docker && mkdir /tmp/docker")
     # https://github.com/phusion/baseimage-docker/releases
+    origin = "docker.io/"
+    if not env.config.podman:
+        origin = ""
     env.makeFile(
-        """\
+        f"""\
 # FROM phusion/baseimage:focal-1.0.0
-FROM phusion/baseimage:jammy-1.0.1
+FROM {origin}phusion/baseimage:jammy-1.0.4
 LABEL title="gattool"
 CMD ["/sbin/my_init"]
 RUN mkdir -p /data && mkdir -p /work
