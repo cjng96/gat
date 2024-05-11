@@ -2,10 +2,12 @@ import os
 import sys
 import time
 import paramiko
+from paramiko.agent import AgentRequestHandler
 import socket
 import subprocess
 import signal
 import getpass
+import platform
 
 from .coPath import cutpath, path2folderList
 
@@ -39,6 +41,24 @@ class MyCalledProcessError(subprocess.CalledProcessError):
             )
 
 
+class MacOSXAgent(AgentRequestHandler):
+    def __init__(self):
+        self.agents = []
+        self.keys = []
+
+    def get_keys(self):
+        if not self.keys:
+            for agent_fd in self.agents:
+                with open(agent_fd, "rb") as agent:
+                    keys = paramiko.agent.AgentRequestHandler(agent.read)
+                    self.keys.extend(keys.keys())
+        return self.keys
+
+    def add_agent(self, agent_fd):
+        self.agents.append(agent_fd)
+        self.keys = []
+
+
 def falseFunc(pp):
     return False
 
@@ -63,17 +83,42 @@ class CoSsh:
         #     host, port=port, username=id, password=pw, key_filename=keyFile
         # )
         # , password='lol')
-        try:
-            self.ssh.connect(
-                host, port=port, username=id, key_filename=keyFile
-            )  # , password='lol')
-        except paramiko.PasswordRequiredException:
-            pw = getpass.getpass("key password: ")
-            self.ssh.connect(
-                host, port=port, username=id, key_filename=keyFile, passphrase=pw
-            )
 
-        self.sftp = paramiko.SFTPClient.from_transport(self.ssh.get_transport())
+        # if "Darwin" in platform.system():
+        #     import keyring
+
+        #     pp = os.path.expanduser("~/.ssh/id_ed25519")
+        #     ss = keyring.get_password("OpenSSH", pp)
+        #     print(f"keyring: {ss} - {pp}")
+
+        connected = False
+        # keys = tuple(MacOSXAgent().get_keys())
+        # print(f"key lenght: {len(keys)}")
+        # for key in keys:
+        #     try:
+        #         self.ssh.connect(host, port=port, username=id, pkey=key)
+        #         connected = True
+        #     except paramiko.AuthenticationException:
+        #         continue
+
+        if not connected:
+            try:
+                self.ssh.load_system_host_keys()
+                self.ssh.connect(
+                    host, port=port, username=id, key_filename=keyFile, allow_agent=True
+                )
+                # , password='lol')
+            except paramiko.PasswordRequiredException:
+                pw = getpass.getpass("key password: ")
+                self.ssh.connect(
+                    host, port=port, username=id, key_filename=keyFile, passphrase=pw
+                )
+
+        transport = self.ssh.get_transport()
+        s = transport.open_session()
+        paramiko.agent.AgentRequestHandler(s)
+
+        self.sftp = paramiko.SFTPClient.from_transport(transport)
 
         self.uploadFilterFunc = falseFunc
 
