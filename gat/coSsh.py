@@ -7,7 +7,6 @@ import socket
 import subprocess
 import signal
 import getpass
-import platform
 
 from .coPath import cutpath, path2folderList
 
@@ -39,24 +38,6 @@ class MyCalledProcessError(subprocess.CalledProcessError):
                 self.returncode,
                 "\n out:[%s]" % self.output if self.output else "",
             )
-
-
-class MacOSXAgent(AgentRequestHandler):
-    def __init__(self):
-        self.agents = []
-        self.keys = []
-
-    def get_keys(self):
-        if not self.keys:
-            for agent_fd in self.agents:
-                with open(agent_fd, "rb") as agent:
-                    keys = paramiko.agent.AgentRequestHandler(agent.read)
-                    self.keys.extend(keys.keys())
-        return self.keys
-
-    def add_agent(self, agent_fd):
-        self.agents.append(agent_fd)
-        self.keys = []
 
 
 def falseFunc(pp):
@@ -103,7 +84,7 @@ class CoSsh:
 
         if not connected:
             try:
-                self.ssh.load_system_host_keys()
+                # self.ssh.load_system_host_keys()
                 self.ssh.connect(
                     host, port=port, username=id, key_filename=keyFile, allow_agent=True
                 )
