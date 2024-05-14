@@ -231,6 +231,9 @@ class MyUtil:
     def str2arg(self, ss):
         return str2arg(ss)
 
+    def dictMerge(self, dic1, dic2):
+        return dictMerge(dic1, dic2)
+
     def deployFileListProd(self, env, func):
         include = env.config.deploy.include
         exclude = env.config.deploy.get("exclude", [])
