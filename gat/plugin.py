@@ -222,7 +222,7 @@ def dockerPhotoprism(
     nginx통해서 전송해야한다
     """
 
-    if dockerContainerExists(env, name):
+    if containerExists(env, name):
         return
 
     env.run(
@@ -511,7 +511,7 @@ def dockerNextcloudFpm(
     """
 
     # https://hub.docker.com/_/nextcloud#running-this-image-with-docker-compose
-    if dockerContainerExists(env, name):
+    if containerExists(env, name):
         # TODO: next가 만들다 실패했을도 있으니 더 검사해야 한다
         return
 
@@ -579,7 +579,7 @@ def dockerNextcloud(
     dbPw="1234",
 ):
     # https://hub.docker.com/_/nextcloud#running-this-image-with-docker-compose
-    if dockerContainerExists(env, name):
+    if containerExists(env, name):
         # TODO: next가 만들다 실패했을도 있으니 더 검사해야 한다
         return
 
