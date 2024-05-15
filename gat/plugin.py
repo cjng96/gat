@@ -1439,7 +1439,7 @@ def containerCoImage(env, nodeVer="16.13.1", dartVer="3.2.3"):
     baseName, baseVer = containerBaseImage(env)
 
     newName = "coimg"
-    newVer = 5
+    newVer = 7
     newVer = f"{baseVer}{newVer}"
     # 1~9, a~z까지 쓰자
     # 최악으로 coImg와 baseImg버젼이 겹쳐져도 1 11과 11 1처럼 중복되도, 부모가 다르기때문에 오류난다
@@ -1451,9 +1451,8 @@ def containerCoImage(env, nodeVer="16.13.1", dartVer="3.2.3"):
         env.run("apt update")
         env.run("apt install -y --no-install-recommends libmysqlclient-dev git")
         # env.run("sudo apt remove -y python3-pip")
-        env.run(
-            "apt install -y python3-pip"
-        )  # 풀설치- 200메가정도 늘어남. mysqlclient같은거 빌드할때 필요하다
+        # 풀설치- 200메가정도 늘어남. mysqlclient같은거 빌드할때 필요하다
+        env.run("apt install -y python3-pip python3-pyxattr")
         # env.run("ln -sf /usr/bin/python3 /usr/bin/python")
         # env.run("apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*")
 
@@ -2624,8 +2623,15 @@ fi
 #!/usr/bin/env python3
 import subprocess, datetime, re, shutil, os, sys
 
+bupFolder = '/work/bupOnline'
+os.environ['BUP_DIR'] = bupFolder
+
+def isMysqlLive():
+    return subprocess.run('pidof mysqld', stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, shell=True).returncode == 0
+
+
 def backup(cmt=''):
-    cmt = f'-{{comment}}' if cmt else ''
+    cmt = f'-{{cmt}}' if cmt else ''
 
     print("\\nBackup sql...")
     ver = subprocess.check_output(["mysql", "--version"])
@@ -2638,53 +2644,111 @@ def backup(cmt=''):
     backupDir = "/work/bdump"
     backupFile = os.path.join(backupDir, filename)
     os.makedirs(backupDir, exist_ok=True)
-    cmd = f"time mariabackup --backup --user=root --slave-info --stream=xbstream | zstd -o {{backupFile}}"
+
+    # bup
+    # shutil.copy(backupFile, "/work/bdump.zst")
+    print(f'Bup backup starts to {{bupFolder}}...')
+    if not os.path.exists(bupFolder):
+        subprocess.check_call('bup init', shell=True)
+
+    # subprocess.check_call(['bup', 'index', '/data/mysql'])
+    # subprocess.check_call('time bup save -n db /data/mysql', shell=True, executable='/bin/bash')
+    # subprocess.check_call(f'time zstd -c -d {{backupFile}} | bup split -n db', shell=True, executable='/bin/bash')
+    
+    # cmd = f"time mariabackup --backup --user=root --slave-info --stream=xbstream | zstd -o {{backupFile}}"
+    # zstd만 할때 1분 30초, bup까지 하니까 3분. 두번째부터는 1분 51초
+    cmd = f"time mariabackup --backup --user=root --slave-info --stream=xbstream | tee >(zstd -o {{backupFile}}) >(bup split -n db) > /dev/null"
     subprocess.check_call(cmd,shell=True,executable="/bin/bash")
 
     print("Remove old files...")
     subprocess.check_call(["find", backupDir, "-mtime", "+10", "-type", "f", "-delete"])
-    shutil.copy(backupFile, "/work/bdump.zst")
+
     open(os.path.join(backupDir, "new.flag"), "w").close()
 
-def restore(backupFile):
+def restoreFile(backupFile):
+    if isMysqlLive():
+        print("Stop mysql service first")
+        sys.exit(1)
+
     if not os.path.isfile(backupFile):
         print(f"Invalid maria backup target [{{backupFile}}]")
         return
     
     print(f"\\nRestore sql from [{{backupFile}}]")
-    userInput = input("Are you sure [y|N]? ").lower()
-    if userInput != "y":
+    ss = input("Are you sure [y|N]? ").lower()
+    if ss != "y":
         return
     
     restoreDir = "/work/_restore"
     shutil.rmtree(restoreDir, ignore_errors=True)
     os.makedirs(restoreDir)
     
+    print(f'Prepare restore folder[{{restoreDir}}] from backup file[{{backupFile}}]...')
     cmd = f'time zstd -c -d {{backupFile}} | mbstream -x -C {{restoreDir}}'
-    ps = subprocess.Popen(cmd,shell=True,executable="/bin/bash")
-    ps.wait()
+    subprocess.check_call(cmd,shell=True,executable="/bin/bash")
 
+    print('Delete old mysql data folder...')
     shutil.rmtree("/data/mysql", ignore_errors=True)
+
+    print('Restore mysql data...')
     subprocess.check_call(["mariabackup", "--prepare", f"--target-dir={{restoreDir}}"])
     subprocess.check_call(["mariabackup", "--copy-back", f"--target-dir={{restoreDir}}"])
     subprocess.check_call("chown -R mysql.mysql /data/mysql")
     shutil.rmtree(restoreDir)
 
+    print('restore is finished successfully.')
+
+def restoreBup(target):
+    if isMysqlLive():
+        print("Stop mysql service first")
+        sys.exit(1)
+
+    # target is hash or name
+    print(f"\\nRestore sql from bup[{{target}}]")
+    ss = input("Are you sure [y|N]? ").lower()
+    if ss != "y":
+        return
+    
+    restoreDir = "/work/_restoreBup"
+    shutil.rmtree(restoreDir, ignore_errors=True)
+    os.makedirs(restoreDir)
+    
+    print(f'Prepare restore folder[{{restoreDir}}] from bup[{{target}}]...')
+    cmd = f'time bup join db {{target}} | mbstream -x -C {{restoreDir}}'
+    subprocess.check_call(cmd,shell=True,executable="/bin/bash")
+
+    print('Delete old mysql data folder...')
+    shutil.rmtree("/data/mysql", ignore_errors=True)
+
+    print('Restore mysql data...')
+    subprocess.check_call(["mariabackup", "--prepare", f"--target-dir={{restoreDir}}"])
+    subprocess.check_call(["mariabackup", "--copy-back", f"--target-dir={{restoreDir}}"])
+    subprocess.check_call("chown -R mysql.mysql /data/mysql", shell=True)
+    shutil.rmtree(restoreDir)
+
+    print('restore is finished successfully.')
+    
 def main():
     argv = sys.argv
     if len(argv) < 2:
-        print("Please provide a command.")
+        print("Please provide a command [backup|restoreFile|ls|restoreBup]")
         return
 
     cmd = argv[1]
     if cmd == "backup":
         comment = argv[2] if len(argv) > 2 else ''
         backup(comment)
-    elif cmd == "restore":
+    elif cmd == "restoreFile":
         if len(argv) < 3:
             print("Please provide a backup file path.")
             return
-        restore(argv[2])
+        restoreFile(argv[2])
+    elif cmd == 'ls':
+        print(f'bup repo is {{bupFolder}}..')
+        subprocess.check_call('bup ls -l db', shell=True)
+    elif cmd == 'restoreBup':
+        print(f'bup repo is {{bupFolder}}..')
+        restoreBup(argv[2])
     else:
         print(f"Unknown command [{{cmd}}]")
         return
@@ -2692,13 +2756,13 @@ def main():
 if __name__ == "__main__":
     main()
 """,
-        path="/usr/local/bin/db-bdump",
+        path="/usr/local/bin/db-online",
         mode=760,
         sudo=True,
     )
 
     if cron:
-        env.run("ln -sf /usr/local/bin/db-bdump /etc/cron.daily/db-bdump")
+        env.run("ln -sf /usr/local/bin/db-online /etc/cron.daily/db-online")
 
 
 def dockerForceNetwork(env, name):
