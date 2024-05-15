@@ -34,8 +34,23 @@ def skipEnter(ss, pt):
     return sz
 
 
+def skipEnterBackward(ss, pt):
+    while pt >= 0:
+        if ss[pt - 1] not in "\r\n":
+            return pt
+        pt -= 1
+
+    return 0
+
+
 def configBlockStr(ss, start, end, block, insertAfter):
     # marker
+    start = f"\n{start}"
+    end = f"{end}\n"
+    ctx = f"{start}\n{block}\n{end}"
+    if ctx in ss:
+        return ss
+
     pt = ss.find(start)
     if pt >= 0:
         pt2 = ss.find(end, pt)
@@ -48,16 +63,22 @@ def configBlockStr(ss, start, end, block, insertAfter):
     else:
         # insertAfter
         pt = len(ss)
+        pt2 = None
         if insertAfter is not None:
             m = re.search(insertAfter, ss)
             if m is not None:
                 pt = m.end()
-                pt = skipEnter(ss, pt)
+                pt2 = skipEnter(ss, pt)
+        else:
+            # 마지막 \n은 무시
+            pt = skipEnterBackward(ss, pt)
+            ss = ss[:pt]
 
-        pt2 = pt
+        if pt2 is None:
+            pt2 = pt
 
     # insert
-    ss = ss[:pt] + "\n" + start + "\n" + block + "\n" + end + "\n\n" + ss[pt2:]
+    ss = ss[:pt] + ctx + ss[pt2:]
     return ss
 
 
@@ -160,7 +181,7 @@ def userNew(name, existOk, sshKey):
 def lineEndPos(ss, pt):
     """
     return: 01234\n 이면 5위치를 돌려준다.
-            만약없으면 마지막 문자 위치
+            만약없으면 라인 길이
     """
     sz = len(ss)
     while pt < sz:
@@ -168,17 +189,33 @@ def lineEndPos(ss, pt):
             return pt
         pt += 1
 
-    return sz - 1
+    return sz
 
 
-def configLineStr(ss, regexp, line, append=False):
+# append: True면 추가 - deprecated use appendAfterRe="" instead
+# appendAfterRe: ""이면 마지막에 덧붙이기
+# ignore: appendAfterRe를 안쓰는데 패턴을 못찾으면 원본을 반환
+def configLineStr(ss, regexp, line, append=False, appendAfterRe=None, ignore=False):
     m = re.search(regexp, ss, re.MULTILINE)
     if m is None:
-        if append:
-            if ss[-1] != "\n":
-                ss += "\n" + line
+        if append or appendAfterRe is not None:
+            if appendAfterRe != "":
+                m = re.search(appendAfterRe, ss, re.MULTILINE)
+                if m is None:
+                    raise Exception(f"can't find appendAfterRe[{appendAfterRe}]")
+
+                start = lineEndPos(ss, m.start())
+                ss = ss[:start] + "\n" + line + ss[start:]
+                return ss
+
             else:
-                ss += line
+                if ss[-1] != "\n":
+                    ss += "\n" + line
+                else:
+                    ss += line
+            return ss
+
+        if ignore:
             return ss
 
         return None
@@ -191,10 +228,12 @@ def configLineStr(ss, regexp, line, append=False):
     return ss
 
 
-def configLine(path, regexp, line, items=None, append=False):
+def configLine(
+    path, regexp, line, items=None, append=False, appendAfterRe=None, ignore=False
+):
     """
     replace it to the [line] after finding [regexp]
-    no action if there is no regexp
+    ignore: no action if there is no regexp
     """
     path = os.path.expanduser(path)
     path = strExpand(path, g_dic)
@@ -208,20 +247,35 @@ def configLine(path, regexp, line, items=None, append=False):
             regexp2 = regexp.replace("{{item}}", item)
             line2 = line.replace("{{item}}", item)
             line2 = strExpand(line2, g_dic)
-            s2 = configLineStr(ss, regexp2, line2, append)
+            s2 = configLineStr(
+                ss,
+                regexp=regexp2,
+                line=line2,
+                append=append,
+                appendAfterRe=appendAfterRe,
+                ignore=ignore,
+            )
             if s2 is None:
-                print("can't find regexp[%s]" % (regexp2))
-            else:
-                ss = s2
+                # print("can't find regexp[%s]" % (regexp2))
+                raise Exception("can't find regexp[%s]" % (regexp2))
+
     else:
         line2 = strExpand(line, g_dic)
-        ss = configLineStr(ss, regexp, line2, append)
-        if ss is None:
-            print("can't find regexp[%s]" % (regexp))
+        s2 = configLineStr(
+            ss,
+            regexp=regexp,
+            line=line2,
+            append=append,
+            appendAfterRe=appendAfterRe,
+            ignore=ignore,
+        )
+        if s2 is None:
+            # print("can't find regexp[%s]" % (regexp))
+            raise Exception("can't find regexp[%s]" % (regexp))
 
-    if ss is not None:
+    if s2 is not None and s2 != ss:
         with open(path, "w") as fp:
-            fp.write(ss)
+            fp.write(s2)
 
 
 def strExpand(ss, dic):
@@ -231,7 +285,7 @@ def strExpand(ss, dic):
     while True:
         m = re.search(r"\{\{([\w_.]+)\}\}", ss)
         if m is None:
-            ss = ss.replace("\{{", "{{")
+            ss = ss.replace("\\{{", "{{")
             return ss
 
         name = m.group(1)

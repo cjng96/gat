@@ -732,12 +732,12 @@ class Conn:
         cmd = tmpCmd + cmd
         self.run(cmd, expandVars=expandVars)
 
-    def runSafe(self, cmd):
+    def runSafe(self, cmd, printLog=True):
         """
         return: success flag
         """
         try:
-            self.run(cmd)
+            self.run(cmd, printLog=printLog)
             return True
         except subprocess.CalledProcessError as e:
             print("run: failed %d\n -- %s\n" % (e.returncode, e.output))
@@ -832,8 +832,9 @@ class Conn:
 
         # ss = str2arg(json.dumps(args, cls=ObjectEncoder))
         ss = json.dumps(args, cls=ObjectEncoder)
-        # 1/3이나 절반 - 사이즈가 문제가 아니라 escape때문에
-        ss2 = zlib.compress(ss.encode())
+        ss2 = zlib.compress(
+            ss.encode()
+        )  # 1/3이나 절반 - 사이즈가 문제가 아니라 escape때문에
         ss = base64.b64encode(ss2).decode()
         sudo = "sudo " if sudo else ""
         self.run(
@@ -893,7 +894,17 @@ class Conn:
         )
         self._helperRun(args, sudo)
 
-    def configLine(self, path, regexp, line, items=None, sudo=False, append=False):
+    def configLine(
+        self,
+        path,
+        regexp,
+        line,
+        items=None,
+        sudo=False,
+        append=False,
+        appendAfterRe=None,
+        ignore=False,
+    ):
         """
         regexp에 부합되는 라인이 있을 경우 변경한다
         """
@@ -908,6 +919,8 @@ class Conn:
             line=line,
             items=items,
             append=append,
+            appendAfterRe=appendAfterRe,
+            ignore=ignore,
         )
         self._helperRun(args, sudo)
 
@@ -1125,9 +1138,6 @@ def _pathExpand(pp2):
     pp2 = os.path.expanduser(pp2)
     # return strExpand(pp2, dic)
     return pp2
-
-
-import socket
 
 
 class Main:

@@ -2343,20 +2343,23 @@ def installMariaDb(env, dataDir="/var/lib/mysql", port=3306, repo=None):
     env.run("sudo mkdir -p -m 755 /run/mysqld && sudo chown mysql: /run/mysqld")
     env.configLine(
         "/etc/mysql/mariadb.conf.d/50-server.cnf",
-        regexp="^datadir\s*=\s*/",
+        regexp="^datadir\s*=\s*",
         line=f"datadir={dataDir}",
+        appendAfterRe=r"^\[mysqld\]$",
         sudo=True,
     )
     env.configLine(
         "/etc/mysql/mariadb.conf.d/50-server.cnf",
         regexp="^port\s*=\s*[0-9]",
         line=f"port={port}",
+        appendAfterRe=r"^\[mysqld\]$",
         sudo=True,
     )
     env.configLine(
         "/etc/mysql/mariadb.conf.d/50-server.cnf",
         regexp="^bind-address\s*=",
         line="#bind-address =",
+        ignore=True,
         sudo=True,
     )
     # env.run("[ ! -d {0}/mysql ] && sudo mysql_install_db --ldata='{0}'".format(dataDir))
@@ -2475,6 +2478,22 @@ def mysqlCreateUsersFromS3(env, local, bucket, key):
         )
 
 
+def mysqlWaitReady(env):
+    print("wait mysql to be ready...")
+    for i in range(30):
+        # hr = env.runSafe(f"mysql -e 'select 1' > /dev/null 2>&1")
+        hr = env.runSafe(f"mysql -e 'select 1'", printLog=False)
+        if hr is False:
+            print(".", end="", flush=True)
+            time.sleep(1)
+            continue
+
+        print("")
+        return
+
+    raise Exception("mysql not ready. check mysql container logs.")
+
+
 # mariabackup과 비교해서 복구시 1:15 vs 15초 정도로 5배 정도 느리다
 # 빽업은 37 vs 11 3.5배정도 느리다
 def mysqlSqlDump(env, cron):
@@ -2539,12 +2558,17 @@ def mysqlBinDump(env, cron, desync):
     env.makeFile(
         f"""\
 #!/bin/bash
-if [ "$1" == "" ]; then
+if [ -z "$1" ]; then
+    cmt = ''
+    if [ -n "$2" ]; then
+        cmt = '-$2'
+    fi
+
     echo -e "\\nBackup sql..."
     #time mariabackup --backup --user=root --slave-info --target-dir=/work/bdump
     #rm -f /work/backup.zst
     VER=$(mysql --version | sed -E "s/.*Distrib (.*)-M.*/\\1/")
-    FN=bdump-$(date +"%Y-%m%d-%H%M")-$VER.sql.zst
+    FN=bdump-$(date +"%Y-%m%d-%H%M")-$VER$cmt.sql.zst
 
     mkdir -p /work/bdump
     
@@ -2589,6 +2613,84 @@ elif [ "$1" == "restore" ]; then
     sv u app
     #rm -rf /work/_restore
 fi
+""",
+        path="/usr/local/bin/db-bdump2",
+        mode=760,
+        sudo=True,
+    )
+    # 동작 테스트 필요함
+    env.makeFile(
+        f"""\
+#!/usr/bin/env python3
+import subprocess, datetime, re, shutil, os, sys
+
+def backup(cmt=''):
+    cmt = f'-{{comment}}' if cmt else ''
+
+    print("\\nBackup sql...")
+    ver = subprocess.check_output(["mysql", "--version"])
+    m = re.search(r'Distrib (.*)-M.*', str(ver))
+    ver = m.group(1)
+
+    timestamp = datetime.datetime.now().strftime("%Y-%m%d-%H%M")
+    filename = f"bdump-{{timestamp}}-{{ver}}{{cmt}}.sql.zst"
+
+    backupDir = "/work/bdump"
+    backupFile = os.path.join(backupDir, filename)
+    os.makedirs(backupDir, exist_ok=True)
+    cmd = f"time mariabackup --backup --user=root --slave-info --stream=xbstream | zstd -o {{backupFile}}"
+    subprocess.check_call(cmd,shell=True,executable="/bin/bash")
+
+    print("Remove old files...")
+    subprocess.check_call(["find", backupDir, "-mtime", "+10", "-type", "f", "-delete"])
+    shutil.copy(backupFile, "/work/bdump.zst")
+    open(os.path.join(backupDir, "new.flag"), "w").close()
+
+def restore(backupFile):
+    if not os.path.isfile(backupFile):
+        print(f"Invalid maria backup target [{{backupFile}}]")
+        return
+    
+    print(f"\\nRestore sql from [{{backupFile}}]")
+    userInput = input("Are you sure [y|N]? ").lower()
+    if userInput != "y":
+        return
+    
+    restoreDir = "/work/_restore"
+    shutil.rmtree(restoreDir, ignore_errors=True)
+    os.makedirs(restoreDir)
+    
+    cmd = f'time zstd -c -d {{backupFile}} | mbstream -x -C {{restoreDir}}'
+    ps = subprocess.Popen(cmd,shell=True,executable="/bin/bash")
+    ps.wait()
+
+    shutil.rmtree("/data/mysql", ignore_errors=True)
+    subprocess.check_call(["mariabackup", "--prepare", f"--target-dir={{restoreDir}}"])
+    subprocess.check_call(["mariabackup", "--copy-back", f"--target-dir={{restoreDir}}"])
+    subprocess.check_call("chown -R mysql.mysql /data/mysql")
+    shutil.rmtree(restoreDir)
+
+def main():
+    argv = sys.argv
+    if len(argv) < 2:
+        print("Please provide a command.")
+        return
+
+    cmd = argv[1]
+    if cmd == "backup":
+        comment = argv[2] if len(argv) > 2 else ''
+        backup(comment)
+    elif cmd == "restore":
+        if len(argv) < 3:
+            print("Please provide a backup file path.")
+            return
+        restore(argv[2])
+    else:
+        print(f"Unknown command [{{cmd}}]")
+        return
+
+if __name__ == "__main__":
+    main()
 """,
         path="/usr/local/bin/db-bdump",
         mode=760,
