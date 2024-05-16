@@ -2649,7 +2649,6 @@ def backup(cmt=''):
     os.makedirs(backupDir, exist_ok=True)
 
     # bup
-    # shutil.copy(backupFile, "/work/bdump.zst")
     print(f'Bup backup starts to {{bupFolder}}...')
     if not os.path.exists(bupFolder):
         subprocess.check_call('bup init', shell=True)
@@ -2660,13 +2659,19 @@ def backup(cmt=''):
     
     # cmd = f"time mariabackup --backup --user=root --slave-info --stream=xbstream | zstd -o {{backupFile}}"
     # zstd만 할때 1분 30초, bup까지 하니까 3분. 두번째부터는 1분 51초
-    cmd = f"time mariabackup --backup --user=root --slave-info --stream=xbstream | tee >(zstd -o {{backupFile}}) >(bup split -n db) > /dev/null"
+    cmd = (
+        f"time mariabackup --backup --user=root --slave-info --stream=xbstream | "
+        f"tee >(zstd -o {{backupFile}}) | bup split -n db"
+    )
     subprocess.check_call(cmd,shell=True,executable="/bin/bash")
+
+    # shutil.copy(backupFile, "/work/bdump.zst")
+    #subprocess.check_call('ln -sf {{backupFile}} /work/bdump.zst', shell=True)
 
     print("Remove old files...")
     subprocess.check_call(["find", backupDir, "-mtime", "+10", "-type", "f", "-delete"])
 
-    open(os.path.join(backupDir, "new.flag"), "w").close()
+    open(os.path.join(backupDir, f"{{filename}}.flag"), "w").close()
 
 def restoreFile(backupFile):
     if isMysqlLive():
@@ -2864,14 +2869,15 @@ def installPodman(env, arch=None):
 
 def installRestic(env, version, arch=None):
     """
-    version: 0.12.1
+    version: 0.16.4(0.12.1)
     arch: amd64 | arm64
     """
     if arch is None:
         arch = getArch(env)
 
     # if env.runRet('[ -f /usr/local/bin/restic ]') != 0:
-    if not env.runSafe("test -f /usr/local/bin/restic"):
+    # if not env.runSafe("test -f /usr/local/bin/restic"):
+    if not env.runSafe("command -v restic"):
         env.run("sudo apt install --no-install-recommends -y bzip2")
         env.run(
             f"curl -L -o restic.bz2 https://github.com/restic/restic/releases/download/v{version}/restic_{version}_linux_{arch}.bz2"
@@ -2879,7 +2885,7 @@ def installRestic(env, version, arch=None):
         env.run(
             "bzip2 -df restic.bz2 && chmod 755 restic && sudo mv restic /usr/local/bin/"
         )
-        env.run("rm -rf restic")
+        # env.run("rm -rf restic")
 
 
 def supervisorNginxInstall(env):
