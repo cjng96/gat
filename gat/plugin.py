@@ -1510,7 +1510,6 @@ def containerBaseImage(env):
     # version = _skipSameVersion(env, f"{name}:", version)
 
     # version = verStr(version)
-
     prog = "podman"
     if not env.config.podman:
         prog = "sudo docker"
@@ -2435,6 +2434,10 @@ def baseimgInitScript(env):
     env.makeFile(
         content="#!/bin/bash\necho -1 > /var/run/upcnt",
         path="/etc/my_init.d/01_upcnt-init",
+    )
+    env.makeFile(
+        content="#!/bin/bash\n! test -d /data/init.d || run-parts /data/init.d",
+        path="/etc/my_init.d/02_data-init",
     )
 
 
