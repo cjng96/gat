@@ -2770,7 +2770,14 @@ if __name__ == "__main__":
     )
 
     if cron:
-        env.run("ln -sf /usr/local/bin/db-online /etc/cron.daily/db-online")
+        # env.run("ln -sf /usr/local/bin/db-online /etc/cron.daily/db-online")
+        env.makeFile(
+            """#!/bin/bash
+/usr/local/bin/db-online backup
+""",
+            "/etc/cron.daily/db-online",
+            mode=755,
+        )
 
 
 def dockerForceNetwork(env, name):
