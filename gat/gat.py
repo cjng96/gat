@@ -753,6 +753,10 @@ class Conn:
         else:
             self.ssh.downloadFile(src, dest)
 
+    def downloadFileTo(self, src, dest):
+        pp = os.path.join(dest, os.path.basename(src))
+        self.downloadFile(src, pp)
+
     def uploadFile(self, src, dest):
         """
         support both local and remote
@@ -775,8 +779,8 @@ class Conn:
 
     def uploadFileTo(self, src, dest):
         # self.onlyRemote()
-        src = os.path.expanduser(src)
-        dest = os.path.expanduser(dest)
+        # src = os.path.expanduser(src)
+        # dest = os.path.expanduser(dest)
         pp = os.path.join(dest, os.path.basename(src))
         self.uploadFile(src, pp)
 
