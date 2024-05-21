@@ -225,6 +225,8 @@ class CoSsh:
         self.uploadFile(srcPath, os.path.join(destFolder, name))
 
     def downloadFile(self, srcPath, destPath):
+        destPath = os.path.expanduser(destPath)
+
         print("sftp: download file %s -> %s" % (srcPath, destPath))
         self.sftp.get(srcPath, destPath)
 
@@ -232,12 +234,18 @@ class CoSsh:
     # src_path에 dest_path로 업로드한다. 두개 모두 file full path여야 한다.
     def uploadFile(self, srcPath, destPath):
         print("sftp: upload file %s -> %s" % (srcPath, destPath))
+        srcPath = os.path.expanduser(srcPath)
+
         if not os.path.isfile(srcPath):
             raise Exception("uploadFile: there is no file[%s]" % srcPath)
 
         if self.uploadFilterFunc(srcPath):
             print(" ** exclude file - %s" % srcPath)
             return
+
+        if destPath.startswith("~/"):
+            destHome = self.runOutput("echo $HOME").strip()
+            destPath = destPath.replace("~/", f"{destHome}/")
 
         self.mkdirs(destPath)
         try:
