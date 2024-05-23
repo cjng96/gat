@@ -1697,6 +1697,7 @@ def containerRunCmd(
 ):
     """
     port: "3306:3306", "9018-9019:9018-9019", ["9018-9019:9018-9019"]
+    extra: "-v /home/cjng96/ctrSql:/sql"
     """
     # print("port", port)
 
