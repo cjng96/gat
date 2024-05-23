@@ -1097,8 +1097,8 @@ def userAddRaw(
 def userAdd(
     env,
     id,
-    home=None,
-    shell=None,
+    home=None,  # None: 기본값으로 생성. --no-create-home
+    shell=None,  # /usr/sbin/nologin 또는 /bin/false
     genSshKey=True,
     grantSudo=False,
     authPubs=None,
@@ -1439,9 +1439,9 @@ def containerCoImage(env, nodeVer="16.13.1", dartVer="3.2.3"):
     baseName, baseVer = containerBaseImage(env)
 
     newName = "coimg"
-    newVer = 7
+    newVer = "9"
     newVer = f"{baseVer}{newVer}"
-    # 1~9, a~z까지 쓰자
+    # 1~9, a~z, A~Z까지 쓰자
     # 최악으로 coImg와 baseImg버젼이 겹쳐져도 1 11과 11 1처럼 중복되도, 부모가 다르기때문에 오류난다
 
     def update(env):
@@ -1462,6 +1462,15 @@ def containerCoImage(env, nodeVer="16.13.1", dartVer="3.2.3"):
         )
         env.run("pip3 install bcrypt requests google-auth google-auth-oauthlib")
         env.run("pip3 install pyyaml pyOpenSSL")
+
+        # /data/envs/TZ 사용용
+        env.run("mkdir -p /data/envs")
+        env.run(
+            "cd /etc && rm -rf container_environment && ln -s /data/envs container_environment"
+        )
+        env.run(
+            'DEBIAN_FRONTEND="noninteractive" TZ="UTC" apt install -y --no-install-recommends tzdata'
+        )
 
         # 280 - base
         # 435 - python 150m정도
@@ -1523,11 +1532,12 @@ def containerBaseImage(env):
     installDocker(env, arch="amd64")
 
     # make docker image
-    env.run("rm -rf /tmp/docker && mkdir /tmp/docker")
+    env.run("rm -rf /tmp/ctr && mkdir /tmp/ctr")
     # https://github.com/phusion/baseimage-docker/releases
     origin = "docker.io/"
     if not env.config.podman:
         origin = ""
+
     env.makeFile(
         f"""\
 # FROM phusion/baseimage:focal-1.0.0
@@ -1541,11 +1551,11 @@ RUN apt update && \\
     apt install -y sudo vim net-tools inetutils-ping rsync unzip zstd
 # RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 """,
-        "/tmp/docker/Dockerfile",
+        "/tmp/ctr/Dockerfile",
     )
     # upgrade -> add 110MB
 
-    env.runProf(f"{prog} build -t {name}:{version} /tmp/docker && rm -rf /tmp/docker")
+    env.runProf(f"{prog} build -t {name}:{version} /tmp/ctr && rm -rf /tmp/ctr")
     # --squash --no-cache
     # env.run(f"sudo docker tag {name}:{version} {name}:latest")
 
@@ -1710,7 +1720,9 @@ def containerRunCmd(
     # else:
     # 	portCmd = '-p {0}:{0}'.format(port)
 
-    cmd = f"{prog} run -itd --restart unless-stopped --name {name} --hostname {name} "
+    cmd = f"{prog} run -itd  --name {name} --hostname {name} "
+    if not env.config.podman:
+        cmd += "--restart unless-stopped "
 
     if net is not None:
         # host, bridge(default)
@@ -1736,10 +1748,16 @@ def containerRunCmd(
         cmd += f"{portCmd} "
 
     if mountBase:
-        cmd += (
-            # "-v /data/common:/common "	일단은 common도 없애자 - eweb설정등은 god레벨에서 직접 올리자
-            f"-v /data/{name}:/data -v /work/{name}:/work "
-        )
+        if env.config.podman:
+            # home = env.runOutput("echo ~%s" % account).strip()
+            userHome = env.runOutput(f"mkdir -p ~/ctrs/{name} && echo ~").strip()
+            pp = f"{userHome}/ctrs"
+            cmd += f"-v {pp}/{name}:/data -v {pp}/{name}:/work "
+        else:
+            cmd += (
+                # "-v /data/common:/common "	일단은 common도 없애자 - eweb설정등은 god레벨에서 직접 올리자
+                f"-v /data/{name}:/data -v /work/{name}:/work "
+            )
 
     if awsLogsGroup is not None:
         awsLogsRegion = awsLogsRegion or "us-west-1"
@@ -1868,7 +1886,7 @@ def writeSvHelper(env):
         block=f"""
 function readlinks() {{ readlink "$@" || echo "$@"; }}
 alias d="sv d app; test -f /down && /down; sv s app"
-alias re="echo -1 > /var/run/upcnt; sv restart app; ps aux; sv s app"
+alias re="echo -1 > /work/upcnt; sv restart app; ps aux; sv s app"
 alias c="cd $(dirname $(readlinks /etc/service/app/run))"
 alias s="ps aux && sv s app"
 alias r="sv d app; ENV=test $(dirname $(readlinks /etc/service/app/run))/run"
@@ -2426,14 +2444,12 @@ def upcntRunStr():
     # return "test -f /var/opt/upcnt || echo 0 > /var/opt/upcnt; awk -F, '{$1=$1+1}1' /var/opt/upcnt > /tmp/upt && mv /tmp/upt /var/opt/upcnt"
     # centos에서 docker exec -i dxm bash -c "echo '1'"하면 안된다
     # 'awk -F, "{$1=$1+1}1" /var/run/upcnt > /tmp/upt && mv /tmp/upt /var/run/upcnt'
-    return (
-        "awk -F, '{$1=$1+1}1' /var/run/upcnt > /tmp/upt && mv /tmp/upt /var/run/upcnt"
-    )
+    return "awk -F, '{$1=$1+1}1' /work/upcnt > /tmp/upt && mv /tmp/upt /work/upcnt"
 
 
 def baseimgInitScript(env):
     env.makeFile(
-        content="#!/bin/bash\necho -1 > /var/run/upcnt",
+        content="#!/bin/bash\necho -1 > /work/upcnt",
         path="/etc/my_init.d/01_upcnt-init",
     )
     env.makeFile(
@@ -2494,7 +2510,23 @@ def mysqlWaitReady(env):
         print("")
         return
 
-    raise Exception("mysql not ready. check mysql container logs.")
+    raise Exception("mysql not ready. check the container logs.")
+
+
+def psqlWaitReady(env):
+    print("wait postgresql to be ready...")
+    for i in range(30):
+        # hr = env.runSafe(f"mysql -e 'select 1' > /dev/null 2>&1")
+        hr = env.runSafe(f"sudo -u postgres psql -c 'select 1'", printLog=False)
+        if hr is False:
+            print(".", end="", flush=True)
+            time.sleep(1)
+            continue
+
+        print("")
+        return
+
+    raise Exception("postgresql not ready. check the container logs.")
 
 
 # mariabackup과 비교해서 복구시 1:15 vs 15초 정도로 5배 정도 느리다
