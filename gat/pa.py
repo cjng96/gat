@@ -11,12 +11,35 @@ import subprocess
 
 
 # dkCmd = "sudo docker"
-dkCmd = "docker"
+
+ctrCmd = "podman"
+scriptName = os.path.basename(sys.argv[0])
+if not scriptName.startswith("p"):
+    ctrCmd = "docker"
 
 
-def dockerExec(cmd):
-    ret = subprocess.check_output(f"{dkCmd} exec -it {cmd}", shell=True)
-    print(ret.decode("utf-8").strip())
+def run(cmd):
+    subprocess.check_call(cmd, shell=True)
+
+
+def runOutput(cmd):
+    ret = subprocess.check_output(cmd, shell=True)
+    return ret.decode("utf-8").strip()
+
+
+def runSafe(cmd):
+    try:
+        run(cmd)
+        return True
+    except Exception as e:
+        return False
+
+
+def ctrExec(cmd):
+    # ret = subprocess.check_output(f"{dkCmd} exec -it {cmd}", shell=True)
+    # print(ret.decode("utf-8").strip())
+    ss = runOutput(f"{ctrCmd} exec -it {cmd}")
+    print(f" > {ss}")
 
 
 def printTable(arr, minWidth=3, minGap=2):
@@ -117,14 +140,13 @@ def test_size2str():
 
 
 def doPrune():
-    with open("/etc/sa.yml", "r") as fp:
+    # with open("/etc/sa.yml", "r") as fp:
+    with open("/usr/local/share/sa.yml", "r") as fp:
         info = yaml.safe_load(fp.read())
         deleteTargets = info["prune"]
 
-    cmd = (
-        dkCmd
-        + """ ps -a --format '{"id":"{{ .ID }}", "img": "{{ .Image }}", "name":"{{ .Names }}"}'"""
-    )
+    cmd = ctrCmd
+    cmd += """ ps -a --format '{"id":"{{ .ID }}", "img": "{{ .Image }}", "name":"{{ .Names }}"}'"""
     ss = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
     # print(ss)
 
@@ -135,15 +157,14 @@ def doPrune():
         # name = con["name"]
         img = con["img"]
 
-        cmd = f"{dkCmd} image history -q {img}"
+        cmd = f"{ctrCmd} image history -q {img}"
         ss = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
         qs = ss.splitlines()
         ids = ids + qs
 
-    cmd = (
-        dkCmd
-        + """ images --format '{"id":"{{.ID}}", "img":"{{.Repository}}:{{.Tag}}"}' """
-    )
+    cmd = ctrCmd
+    cmd += """ images --format '{"id":"{{.ID}}", "img":"{{.Repository}}:{{.Tag}}"}' """
+    print("deleteTargets", deleteTargets)
 
     ss = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
     images = ss.splitlines()
@@ -154,7 +175,7 @@ def doPrune():
         if img["id"] not in ids:
             print(f"\n{img['img']}({img['id']}) is not used...")
             if imgName in deleteTargets:
-                cmd = f"{dkCmd} rmi {img['id']}"
+                cmd = f"{ctrCmd} rmi {img['id']}"
                 # print(cmd)
                 try:
                     ss = (
@@ -246,7 +267,7 @@ async def asyncRun(*args):
 
 async def asyncShell(cmd):
     p = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE)
-    stdout, stderr = await p.communicate()
+    stdout, _ = await p.communicate()
     return stdout
 
 
@@ -262,10 +283,8 @@ async def asyncGatherN(n, *coros):
 
 async def doLs(isJson=False):
     # https://stackoverflow.com/questions/61528514/docker-format-with-json-specific-placeholder-syntax-for-multiple-placeholders
-    cmd = (
-        dkCmd
-        + """ ps -a --format '{"id":"{{ .ID }}", "img": "{{ .Image }}", "name":"{{ .Names }}", "status":"{{ .Status }}"}'"""
-    )
+    cmd = ctrCmd
+    cmd += """ ps -a --format '{"id":"{{ .ID }}", "img": "{{ .Image }}", "name":"{{ .Names }}", "status":"{{ .Status }}"}' """
     ss = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
     # print(ss)
 
@@ -286,8 +305,8 @@ async def doLs(isJson=False):
         # f가 트리표시, w가 무제한길이, u가 다양한 정보 표시, ax전체 프로세스 표시
         try:
             # https://superuser.com/questions/1326853/docker-exec-messes-up-terminal-line-feeds
-            # -it is broken terminal
-            cmd = f"""{dkCmd} exec -t {name} bash -c 'cat /var/run/upcnt;ps -awfxo etimes,pid,%cpu,vsz,rss,%mem,time,ppid,cmd' """
+            # -i is broken terminal
+            cmd = f"""{ctrCmd} exec -t {name} bash -c 'cat /var/run/upcnt;ps -awfxo etimes,pid,%cpu,vsz,rss,%mem,time,ppid,cmd' """
             # ss = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
             ss = (await asyncShell(cmd)).decode("utf-8").strip()
             upcnt, app = parsePs(ss)
@@ -302,6 +321,8 @@ async def doLs(isJson=False):
 
     tasks = [_run(ll) for ll in lst]
     await asyncGatherN(5, *tasks)
+    if ctrCmd == "podman":
+        run(f"stty icrnl opost isig icanon iexten echo")
 
     # 이름순 정렬 - 생성순이라서 안하는게 나을려나..
     # sorted(cons, key=lambda item: item[0]["name"])
@@ -352,25 +373,156 @@ async def doLs(isJson=False):
 
 
 def test():
-    ss = """\
-0
+    ss = """0
 ELAPSED     PID %CPU    VSZ   RSS %MEM     TIME    PPID CMD
-       0     756  0.0   9524  2832  0.0 15-00:00:00       0 bash -c cat /var/run/upcnt;ps -awfxo etimes,pid,%cpu,vsz,rss,%mem,time,ppid,
-       0     763  0.0  11244  1200  0.0 00:00:00     756  \_ ps -awfxo etimes,pid,%cpu,vsz,rss,%mem,time,ppid,cmd
+       0     756  0.0   9524  2832  0.0 15-00:00:00       0 bash -c cat /var/run/upcnt;ps -awfxo etimes,pid,%%cpu,vsz,rss,%mem,time,ppid,
+       0     763  0.0  11244  1200  0.0 00:00:00     756  \\_ ps -awfxo etimes,pid,%%cpu,vsz,rss,%mem,time,ppid,cmd
   580096     114  0.0  13744  1136  0.0 00:00:00       0 bash -l
  8896973       1  0.0  19624    12  0.0 00:00:00       0 /usr/bin/python3 -u /sbin/my_init
  8896971      14  0.0 234128   876  0.0 00:00:01       1 /usr/sbin/syslog-ng --pidfile /var/run/syslog-ng.pid -F --no-caps
  8896969      22  0.0   1964    92  0.0 00:01:36       1 /usr/bin/runsvdir -P /etc/service
- 8896969      23  0.0   1812   284  0.0 00:00:00      22  \_ runsv app
-  580092     421  1.2 497560 15144  0.4 01:59:05      23      \_ python3 -u sermon.py
+ 8896969      23  0.0   1812   284  0.0 00:00:00      22  \\_ runsv app
+  580092     421  1.2 497560 15144  0.4 01:59:05      23      \\_ python3 -u sermon.py
 """
     cnt, app = parsePs(ss)
     print(cnt, app)
 
 
+# arr = ["0-f", "1--json"]
+def argParse(argv, cmdList):
+    opts = {}
+    # '1--json' -> '--json'
+    cmds = list(map(lambda x: x[1:], cmdList))
+    for i in range(len(argv) - 1, 0, -1):
+        print("i", i, len(argv), type(cmds))
+        arg = argv[i]
+        try:
+            idx = cmds.index(arg)
+            cnt = int(cmdList[idx][0])
+            if cnt == 0:
+                opts[arg] = True
+            else:
+                opts[arg] = argv[i + 1]
+                del argv[i + 1]
+
+            del argv[i]
+        except ValueError:
+            if arg.startswith("-"):
+                raise Exception(f"unknown arg[{arg}]")
+
+    return opts
+
+
+def test_argParse():
+    arr = ["0-f", "1--json"]
+    argv = ["a", "--json", "h"]
+    opts = argParse(argv, arr)
+    print(opts)
+    assert opts["--json"] == "h"
+    assert argv == ["a"]
+
+    arr = ["0-f", "1--json"]
+    argv = ["a", "--json2", "h"]
+    try:
+        opts = argParse(argv, arr)
+    except Exception as e:
+        print("pass")
+
+    arr = ["0-f", "1--json"]
+    argv = ["a", "-f", "h"]
+    opts = argParse(argv, arr)
+    assert opts["-f"] == True
+    assert argv == ["a", "h"]
+
+
+# test_argParse()
+
+
+def ctrRemove(ctr):
+    if ctrCmd == "docker":
+        run(f"docker rm -f {ctr}")
+        return
+
+    runSafe(f"systemctl --user disable --now {ctr}.service")
+    runSafe(f"rm ~/.config/systemd/user/{ctr}.service")
+    runSafe(f"podman rm -if {ctr}")
+
+    argv = sys.argv
+    opts = argParse(argv, ["0-f"])
+    forceFlag = opts.get("-f", False)
+
+    if forceFlag:
+        print(f"force remove the container directory[~/ctrs/{ctr}].")
+        run(f"podman unshare rm -rf ~/ctrs/{ctr}")
+    else:
+        print(f"remove the container directory manually.\nex> rm -rf ~/ctrs/{ctr}")
+
+
+def genArgsStr(argv):
+    ss = ""
+    for arg in argv:
+        ss += f'"{arg}" '
+
+    return ss
+
+
 async def main():
     # test()
     # return
+
+    # https://www.jorgeanaya.dev/en/bin/docker-ps-prettify/
+    # 위에꺼 이름이 길거나 하면 잘 안된다. 보기 안좋다
+    # docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Networks}}\t{{.Ports}}' "$@" | less -N -S
+    if scriptName in ["pa", "da"]:
+        pass
+    elif scriptName == "sa":
+        cmd = "ls"
+    elif scriptName in ["pp", "dp"]:
+        cmd = ctrCmd
+        cmd += """ ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}({{.RunningFor}})\t{{.ID}} {{.Networks}}' -a "$@" """
+        run(cmd)
+        return
+    elif scriptName in ["pr", "dr"]:
+        ctr = sys.argv[1]
+        if ctr == "":
+            print(f"Please {scriptName} CONTAINER_NAME")
+            sys.exit(1)
+
+        ctrRemove(sys.argv[1])
+        return
+    elif scriptName in ["pe", "de"]:
+        ss = genArgsStr(sys.argv[1:])
+
+        run(f"{ctrCmd} exec -it {ss} bash -l")
+        return
+    elif scriptName in ["pl", "dl"]:
+        ss = genArgsStr(sys.argv[1:])
+
+        # podman logs --tail 3000 "$@"
+        run(f"{ctrCmd} logs --tail 3000 {ss}")
+        return
+    elif scriptName in ["pp", "dp"]:
+        # https://www.jorgeanaya.dev/en/bin/docker-ps-prettify/
+        # 위에꺼 이름이 길거나 하면 잘 안된다. 보기 안좋다
+        # docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Networks}}\t{{.Ports}}' "$@" | less -N -S
+        # docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}({{.RunningFor}})\t{{.ID}} {{.Networks}}' -a "$@" """,
+        ss = genArgsStr(sys.argv[1:])
+        run(
+            f"{ctrCmd} ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}({{.RunningFor}})\t{{.ID}} {{.Networks}}' -a {ss}"
+        )
+        return
+    elif scriptName in ["pi", "di"]:
+        run(f"{ctrCmd} images")
+        return
+    elif scriptName in ["pri", "dri"]:
+        # pri bsone:*
+        ss = genArgsStr(sys.argv[1:])
+        run(f"{ctrCmd} rmi $(docker images -q {ss})")
+        return
+
+    else:
+        print(f"unknown script name[{scriptName}]")
+        sys.exit(1)
 
     cnt = len(sys.argv)
     if cnt < 2:
@@ -391,7 +543,7 @@ async def main():
             return
 
         for con in sys.argv[2:]:
-            dockerExec(f"{con} bash -c 'sv u app; sv s app'")
+            ctrExec(f"{con} bash -c 'sv u app; sv s app'")
         print()
         await doLs()
 
@@ -401,7 +553,7 @@ async def main():
             return
 
         for con in sys.argv[2:]:
-            dockerExec(f"{con} bash -l -c 'sv d app; test -f /down && /down; sv s app'")
+            ctrExec(f"{con} bash -l -c 'sv d app; test -f /down && /down; sv s app'")
         print()
         await doLs()
 
@@ -411,7 +563,7 @@ async def main():
             return
 
         con = sys.argv[2]
-        dockerExec(f"{con} sv s app")
+        ctrExec(f"{con} sv s app")
 
     elif cmd == "r":
         if cnt < 3:
@@ -419,7 +571,7 @@ async def main():
             return
 
         for con in sys.argv[2:]:
-            dockerExec(
+            ctrExec(
                 f"{con} bash -c 'sv restart app; echo 0 > /var/run/upcnt; sv s app'"
             )
         await doLs()
@@ -430,7 +582,7 @@ async def main():
             return
 
         for con in sys.argv[2:]:
-            dockerExec(f"{con} bash -c 'echo 0 > /var/run/upcnt'")
+            ctrExec(f"{con} bash -c 'echo 0 > /var/run/upcnt'")
         await doLs()
 
     elif cmd == "ls":
@@ -450,7 +602,7 @@ async def main():
         con = sys.argv[2]
         # 해당 컨테이너 폴더로 이동
         ret = subprocess.check_output(
-            f'{dkCmd} ps --no-trunc -aqf "name=^{con}$"', shell=True
+            f'{ctrCmd} ps --no-trunc -aqf "name=^{con}$"', shell=True
         )
         conId = ret.decode("utf-8").strip()
         print(f"cd /var/lib/docker/containers/{conId}")
@@ -467,7 +619,7 @@ if __name__ == "__main__":
     # loop.run_until_complete(main())
     # loop.close()
 
-    # asyncio.run(main())
     # py3.6
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    # loop = asyncio.get_event_loop()
+    # loop.run_until_complete(main())
+    asyncio.run(main())

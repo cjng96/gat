@@ -477,19 +477,20 @@ server {{
         )
 
 
-def dockerNextcloudFpm(
+def containerNextcloudFpm(
     env,
     dataPath,
     name="next",
     overwriteProt="https",
     overwriteDomain=None,  # None이면 overwrite안한다
-    dbHost="sql",
-    dbName="next",
+    dbHost="sql",  # localhost:3306
     dbId="next",
     dbPw="1234",
+    dbName="next",
     publishPort=0,
     restart="unless-stopped",
     imgTag="fpm",
+    net=None,
 ):
     """
     sudo docker exec -ti --user www-data next /var/www/html/occ files:scan --all
@@ -515,6 +516,8 @@ def dockerNextcloudFpm(
         # TODO: next가 만들다 실패했을도 있으니 더 검사해야 한다
         return
 
+    ctrCmd = "podman" if env.config.podman else "docker"
+
     # bind mount도 안먹힌다
     # env.run(f'sudo mount --bind {srcPath} /data/web/{name}')
     env.run(f"sudo mkdir -p /data/web/{name}")
@@ -534,7 +537,7 @@ def dockerNextcloudFpm(
 
     env.run(
         f"""\
-sudo docker run -d --name {name} \
+sudo {ctrCmd} run -d --name {name} \
   --restart {restart} \
   {publishPortCmd} \
   -e MYSQL_DATABASE={dbName} \
@@ -547,12 +550,14 @@ sudo docker run -d --name {name} \
   nextcloud:{imgTag}
 """
     )
-    env.run(f"docker network connect net {name}")
 
-    env.runSafe(f"sudo docker rm -f {name}Cron")
+    if net is not None:
+        env.run(f"{ctrCmd} network connect {net} {name}")
+
+    env.runSafe(f"sudo {ctrCmd} rm -f {name}Cron")
     env.run(
         f"""\
-sudo docker run -d --name {name}Cron \
+sudo {ctrCmd} run -d --name {name}Cron \
   --restart {restart} \
   --entrypoint /cron.sh \
   -e MYSQL_DATABASE={dbName} \
@@ -564,7 +569,15 @@ sudo docker run -d --name {name}Cron \
   nextcloud:{imgTag}
 """
     )
-    env.run(f"docker network connect net {name}Cron")
+    if net is not None:
+        env.run(f"{ctrCmd} network connect {net} {name}Cron")
+
+    if env.config.podman:
+        setupSystemd(env, name)
+        setupSystemd(env, f"{name}Cron")
+
+
+dockerNextcloudFpm = containerNextcloudFpm
 
 
 def dockerNextcloud(
@@ -1692,6 +1705,14 @@ Environment="AWS_SECRET_ACCESS_KEY={secretKey}"''',
     conn.run("sudo systemctl restart docker")
 
 
+def setupSystemd(env, dkName):
+    pp = "~/.config/systemd/user"
+    env.run(f"mkdir -p {pp}")
+    env.run(f"podman generate systemd --new --name {dkName} > {pp}/{dkName}.service")
+    env.run(f"systemctl --user daemon-reload")
+    env.run(f"systemctl --user enable --now {dkName}.service")
+
+
 def containerRunCmd(
     name,
     image,
@@ -1792,6 +1813,9 @@ def containerRunCmd(
         dk = env.dockerConn(name)
         dk.makeFile(cmd, "/cmd")
 
+    if env.config.podman:
+        setupSystemd(env, name)
+
     return cmd
 
 
@@ -1805,6 +1829,9 @@ def containerExists(env, name):
 
     ret = env.runOutputProf(f'{prog} ps -aqf name="^{name}$"')
     return ret.strip() != ""
+
+
+dockerContainerExists = containerExists
 
 
 def makeDockerContainer(env, name, image=None, port=None, mountBase=True):
@@ -3978,7 +4005,7 @@ time zstd -d $fn -c | docker import --change 'CMD ["/start"]' - $image
 
     pp = os.path.dirname(os.path.abspath(__file__))
     env.copyFile(
-        srcPath=f"{pp}/sa.py",
+        srcPath=f"{pp}/pa.py",
         targetPath="/usr/local/bin/sa",
         sudo=True,
     )
@@ -3990,36 +4017,48 @@ time zstd -d $fn -c | docker import --change 'CMD ["/start"]' - $image
     )
 
 
-def scriptPodman(env, saYml="./resource/sa.yml"):
-    env.run("mkdir -p ~/.local/bin")
-    env.makeFile(path="~/.local/bin/pe", content="""podman exec -it "$@" bash -l """)
-    env.makeFile(path="~/.local/bin/pl", content="""podman logs --tail 3000 "$@" """)
-    env.makeFile(
-        path="~/.local/bin/plf",
-        content="""podman logs ---tail 500 -f "$@" """,
+def scriptCtr(env, saYml="./resource/sa.yml"):
+    pp = os.path.dirname(os.path.abspath(__file__))
+    # env.copyFile(
+    env.uploadFile(
+        src=f"{pp}/pa.py",
+        dest="/usr/local/bin/pa",
+        sudo=True,
+        mode=755,
     )
-    env.makeFile(
-        path="~/.local/bin/plg",
-        content="""A=`podman inspect --format '{{.LogPath}}' "$@"`\necho $A\nvi $A""",
+    env.run("cd /usr/local/bin && sudo ln -sf pa da")
+    env.run("cd /usr/local/bin && sudo ln -sf pa sa")  # backward compatibility
+
+    env.copyFile(
+        srcPath=saYml,
+        targetPath="/usr/local/share/sa.yml",
+        sudo=True,
     )
 
-    # https://www.jorgeanaya.dev/en/bin/docker-ps-prettify/
-    # 위에꺼 이름이 길거나 하면 잘 안된다. 보기 안좋다
-    env.makeFile(
-        path="~/.local/bin/dp",
-        content="""
-#docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Networks}}\t{{.Ports}}' "$@" | less -N -S
-docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}({{.RunningFor}})\t{{.ID}} {{.Networks}}' -a "$@" """,
-    )
-    env.makeFile(path="~/.local/bindi", content="""docker images """)
+    arr = [
+        "p",
+        "r",
+        "e",
+        "l",
+        "p",
+        "i",
+        "ri",
+    ]
+    for name in arr:
+        env.run(f"cd /usr/local/bin && sudo ln -sf pa p{name}")
+        env.run(f"cd /usr/local/bin && sudo ln -sf pa d{name}")
 
-    env.makeFile(path="~/.local/bin/dr", content="""docker rm -f "$@" """)
-    # dri bsone:*
+    # env.run("mkdir -p ~/.local/bin")
+    # env.makeFile(
+    #     path="/usr/local/bin/dlf",
+    #     content="""docker logs ---tail 500 -f "$@" """,
+    #     sudo=True,
+    # )
     env.makeFile(
-        path="~/.local/bin/dri",
-        content="""docker rmi $(docker images -q "$@") """,
+        path="/usr/local/bin/dlg",
+        content="""A=`docker inspect --format '{{.LogPath}}' "$@"`\necho $A\nvi $A""",
+        sudo=True,
     )
-    # env.makeFile(path="/usr/local/bin/dri", content="""docker rmi "$@" """, sudo=True)
 
     # docker backup script - 잘 안쓴다
     env.makeFile(
@@ -4033,7 +4072,8 @@ name=$1
 mkdir -p ~/backup
 time nice docker export $(docker inspect --format="\{{.Id}}" $name) | zstd -o ~/backup/$name-$(date +%y-%m%d_%H%M%S).zst
 """,
-        "~/.local/bin/docker_backup",
+        "/usr/local/bin/ctr_backup",
+        sudo=True,
     )
 
     # run할때 쓰는 cmd, port, volumes를 잃어버린다. run할때 해야 함
@@ -4048,16 +4088,6 @@ fn=$1
 image=$2
 time zstd -d $fn -c | docker import --change 'CMD ["/start"]' - $image
 """,
-        "~/.local/bin/docker_restore",
-    )
-
-    pp = os.path.dirname(os.path.abspath(__file__))
-    env.copyFile(
-        srcPath=f"{pp}/sa.py",
-        targetPath="~/.local/bin/sa",
-    )
-
-    env.copyFile(
-        srcPath=saYml,
-        targetPath="~/.local/share/sa.yml",
+        "/usr/local/bin/ctr_restore",
+        sudo=True,
     )
