@@ -757,10 +757,14 @@ class Conn:
         pp = os.path.join(dest, os.path.basename(src))
         self.downloadFile(src, pp)
 
-    def uploadFile(self, src, dest):
+    def uploadFile(self, src, dest, sudo=False, mode=None):
         """
         support both local and remote
         """
+        if sudo:
+            # 꼼수
+            self.run(f"sudo touch {dest} && sudo chown -R $USER: {dest}")
+
         # self.onlyRemote()
         src = os.path.expanduser(src)
         dest = os.path.expanduser(dest)
@@ -776,6 +780,12 @@ class Conn:
             self.run(f"cp {src} {dest}")
         else:
             self.ssh.uploadFile(src, dest)
+
+        if mode is not None:
+            cmd = f"chmod {mode} {dest}"
+            if sudo:
+                cmd = f"sudo {cmd}"
+            self.run(cmd)
 
     def uploadFileTo(self, src, dest):
         # self.onlyRemote()
