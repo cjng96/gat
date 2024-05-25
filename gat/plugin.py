@@ -573,8 +573,8 @@ sudo {ctrCmd} run -d --name {name}Cron \
         env.run(f"{ctrCmd} network connect {net} {name}Cron")
 
     if env.config.podman:
-        setupSystemd(env, name)
-        setupSystemd(env, f"{name}Cron")
+        systemdInstall(env, name)
+        systemdInstall(env, f"{name}Cron")
 
 
 dockerNextcloudFpm = containerNextcloudFpm
@@ -619,7 +619,7 @@ sudo docker run -d --name {name} \
     # web에서 /media/w/nextcloud에 접근이 가능해야한다 - static files
     # 이게 좀 어렵다 그냥 fpm대신 아파치 쓰자
 
-    web = env.dockerConn("web")
+    web = env.containerConn("web")
     web.makeFile(
         f"""\
 server {{
@@ -1428,7 +1428,7 @@ def containerUpdateImage(
         extra = f"--network {net}"
 
     env.run(f"{prog} run -itd {extra} --name {newName}-con {baseName}:{baseVer}")
-    dk = env.dockerConn(f"{newName}-con", dkId=userId)
+    dk = env.containerConn(f"{newName}-con", ctrId=userId)
 
     func(dk)
     dk.clearConn()
@@ -1448,7 +1448,8 @@ dockerUpdateImage = containerUpdateImage
 
 
 # nodeVer는 coimg에 포함된거라 매번 바뀌지 않는다
-def containerCoImage(env, nodeVer="16.13.1", dartVer="3.2.3"):
+# def containerCoImage(env, nodeVer="16.13.1", dartVer="3.2.3"):
+def containerCoImage(env, nodeVer="16.13.1", dartVer="3.4.1"):
     baseName, baseVer = containerBaseImage(env)
 
     newName = "coimg"
@@ -1614,7 +1615,7 @@ CMD ["/start"]
 
     # Dockerfile에 직접 명시해도 되지만, 편의를 위해서 다시 이미지를 만든다
     env.run(f"sudo docker run -itd --name {name}-con {name}-work")
-    dk = env.dockerConn(f"{name}-con")
+    dk = env.containerConn(f"{name}-con")
 
     ret = installSupervisor(dk)
     if userId is not None:
@@ -1623,7 +1624,7 @@ CMD ["/start"]
     if ret:
         env.run(f"sudo docker restart {name}-con")
 
-    dk = env.dockerConn(f"{name}-con", dkId=userId)
+    dk = env.containerConn(f"{name}-con", ctrId=userId)
     supervisorBasic(dk, serverName=name)
 
     if func is not None:
@@ -1652,7 +1653,7 @@ def makeDockerContainerForSupervisor(
     # image를 쓰면 68초, 직접 생성하면 241초 한 4배
     makeDockerContainer(env, name=name, port=port, image=image, mountBase=mountBase)
 
-    dk = env.dockerConn(name)
+    dk = env.containerConn(name)
     ret = installSupervisor(dk)
     if dkId is not None:
         makeUser(dk, dkId, grantSudo=True)
@@ -1660,7 +1661,7 @@ def makeDockerContainerForSupervisor(
     if ret:
         env.run(f"sudo docker restart {env.vars.dkName}")
 
-    dk = env.dockerConn(name, dkId=dkId)
+    dk = env.containerConn(name, ctrId=dkId)
     supervisorBasic(dk, serverName=name)
     return dk
 
@@ -1676,13 +1677,13 @@ def makeDockerContainerForRunit(
 
     makeDockerContainer(env, name=name, port=port, image=image, mountBase=mountBase)
 
-    dk = env.dockerConn(name)
+    dk = env.containerConn(name)
     installRunit(dk)
     if dkId is not None:
         makeUser(dk, dkId, grantSudo=True)
     env.run(f"sudo docker restart {env.vars.dkName}")
 
-    dk = env.dockerConn(name, dkId=dkId)
+    dk = env.containerConn(name, ctrId=dkId)
     # supervisorBasic(dk, serverName=name)
     return dk
 
@@ -1705,12 +1706,21 @@ Environment="AWS_SECRET_ACCESS_KEY={secretKey}"''',
     conn.run("sudo systemctl restart docker")
 
 
-def setupSystemd(env, dkName):
+def systemdInstall(env, ctrName):
     pp = "~/.config/systemd/user"
     env.run(f"mkdir -p {pp}")
-    env.run(f"podman generate systemd --new --name {dkName} > {pp}/{dkName}.service")
+    env.run(f"podman generate systemd --new --name {ctrName} > {pp}/{ctrName}.service")
     env.run(f"systemctl --user daemon-reload")
-    env.run(f"systemctl --user enable --now {dkName}.service")
+    env.run(f"systemctl --user enable --now {ctrName}.service")
+
+
+def systemdRemove(env, ctrName, force=False):
+    pp = "~/.config/systemd/user"
+    env.runSafe(f"systemctl --user disable --now {ctrName}.service")
+    env.runSafe(f"rm -f {pp}/{ctrName}.service")
+    env.runSafe(f"podman rm -f {ctrName}")
+    if force:
+        env.run(f"podman unshare rm -rf {pp}")
 
 
 def containerRunCmd(
@@ -1719,9 +1729,10 @@ def containerRunCmd(
     port=None,
     mountBase=True,
     net=None,
-    env=None,
+    env=None,  # execute cmd if env is specified
     extra="",
-    useHost=True,
+    useHost=True,  # podman always uses host
+    hostname=None,
     awsLogsGroup=None,
     awsLogsStream=None,
     awsLogsRegion=None,
@@ -1732,16 +1743,15 @@ def containerRunCmd(
     """
     # print("port", port)
 
-    prog = "podman"
-    if not env.config.podman:
-        prog = "sudo docker"
+    prog = "podman" if env.config.podman else "sudo docker"
 
     # if portCnt != 1:
     # 	portCmd = '-p {0}-{1}:{0}-{1}'.format(port, port+portCnt-1)
     # else:
     # 	portCmd = '-p {0}:{0}'.format(port)
+    hostname = hostname or name
 
-    cmd = f"{prog} run -itd  --name {name} --hostname {name} "
+    cmd = f"{prog} run -itd  --name {name} --hostname {hostname} "
     if not env.config.podman:
         cmd += "--restart unless-stopped "
 
@@ -1801,20 +1811,21 @@ def containerRunCmd(
         # if dockerContainerExists(env, env.vars.dkName):
         if containerExists(env, name):
             env.run(f"{prog} start {name}")
-            dk = env.dockerConn(name)
+            dk = env.containerConn(name)
             # 이 부분에서도 에러 발생
             dk.run("! test -f /update || /update")
 
             # env.run(f"sudo docker rm -f {env.vars.dkName}")
-            env.run(f"{prog} rm -f {name}")
+            # env.run(f"{prog} rm -f {name}")
+            if env.config.podman:
+                systemdRemove(env, name)
+            else:
+                env.run(f"{prog} rm -f {name}")
 
         # env.run(f"sudo mkdir -p /data/{name}/tmp")
         env.run(cmd)
-        dk = env.dockerConn(name)
+        dk = env.containerConn(name)
         dk.makeFile(cmd, "/cmd")
-
-    if env.config.podman:
-        setupSystemd(env, name)
 
     return cmd
 
@@ -1823,24 +1834,22 @@ dockerRunCmd = containerRunCmd
 
 
 def containerExists(env, name):
-    prog = "podman"
-    if not env.config.podman:
-        prog = "sudo docker"
+    prog = "podman" if env.config.podman else "sudo docker"
 
     ret = env.runOutputProf(f'{prog} ps -aqf name="^{name}$"')
     return ret.strip() != ""
 
 
-dockerContainerExists = containerExists
+def dockerContainerExists(env, name):
+    ret = env.runOutputProf(f'docker ps -aqf name="^{name}$"')
+    return ret.strip() != ""
 
 
 def makeDockerContainer(env, name, image=None, port=None, mountBase=True):
     """
     image: None(create image directly), string(using that image)
     """
-    prog = "podman"
-    if not env.config.podman:
-        prog = "sudo docker"
+    prog = "podman" if env.config.podman else "sudo docker"
 
     print(f"makeDockerContainer: name:{name}, image:{image}, port:{port}")
     # 이건 image도 나온다.
@@ -1929,6 +1938,14 @@ def promptSet(env, name):
         path="~/.bashrc",
         marker="# {mark} PS1",
         block=f'PS1="{name} $PS1"',
+    )
+
+
+def promptSetHostname(env):
+    env.configBlock(
+        path="~/.bashrc",
+        marker="# {mark} PS1",
+        block=f'PS1="$hostname $PS1"',
     )
 
 
@@ -2111,12 +2128,15 @@ def mysqlUserDel(env, id, host):
     env.run('''sudo mysql -e "DROP USER '%s'@'%s';"''' % (id, host))
 
 
-def mysqlUserGen(env, id, pw, host, priv, unixSocket=False):
+def mysqlUserGen(env, id, pw, host, priv, unixSocket=False, regen=False):
     """
     priv: "*.*:ALL,GRANT", "*.*:RELOAD,PROCESS,LOCK TABLES,REPLICATION CLIENT"
     앞에께 ON 대상, 뒤에껀 권한인데 - ALL PRIVILEGES를 주면 전체 권한이 된다
 
     """
+    if regen:
+        mysqlUserDel(env, id, host)
+
     # pw = str2arg(pw).replace(';', '\\;').replace('`', '``').replace("'", "\\'")
     pw = env.str2arg(pw).replace("'", "''")
     # 이게 좀 웃긴데, mysql 통해서 실행하는거기 때문에 \\는 \\\\로 바꿔야한다.
@@ -2385,27 +2405,38 @@ def installMariaDb(env, dataDir="/var/lib/mysql", port=3306, repo=None):
     # env.run("sudo apt install --no-install-recommends -y libmysqlclient-dev python3-pip")
     # env.run("pip3 install mysqlclient")
     env.run("sudo mkdir -p -m 755 /run/mysqld && sudo chown mysql: /run/mysqld")
+    cfgPp = "/etc/mysql/mariadb.conf.d/50-server.cnf"
     env.configLine(
-        "/etc/mysql/mariadb.conf.d/50-server.cnf",
+        cfgPp,
         regexp="^datadir\s*=\s*",
         line=f"datadir={dataDir}",
         appendAfterRe=r"^\[mysqld\]$",
-        sudo=True,
     )
     env.configLine(
-        "/etc/mysql/mariadb.conf.d/50-server.cnf",
+        cfgPp,
         regexp="^port\s*=\s*[0-9]",
         line=f"port={port}",
         appendAfterRe=r"^\[mysqld\]$",
-        sudo=True,
     )
     env.configLine(
-        "/etc/mysql/mariadb.conf.d/50-server.cnf",
+        cfgPp,
         regexp="^bind-address\s*=",
         line="#bind-address =",
         ignore=True,
-        sudo=True,
     )
+    env.configLine(
+        cfgPp,
+        regexp="^#?log_bin\s*=",
+        line="log_bin=binlog",
+        ignore=True,
+    )
+    env.configLine(
+        cfgPp,
+        regexp="^#?log_slave_updates\s*=",
+        line="log_slave_updates=1",
+        ignore=True,
+    )
+
     # env.run("[ ! -d {0}/mysql ] && sudo mysql_install_db --ldata='{0}'".format(dataDir))
     # 이제 initMariaDb를 따로 호출해야한다
     # if not env.runSafe(f"test -d {dataDir}/mysql"):
@@ -2414,12 +2445,13 @@ def installMariaDb(env, dataDir="/var/lib/mysql", port=3306, repo=None):
     # dk.uploadFileTo("./files/mariadb.conf", "/tmp/efile")
     # dk.run("sudo mv /tmp/efile/mariadb.conf /etc/supervisor/conf.d/")
     # /usr/bin/mysql_secure_installation'
-    env.run(
-        "sudo killall mysqld_safe; sleep 3"
-    )  # it runs when apt install. baseimage에서는 실행이 안된다
+    # env.run("sudo killall mysqld_safe; sleep 3")
+
+    env.runSafe("sudo killall mysqld_safe")
+    # it runs when apt install. baseimage에서는 실행이 안된다
 
 
-def mariadbInit(env, binlog, galera, galeraIps, galeraSstPw):
+def mariadbInit(env, galera, galeraIps, galeraSstPw):
     """
     ips: 192.168.1.100,192.168.1.101
     binlog: true, false
@@ -2447,13 +2479,13 @@ wsrep_provider_options="pc.ignore_sb=TRUE"
 innodb_flush_log_at_trx_commit=0
 """
 
-    if binlog:
-        ss += """
-log_bin=binlog
-#max_binlog_size=100M
-expire_logs_days=7
-log_slave_updates=1
-"""
+    #     if binlog:
+    #         ss += """
+    # log_bin=binlog
+    # #max_binlog_size=100M
+    # expire_logs_days=7
+    # log_slave_updates=1
+    # """
 
     # /usr/lib/libgalera_smm.so
     # https://jsonobject.tistory.com/510
@@ -3618,7 +3650,7 @@ def installTransmission(env, port, userName, pw, downDir, incompleteDir, watchDi
     if incompleteDir == "":
         raise Exception("transmission - specify incompletedir")
 
-    if env.runSafe("command -v transmission-cli1"):
+    if env.runSafe("command -v transmission-cli"):
         return
 
     env.run("sudo apt install -y transmission-daemon")
