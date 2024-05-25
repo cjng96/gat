@@ -331,7 +331,7 @@ async def doLs(isJson=False):
         out = {}
     else:
         out = []
-        out.append(["NAME", "image", "uptime", "%CPU", "RSS", "↺", "TIME", "CMD"])
+        out.append(["NAME", "IMAGE", "UPTIME", "%CPU", "RSS", "↺", "TIME", "CMD"])
 
     for node in cons:
         con, upcnt, app = node
@@ -389,12 +389,13 @@ ELAPSED     PID %CPU    VSZ   RSS %MEM     TIME    PPID CMD
 
 
 # arr = ["0-f", "1--json"]
+# opts = argParse(); opts.get("-f", False)
 def argParse(argv, cmdList):
     opts = {}
     # '1--json' -> '--json'
     cmds = list(map(lambda x: x[1:], cmdList))
     for i in range(len(argv) - 1, 0, -1):
-        print("i", i, len(argv), type(cmds))
+        # print("i", i, len(argv), type(cmds))
         arg = argv[i]
         try:
             idx = cmds.index(arg)
@@ -438,20 +439,25 @@ def test_argParse():
 # test_argParse()
 
 
-def ctrRemove(ctr):
+def ctrRemove(ctr, force=False):
     if ctrCmd == "docker":
         run(f"docker rm -f {ctr}")
         return
+
+    if force:
+        ss = input(f"Do you want to remove the data folder[~/ctrs/{ctr}]? (y/N): ")
+        if ss.lower() != "y":
+            return
 
     runSafe(f"systemctl --user disable --now {ctr}.service")
     runSafe(f"rm ~/.config/systemd/user/{ctr}.service")
     runSafe(f"podman rm -if {ctr}")
 
-    argv = sys.argv
-    opts = argParse(argv, ["0-f"])
-    forceFlag = opts.get("-f", False)
+    # argv = sys.argv
+    # opts = argParse(argv, ["0-f"])
+    # forceFlag = opts.get("-f", False)
 
-    if forceFlag:
+    if force:
         print(f"force remove the container directory[~/ctrs/{ctr}].")
         run(f"podman unshare rm -rf ~/ctrs/{ctr}")
     else:
@@ -477,18 +483,15 @@ async def main():
         pass
     elif scriptName == "sa":
         cmd = "ls"
-    elif scriptName in ["pp", "dp"]:
-        cmd = ctrCmd
-        cmd += """ ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}({{.RunningFor}})\t{{.ID}} {{.Networks}}' -a "$@" """
-        run(cmd)
-        return
     elif scriptName in ["pr", "dr"]:
-        ctr = sys.argv[1]
-        if ctr == "":
+        argv = sys.argv
+        opts = argParse(argv, ["0-f"])
+        if len(argv) < 2:
             print(f"Please {scriptName} CONTAINER_NAME")
             sys.exit(1)
 
-        ctrRemove(sys.argv[1])
+        ctr = argv[1]
+        ctrRemove(ctr, opts.get("-f", False))
         return
     elif scriptName in ["pe", "de"]:
         ss = genArgsStr(sys.argv[1:])
@@ -501,15 +504,23 @@ async def main():
         # podman logs --tail 3000 "$@"
         run(f"{ctrCmd} logs --tail 3000 {ss}")
         return
+    # elif scriptName in ["pp", "dp"]:
+    #     cmd = ctrCmd
+    #     cmd += """ ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}({{.RunningFor}})\t{{.ID}} {{.Networks}}' -a "$@" """
+    #     run(cmd)
+    #     return
     elif scriptName in ["pp", "dp"]:
         # https://www.jorgeanaya.dev/en/bin/docker-ps-prettify/
         # 위에꺼 이름이 길거나 하면 잘 안된다. 보기 안좋다
         # docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Networks}}\t{{.Ports}}' "$@" | less -N -S
         # docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}({{.RunningFor}})\t{{.ID}} {{.Networks}}' -a "$@" """,
         ss = genArgsStr(sys.argv[1:])
-        run(
-            f"{ctrCmd} ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}({{.RunningFor}})\t{{.ID}} {{.Networks}}' -a {ss}"
+        cmd = ctrCmd
+        cmd += (
+            " ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}({{.RunningFor}})\t{{.ID}} {{.Networks}}\t{{.Ports}}' -a %s"
+            % ss
         )
+        run(cmd)
         return
     elif scriptName in ["pi", "di"]:
         run(f"{ctrCmd} images")
