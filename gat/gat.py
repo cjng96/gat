@@ -362,20 +362,26 @@ class Conn:
             raise Exception("This connection is not docker connection.")
         return self.dkTunnel
 
-    def dockerConn(self, name, dkId=None):
+    def containerConn(self, name, ctrId=None):
         if self.dkTunnel is not None:
-            # raise Exception("dockerConn can be called only on remote connection.")
-            return self.dkTunnel.dockerConn(name, dkId)
+            # raise Exception("containerConn can be called only on remote connection.")
+            return self.dkTunnel.containerConn(name, ctrId)
 
-        dk = Conn(self.server, self.config, self, name, dkId)
+        dk = Conn(self.server, self.config, self, name, ctrId)
         return dk
 
-    def otherDockerConn(self, name, dkId=None):
+    def dockerConn(self, name, dkId=None):
+        return self.containerConn(name, dkId)
+
+    def otherContainerConn(self, name, ctrId=None):
         # if self.dkTunnel is None:
         #     raise Exception("otherDockerConn can be called on docker connection only.")
 
-        # return self.dkTunnel.dockerConn(name, dkId)
-        return self.dockerConn(name, dkId)
+        # return self.dkTunnel.containerConn(name, dkId)
+        return self.containerConn(name, ctrId)
+
+    def otherDockerConn(self, name, dkId=None):
+        return self.otherContainerConn(name, dkId)
 
     def remoteConn(self, host, port, id, pw=None, dkName=None, dkId=None, keyFile=None):
         """
@@ -395,7 +401,7 @@ class Conn:
         # dk.initSsh(host, port, id, keyFile=keyFile)
 
         if dkName is not None:
-            dk = dk.dockerConn(dkName, dkId)
+            dk = dk.containerConn(dkName, dkId)
 
         return dk
 
@@ -454,7 +460,7 @@ class Conn:
 
         # remote = Tasks(server)
         # if "dkName" in server.dic:
-        #     remote = remote.dockerConn(server.dkName, dkId=server.get("dkId"))
+        #     remote = remote.containerConn(server.dkName, dkId=server.get("dkId"))
 
         pp = os.path.abspath(os.curdir)
         os.chdir(dir)
@@ -507,7 +513,7 @@ class Conn:
 
         # remote = Tasks(server)
         # if "dkName" in server.dic:
-        #     remote = remote.dockerConn(server.dkName, dkId=server.get("dkId"))
+        #     remote = remote.containerConn(server.dkName, dkId=server.get("dkId"))
 
         pp = os.path.abspath(os.curdir)
         os.chdir(dir)
@@ -740,7 +746,8 @@ class Conn:
             self.run(cmd, printLog=printLog)
             return True
         except subprocess.CalledProcessError as e:
-            print("run: failed %d\n -- %s\n" % (e.returncode, e.output))
+            if printLog:
+                print("run: failed %d\n -- %s\n" % (e.returncode, e.output))
             return False
 
     def downloadFile(self, src, dest):
@@ -1270,7 +1277,7 @@ class Main:
 
         env = Conn(server, config)
         if "dkName" in server.dic:
-            env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
+            env = env.containerConn(server.dkName, dkId=server.get("dkId"))
 
         # print(env.config)
 
@@ -1433,7 +1440,7 @@ class Main:
 
         env = Conn(server, config)
         if "dkName" in server.dic:
-            env = env.dockerConn(server.dkName, dkId=server.get("dkId"))
+            env = env.containerConn(server.dkName, dkId=server.get("dkId"))
 
         self.buildTask(mygat)
 
