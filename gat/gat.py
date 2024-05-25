@@ -1277,7 +1277,7 @@ class Main:
 
         env = Conn(server, config)
         if "dkName" in server.dic:
-            env = env.containerConn(server.dkName, dkId=server.get("dkId"))
+            env = env.containerConn(server.dkName, ctrId=server.get("dkId"))
 
         # print(env.config)
 
@@ -1440,7 +1440,7 @@ class Main:
 
         env = Conn(server, config)
         if "dkName" in server.dic:
-            env = env.containerConn(server.dkName, dkId=server.get("dkId"))
+            env = env.containerConn(server.dkName, ctrId=server.get("dkId"))
 
         self.buildTask(mygat)
 

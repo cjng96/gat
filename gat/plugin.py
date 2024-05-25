@@ -1417,10 +1417,11 @@ def containerUpdateImage(
             checkParentRev()
             return False
 
+    opt = ''
     if env.config.podman:
-        env.run(f"{prog} rm -if {newName}-con")
-    else:
-        env.run(f"{prog} rm -f {newName}-con")
+        opt = 'i'
+
+    env.run(f"{prog} rm -{opt}f {newName}-con")
 
     # Dockerfile에 직접 명시해도 되지만, 편의를 위해서 다시 이미지를 만든다
     extra = ""
