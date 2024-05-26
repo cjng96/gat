@@ -391,12 +391,15 @@ server {{
 }}
 """
 
+    resolver = nginxResolver(env)
+
     env.makeFile(
         f"""\
 server {{
 	listen			{listen};
 	server_name		{domain};
 	root			/data/{name};
+    {resolver}
 
     {extra1}
 
@@ -477,6 +480,10 @@ server {{
         )
 
 
+def getCtrCmd(env):
+    return "podman" if env.config.podman else "docker"
+
+
 def containerNextcloudFpm(
     env,
     dataPath,
@@ -489,12 +496,16 @@ def containerNextcloudFpm(
     dbName="next",
     publishPort=0,
     restart="unless-stopped",
-    imgTag="fpm",
+    # imgTag="fpm",
     net=None,
 ):
     """
-    sudo docker exec -ti --user www-data next /var/www/html/occ files:scan --all
-    sudo docker exec -ti --user www-data next /var/www/html/occ files:cleanup
+    /var/www/html/occ
+    podman exec -it --user www-data next occ files:scan --all
+    podman exec -it --user www-data next occ files:cleanup
+
+    podman exec --user www-data next php occ -vvv upgrade
+    podman exec --user www-data next php occ -vvv maintenance:mode --off
 
     파일 락 걸린거 찾기 - 락 안풀리면 위에 scan --all하라네
     SELECT FROM_UNIXTIME( oc_file_locks.ttl, '%Y-%m-%d %h' ) AS DATE, oc_file_locks.lock, COUNT(*) AS LOCKS FROM oc_file_locks GROUP BY DATE, oc_file_locks.lock ORDER BY LOCKS DESC
@@ -504,7 +515,7 @@ def containerNextcloudFpm(
 
     5분마다 이거 해줘야한다
     https://docs.nextcloud.com/server/23/admin_manual/configuration_server/background_jobs_configuration.html
-    docker exec -u www-data next php -f /var/www/html/cron.php
+    podman exec -u www-data next php -f /var/www/html/cron.php
 
     https://help.nextcloud.com/t/docker-setup-cron/78547/7
     그냥 인스턴스 하나 더 띄우자
@@ -520,7 +531,11 @@ def containerNextcloudFpm(
 
     # bind mount도 안먹힌다
     # env.run(f'sudo mount --bind {srcPath} /data/web/{name}')
-    env.run(f"sudo mkdir -p /data/web/{name}")
+    if env.config.podman:
+        home = env.runOutput("echo ~").strip()
+        env.run(f"sudo mkdir -p {home}/ctrs/web/{name}")
+    else:
+        env.run(f"sudo mkdir -p /data/web/{name}")
 
     # 어차피 web통해서 접근해서 이거 필요없는거 같은데..
     publishPortCmd = "" if publishPort == 0 else f"-p {publishPort}:9000"
@@ -535,9 +550,21 @@ def containerNextcloudFpm(
   -e OVERWRITECLIURL={overwriteProt}://{overwriteDomain} \
   """
 
+    img = "docker.io/library/nextcloud:28.0.5-fpm"
+    if not env.config.podman:
+        img = "nextcloud:fpm"
+
+    netOpt = ""
+    if net is not None:
+        netOpt = f"--network {net} "
+
+    html = f"{home}/ctrs/web/{name}"
+    if not env.config.podman:
+        html = f"/data/web/{name}"
+
     env.run(
         f"""\
-sudo {ctrCmd} run -d --name {name} \
+{ctrCmd} run -d --name {name} \
   --restart {restart} \
   {publishPortCmd} \
   -e MYSQL_DATABASE={dbName} \
@@ -545,32 +572,30 @@ sudo {ctrCmd} run -d --name {name} \
   -e MYSQL_USER={dbId} \
   -e MYSQL_PASSWORD={dbPw} \
   {overwrite} \
-  -v /data/web/{name}:/var/www/html \
+  {netOpt} \
+  -v {html}:/var/www/html \
   -v {dataPath}:/var/www/html/data \
-  nextcloud:{imgTag}
+  {img}
 """
     )
 
-    if net is not None:
-        env.run(f"{ctrCmd} network connect {net} {name}")
-
-    env.runSafe(f"sudo {ctrCmd} rm -f {name}Cron")
+    # env.runSafe(f"sudo {ctrCmd} rm -f {name}Cron")
+    systemdRemove(env, f"{name}Cron")
     env.run(
         f"""\
-sudo {ctrCmd} run -d --name {name}Cron \
+{ctrCmd} run -d --name {name}Cron \
   --restart {restart} \
   --entrypoint /cron.sh \
   -e MYSQL_DATABASE={dbName} \
   -e MYSQL_HOST={dbHost} \
   -e MYSQL_USER={dbId} \
   -e MYSQL_PASSWORD={dbPw} \
+  {netOpt} \
   -v /data/web/{name}:/var/www/html \
   -v {dataPath}:/var/www/html/data \
-  nextcloud:{imgTag}
+  {img}
 """
     )
-    if net is not None:
-        env.run(f"{ctrCmd} network connect {net} {name}Cron")
 
     if env.config.podman:
         systemdInstall(env, name)
@@ -1417,9 +1442,9 @@ def containerUpdateImage(
             checkParentRev()
             return False
 
-    opt = ''
+    opt = ""
     if env.config.podman:
-        opt = 'i'
+        opt = "i"
 
     env.run(f"{prog} rm -{opt}f {newName}-con")
 
@@ -1758,10 +1783,6 @@ def containerRunCmd(
 
     if net is not None:
         # host, bridge(default)
-        # 첫 시작시에 net이 없다는 오류가 뜸 -> sudo docker network create net -> 나중에 손 봐야함
-        # print(f"=================== net : {net} ==============================")
-        # env.run(f"sudo docker network create net")
-        # print(f"=================== ret : {ret} ==============================")
         cmd += f"--network {net} "
 
     if port is not None:
@@ -1783,13 +1804,16 @@ def containerRunCmd(
         if env.config.podman:
             # home = env.runOutput("echo ~%s" % account).strip()
             userHome = env.runOutput(f"mkdir -p ~/ctrs/{name} && echo ~").strip()
-            pp = f"{userHome}/ctrs"
-            cmd += f"-v {pp}/{name}:/data -v {pp}/{name}:/work "
+            ctrs = f"{userHome}/ctrs"
+            cmd += f"-v {ctrs}/{name}:/data "
+
+            # /work는 현재 app.st, upcnt, sql backup만 사용 - 다 data로 옮겨도 문제없다. - 나중에 없애자
+            workPath = f"{userHome}/work/{name}"
+            env.run(f"mkdir -p {workPath}")
+            cmd += f"-v {workPath}:/work "
         else:
-            cmd += (
-                # "-v /data/common:/common "	일단은 common도 없애자 - eweb설정등은 god레벨에서 직접 올리자
-                f"-v /data/{name}:/data -v /work/{name}:/work "
-            )
+            # "-v /data/common:/common "	일단은 common도 없애자 - eweb설정등은 god레벨에서 직접 올리자
+            cmd += f"-v /data/{name}:/data -v /work/{name}:/work "
 
     if awsLogsGroup is not None:
         awsLogsRegion = awsLogsRegion or "us-west-1"
@@ -2509,11 +2533,13 @@ def upcntRunStr():
 
 def baseimgInitScript(env):
     env.makeFile(
-        content="#!/bin/bash\necho -1 > /work/upcnt",
+        content="#!/bin/bash\ntest -e /work/upcnt || echo -1 > /work/upcnt",
         path="/etc/my_init.d/01_upcnt-init",
     )
     env.makeFile(
         content="#!/bin/bash\n! test -d /data/init.d || run-parts /data/init.d",
+        # 아래껄로 안된다
+        # content="#!/bin/bash\ntest -d /data/init.d && run-parts /data/init.d",
         path="/etc/my_init.d/02_data-init",
     )
 
@@ -2876,6 +2902,11 @@ if __name__ == "__main__":
 def dockerForceNetwork(env, name):
     env.run(f"docker network inspect {name} || docker network create {name}")
     # -f {{.Name}}
+
+
+def containerForceNetwork(env, name):
+    ctrCmd = "podman" if env.config.podman else "docker"
+    env.run(f"{ctrCmd} network inspect {name} || {ctrCmd} network create {name}")
 
 
 def getArch(env):
@@ -3403,6 +3434,16 @@ server {{
         env.run("sudo nginx -s reload")
 
 
+def nginxResolver(env):
+    gwIp = env.runOutput("ip route | grep default | awk '{print $3}'").strip()
+    if env.config.podman:
+        resolver = f"resolver {gwIp} valid=30s ipv6=off;"
+    else:
+        resolver = "resolver 127.0.0.11 valid=30s ipv6=off;"
+
+    return resolver
+
+
 # 단순 proxy로 쓰려면 privateApi, root없이 쓰자. publicApi는 '/'
 # proxyUrl: http://192.168.1.105
 def setupWebApp(
@@ -3438,6 +3479,7 @@ def setupWebApp(
     if privateFilter is not None:
         env.makeFile(privateFilter, privPath, sudo=True, mode=664)
 
+    resolver = nginxResolver(env)
     extra = (
         ""
         if buffering
@@ -3453,7 +3495,6 @@ proxy_max_temp_file_size 0;
 
     proxyContent = f"""
     set $upstream {proxyUrl};
-    resolver 127.0.0.11 ipv6=off;
     proxy_pass $upstream;
     proxy_buffering off;
     proxy_redirect off;
@@ -3516,7 +3557,8 @@ server {{
   #access_log /var/log/nginx/{name}.access.log;
   error_log /var/log/nginx/{name}.error.log;
   client_max_body_size {maxBodySize};
-  resolver 127.0.0.11 valid=30s;
+  # resolver 127.0.0.11 valid=30s;
+  {resolver}
 
   location {publicApi} {{
     try_files $uri $uri @proxy;
