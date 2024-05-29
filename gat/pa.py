@@ -390,7 +390,7 @@ ELAPSED     PID %CPU    VSZ   RSS %MEM     TIME    PPID CMD
 
 # arr = ["0-f", "1--json"]
 # opts = argParse(); opts.get("-f", False)
-def argParse(argv, cmdList):
+def argParse1(argv, cmdList):
     opts = {}
     # '1--json' -> '--json'
     cmds = list(map(lambda x: x[1:], cmdList))
@@ -414,10 +414,10 @@ def argParse(argv, cmdList):
     return opts
 
 
-def test_argParse():
+def test_argParse1():
     arr = ["0-f", "1--json"]
     argv = ["a", "--json", "h"]
-    opts = argParse(argv, arr)
+    opts = argParse1(argv, arr)
     print(opts)
     assert opts["--json"] == "h"
     assert argv == ["a"]
@@ -425,18 +425,181 @@ def test_argParse():
     arr = ["0-f", "1--json"]
     argv = ["a", "--json2", "h"]
     try:
-        opts = argParse(argv, arr)
+        opts = argParse1(argv, arr)
     except Exception as e:
         print("pass")
 
     arr = ["0-f", "1--json"]
     argv = ["a", "-f", "h"]
-    opts = argParse(argv, arr)
+    opts = argParse1(argv, arr)
     assert opts["-f"] == True
     assert argv == ["a", "h"]
 
 
-# test_argParse()
+def argParse(argv, params):
+    opts = {}
+
+    fields = []
+    for field in dir(params):
+        t = type(getattr(params, field))
+        if t is not str and t is not tuple:
+            continue
+        if field == "__module__":
+            continue
+        fields.append(field)
+
+    def _findItemName(ss):
+        for name in fields:
+            val = getattr(params, name)
+            t = type(val)
+            if t is str and val == ss:
+                return name
+            elif t is tuple:
+                for v in val:
+                    if v == ss:
+                        return name
+
+        return None
+
+    def _getArgCnt(name):
+        param = getattr(params, name)
+        t = type(param)
+        if t is str:
+            return 0
+        elif t is tuple:
+            for v in param:
+                if type(v) is int:
+                    return v
+
+    def _allowMultple(name):
+        param = getattr(params, name)
+        if type(param) is tuple:
+            for v in param:
+                if type(v) is bool:
+                    return v
+        return False
+
+    vals = {}
+    for i in range(len(argv) - 1, 0, -1):
+        arg = argv[i]
+
+        # --json=haha 와 같은 형식도 지원하자
+        signPt = arg.find("=")
+        if arg.startswith("-") and signPt > 0:
+            arg = arg[:signPt]
+
+        name = _findItemName(arg)
+        if name is None:
+            if arg.startswith("-"):
+                raise Exception(f"unknown arg[{arg}]")
+            continue
+
+        cnt = _getArgCnt(name)
+        if cnt > 1:
+            raise Exception(f"invalid extra argument count[{cnt}]")
+
+        if signPt >= 0:
+            if cnt == 0:
+                raise Exception(f"argument[{name}] does not support extra parameter")
+            elif cnt == 1:
+                v = argv[i][signPt + 1 :]
+        else:
+            if cnt == 0:
+                v = True
+            elif cnt == 1:
+                v = argv[i + 1]
+                del argv[i + 1]
+
+        if name not in vals:
+            vals[name] = []
+
+        if len(vals[name]) > 0:
+            if not _allowMultple(name):
+                raise Exception(f"not allowed multiple argument[{name}]")
+
+        vals[name].append(v)
+        del argv[i]
+
+    for name, v in vals.items():
+        if _allowMultple(name):
+            v.reverse()
+            setattr(params, name, v)
+        else:
+            setattr(params, name, v[0])
+
+    for name in fields:
+        if name not in vals:
+            setattr(params, name, None)
+
+    return opts
+
+
+def test_argParse():
+    class arg1:
+        a = "--a"
+        json = "--json", "-j", 1
+        fn = "--fn", 1, True
+
+    # 인자 없는 --a와 인자 있는 --j 그리고 없는건 None으로
+    a = arg1()
+    argv = ["py", "--a", "haha", "-j", "h"]
+    argParse(argv, a)
+    assert a.a == True
+    assert a.json == "h"
+    assert a.fn == None
+    assert len(argv) == 2
+    assert argv[1] == "haha"
+
+    # --fn은 여러개 지원 함
+    a = arg1()
+    argv = ["py", "--fn", "fn1", "--fn", "fn2", "file"]
+    argParse(argv, a)
+    assert len(a.fn) == 2  # 여러개짜리는 배열로 온다
+    assert a.fn[0] == "fn1"
+    assert a.fn[1] == "fn2"
+
+    # --fn은 여러개 지원 함 - 1개만 명시한 경우
+    a = arg1()
+    argv = ["py", "--fn", "fn1", "file"]
+    argParse(argv, a)
+    assert len(a.fn) == 1  # 여러개짜리는 배열로 온다
+    assert a.fn[0] == "fn1"
+
+    # -j는 여러개 명시할수 없다
+    a = arg1()
+    argv = ["py", "-j", "fn1", "-j", "fn2", "file"]
+    try:
+        argParse(argv, a)
+    except Exception as e:
+        pass
+
+    # -j=test 형식도 지원하자
+    a = arg1()
+    argv = ["py", "-j=test", "file"]
+    argParse(argv, a)
+    assert a.json == "test"
+    assert len(argv) == 2
+    assert argv[1] == "file"
+
+    # -j=처럼 빈 경우
+    a = arg1()
+    argv = ["py", "-j=", "file"]
+    argParse(argv, a)
+    assert a.json == ""
+    assert len(argv) == 2
+    assert argv[1] == "file"
+
+    # -j=test haha 형식 지원하자
+    # --a="hahah hh" 처럼 써도 --a=hahah hh로 들어온다
+    a = arg1()
+    argv = ["py", "-j=test haha", "file"]
+    argParse(argv, a)
+    assert a.json == "test haha"
+    assert len(argv) == 2
+    assert argv[1] == "file"
+
+
+test_argParse()
 
 
 def ctrRemove(ctr, force=False):
