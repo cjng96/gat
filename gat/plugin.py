@@ -1742,7 +1742,9 @@ def systemdInstall(env, ctrName):
 
 def systemdRemove(env, ctrName, force=False):
     pp = "~/.config/systemd/user"
+    #env.runSafe(f"systemctl --user disable --now {ctrName}.socket")
     env.runSafe(f"systemctl --user disable --now {ctrName}.service")
+    # env.runSafe(f"rm -f {pp}/{ctrName}.socket")
     env.runSafe(f"rm -f {pp}/{ctrName}.service")
     env.runSafe(f"podman rm -f {ctrName}")
     if force:
