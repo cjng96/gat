@@ -107,6 +107,9 @@ class CoSsh:
         if hasattr(self, "ssh"):
             self.ssh.close()
 
+    def log(self, lv, msg):
+        print("%d) %s" % (lv, msg))
+
     def _run(self, cmd, doOutput, arg, log=False):
         s = time.time()
         chan = self.ssh.get_transport().open_session()
@@ -216,7 +219,7 @@ class CoSsh:
             try:
                 self.sftp.stat(pp)
             except:
-                print("sftp: making dir ->", pp)
+                self.log(1, f"sftp: making dir -> {pp}")
                 self.sftp.mkdir(pp)
 
     def uploadFileTo(self, srcPath, destFolder):
@@ -226,21 +229,20 @@ class CoSsh:
 
     def downloadFile(self, srcPath, destPath):
         destPath = os.path.expanduser(destPath)
-
-        print("sftp: download file %s -> %s" % (srcPath, destPath))
+        self.log(1, f"sftp: download file {srcPath} -> {destPath}")
         self.sftp.get(srcPath, destPath)
 
     # sftp 상에 파일을 업로드한다.
     # src_path에 dest_path로 업로드한다. 두개 모두 file full path여야 한다.
     def uploadFile(self, srcPath, destPath):
-        print("sftp: upload file %s -> %s" % (srcPath, destPath))
+        self.log(1, f"sftp: upload file {srcPath} -> {destPath}")
         srcPath = os.path.expanduser(srcPath)
 
         if not os.path.isfile(srcPath):
             raise Exception("uploadFile: there is no file[%s]" % srcPath)
 
         if self.uploadFilterFunc(srcPath):
-            print(" ** exclude file - %s" % srcPath)
+            self.log(1, f" ** exclude file - {srcPath}")
             return
 
         if destPath.startswith("~/"):
@@ -257,12 +259,12 @@ class CoSsh:
 
     # srcPath, destPath둘다 full path여야한다.
     def uploadFolder(self, srcPath, destPath):
-        print("sftp: upload folder %s -> %s" % (srcPath, destPath))
+        self.log(1, f"sftp: upload folder {srcPath} -> {destPath}")
         if not os.path.isdir(srcPath):
-            raise Exception("uploadFolder: there is no folder[%s]" % srcPath)
+            raise Exception(f"uploadFolder: there is no folder[{srcPath}]")
 
         if self.uploadFilterFunc(srcPath):
-            print(" ** exclude folder - %s" % srcPath)
+            self.log(1, f" ** exclude folder - {srcPath}")
             return
 
         self.mkdirs(destPath, True)
