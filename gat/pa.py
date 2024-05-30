@@ -436,6 +436,20 @@ def test_argParse1():
     assert argv == ["a", "h"]
 
 
+"""
+params: paramater class
+  name = attrs
+
+attrs: [string | int | bool...]
+  string: argument name(required)
+  int: extra parameter count(default 0)
+  bool: allow multiple argument(default False), default extra parameter count is 1 if true
+
+missed zero extra argument is False
+missed other extra argument is None
+"""
+
+
 def argParse(argv, params):
     opts = {}
 
@@ -470,6 +484,8 @@ def argParse(argv, params):
             for v in param:
                 if type(v) is int:
                     return v
+                if v == True:
+                    return 1
 
     def _allowMultple(name):
         param = getattr(params, name)
@@ -529,31 +545,49 @@ def argParse(argv, params):
 
     for name in fields:
         if name not in vals:
-            setattr(params, name, None)
+            # 0개 짜리는 False로 설정
+            cnt = _getArgCnt(name)
+            if cnt == 0:
+                v = False
+            else:
+                v = None
+
+            setattr(params, name, v)
 
     return opts
 
 
 def test_argParse():
+    func = argParse
+
     class arg1:
         a = "--a"
         json = "--json", "-j", 1
-        fn = "--fn", 1, True
+        fn = "--fn", True
 
     # 인자 없는 --a와 인자 있는 --j 그리고 없는건 None으로
     a = arg1()
     argv = ["py", "--a", "haha", "-j", "h"]
-    argParse(argv, a)
+    func(argv, a)
     assert a.a == True
     assert a.json == "h"
     assert a.fn == None
     assert len(argv) == 2
     assert argv[1] == "haha"
 
+    # 인자 없는 --a는 false, 인자 있는건 None
+    a = arg1()
+    argv = ["py", "haha"]
+    func(argv, a)
+    assert a.a == False
+    assert a.json == None
+    assert len(argv) == 2
+    assert argv[1] == "haha"
+
     # --fn은 여러개 지원 함
     a = arg1()
     argv = ["py", "--fn", "fn1", "--fn", "fn2", "file"]
-    argParse(argv, a)
+    func(argv, a)
     assert len(a.fn) == 2  # 여러개짜리는 배열로 온다
     assert a.fn[0] == "fn1"
     assert a.fn[1] == "fn2"
@@ -561,7 +595,7 @@ def test_argParse():
     # --fn은 여러개 지원 함 - 1개만 명시한 경우
     a = arg1()
     argv = ["py", "--fn", "fn1", "file"]
-    argParse(argv, a)
+    func(argv, a)
     assert len(a.fn) == 1  # 여러개짜리는 배열로 온다
     assert a.fn[0] == "fn1"
 
@@ -569,14 +603,14 @@ def test_argParse():
     a = arg1()
     argv = ["py", "-j", "fn1", "-j", "fn2", "file"]
     try:
-        argParse(argv, a)
+        func(argv, a)
     except Exception as e:
         pass
 
     # -j=test 형식도 지원하자
     a = arg1()
     argv = ["py", "-j=test", "file"]
-    argParse(argv, a)
+    func(argv, a)
     assert a.json == "test"
     assert len(argv) == 2
     assert argv[1] == "file"
@@ -584,7 +618,7 @@ def test_argParse():
     # -j=처럼 빈 경우
     a = arg1()
     argv = ["py", "-j=", "file"]
-    argParse(argv, a)
+    func(argv, a)
     assert a.json == ""
     assert len(argv) == 2
     assert argv[1] == "file"
@@ -593,13 +627,14 @@ def test_argParse():
     # --a="hahah hh" 처럼 써도 --a=hahah hh로 들어온다
     a = arg1()
     argv = ["py", "-j=test haha", "file"]
-    argParse(argv, a)
+    func(argv, a)
     assert a.json == "test haha"
     assert len(argv) == 2
     assert argv[1] == "file"
 
 
-test_argParse()
+if __name__ == "__main__":
+    test_argParse()
 
 
 def ctrRemove(ctr, force=False):
@@ -648,13 +683,18 @@ async def main():
         cmd = "ls"
     elif scriptName in ["pr", "dr"]:
         argv = sys.argv
-        opts = argParse(argv, ["0-f"])
+
+        class args:
+            f = "-f"
+
+        opts = args()
+        argParse(argv, opts)
         if len(argv) < 2:
             print(f"Please {scriptName} CONTAINER_NAME")
             sys.exit(1)
 
         ctr = argv[1]
-        ctrRemove(ctr, opts.get("-f", False))
+        ctrRemove(ctr, opts.f != None)
         return
     elif scriptName in ["pe", "de"]:
         ss = genArgsStr(sys.argv[1:])
