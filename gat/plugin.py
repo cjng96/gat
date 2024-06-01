@@ -496,7 +496,6 @@ def containerNextcloudFpm(
     dbName="next",
     publishPort=0,
     restart="unless-stopped",
-    # imgTag="fpm",
     net=None,
 ):
     """
@@ -527,8 +526,6 @@ def containerNextcloudFpm(
         # TODO: next가 만들다 실패했을도 있으니 더 검사해야 한다
         return
 
-    ctrCmd = "podman" if env.config.podman else "docker"
-
     # bind mount도 안먹힌다
     # env.run(f'sudo mount --bind {srcPath} /data/web/{name}')
     if env.config.podman:
@@ -537,9 +534,10 @@ def containerNextcloudFpm(
     else:
         env.run(f"sudo mkdir -p /data/web/{name}")
 
+    ctrCmd = "podman" if env.config.podman else "docker"
+
     # 어차피 web통해서 접근해서 이거 필요없는거 같은데..
     publishPortCmd = "" if publishPort == 0 else f"-p {publishPort}:9000"
-    # publishPortCmd = ""
 
     # web쪽에 /data/next로 별도로 마운팅하지 않으려면 web쪽꺼를 가져다 쓸수밖에 없다
     overwrite = ""
@@ -576,10 +574,45 @@ def containerNextcloudFpm(
   -v {html}:/var/www/html \
   -v {dataPath}:/var/www/html/data \
   {img}
-"""
+""",
+        skip=True,
     )
 
-    # env.runSafe(f"sudo {ctrCmd} rm -f {name}Cron")
+    ports = []
+    if publishPort != 0:
+        ports = [f"{publishPort}:9000"]
+
+    volumes = [
+        f"{html}:/var/www/html",
+        f"{dataPath}:/var/www/html/data",
+    ]
+
+    envs = {
+        "MYSQL_DATABASE": dbName,
+        "MYSQL_HOST": dbHost,
+        "MYSQL_USER": dbId,
+        "MYSQL_PASSWORD": dbPw,
+    }
+    if overwriteDomain is not None:
+        envs = {
+            "OVERWRITEPROTOCOL": overwriteProt,
+            "OVERWRITEHOST": overwriteDomain,
+            "OVERWRITECLIURL": f"{overwriteProt}://{overwriteDomain}",
+        }
+
+    quadletUserGen(
+        env,
+        name,
+        img,
+        ports=ports,
+        mountBase=False,
+        net=net,
+        hostname=name,
+        envs=envs,
+        volumes=volumes,
+        runAsCmd=True,
+    )
+
     systemdRemove(env, f"{name}Cron")
     env.run(
         f"""\
@@ -594,12 +627,28 @@ def containerNextcloudFpm(
   -v /data/web/{name}:/var/www/html \
   -v {dataPath}:/var/www/html/data \
   {img}
-"""
+""",
+        skip=True,
+    )
+    quadletUserGen(
+        env,
+        f"{name}Cron",
+        img,
+        # ports,
+        entrypoint="/cron.sh",
+        mountBase=False,
+        net=net,
+        # hostname=name,
+        envs=envs,
+        volumes=volumes,
+        runAsCmd=True,
     )
 
-    if env.config.podman:
-        systemdInstall(env, name)
-        systemdInstall(env, f"{name}Cron")
+    # if env.config.podman:
+    #     systemdInstall(env, name)
+    #     systemdInstall(env, f"{name}Cron")
+
+    return
 
 
 dockerNextcloudFpm = containerNextcloudFpm
@@ -1741,12 +1790,18 @@ def systemdInstall(env, ctrName):
 
 
 def systemdRemove(env, ctrName, force=False):
+    pp = "~/.config/containers/systemd/"
+    env.runSafe(f"systemctl stop {ctrName}")
+    env.runSafe(f"rm -f {pp}/{ctrName}.containers")
+
     pp = "~/.config/systemd/user"
     # env.runSafe(f"systemctl --user disable --now {ctrName}.socket")
     env.runSafe(f"systemctl --user disable --now {ctrName}.service")
     # env.runSafe(f"rm -f {pp}/{ctrName}.socket")
     env.runSafe(f"rm -f {pp}/{ctrName}.service")
+
     env.runSafe(f"podman rm -f {ctrName}")
+
     if force:
         env.run(f"podman unshare rm -rf {pp}")
 
@@ -1755,16 +1810,18 @@ def quadletUserGen(
     env,
     name,
     image,
-    port,
+    ports=None,
     run=True,
     mountBase=True,
     net=None,
     hostname=None,
+    entrypoint=None,
     envs={},
     volumes=[],
     awsLogsGroup=None,
     awsLogsStream=None,
     awsLogsRegion=None,
+    runAsCmd=False,  # true면 podman run으로 실행한다
 ):
     """
     net='pasta,-T,5001,-T,3306'
@@ -1773,6 +1830,23 @@ def quadletUserGen(
     envs: {'dbDataDir': '/data/db'...}
     volumes: ['/data/db:/var/lib/mysql'...]
     """
+
+    if runAsCmd:
+        containerRunCmd(
+            name,
+            image,
+            env=env,  # always run
+            port=ports,
+            entrypoint=entrypoint,
+            mountBase=mountBase,
+            net=net,  # no use extra
+            envs=envs,
+            volumes=volumes,
+            awsLogsGroup=awsLogsGroup,
+            awsLogsStream=awsLogsStream,
+            awsLogsRegion=awsLogsRegion,
+        )
+        return
 
     ss = ""
     ss += f"[Unit]\n"
@@ -1798,18 +1872,22 @@ def quadletUserGen(
     ss += f"ContainerName={name}\n"
     ss += f"Exec=\n"
     ss += f"HostName={hostname or name}\n"
+
+    if entrypoint is not None:
+        ss += f"Entrypoint={entrypoint}\n"
+
     if net is not None:
         ss += f"Network={net}\n"
 
-    if port is not None:
-        t = type(port)
+    if ports is not None:
+        t = type(ports)
         if t is int or t is str:
-            ss += f"PublishPort={port}\n"
+            ss += f"PublishPort={ports}\n"
         elif t is list:
-            for p in port:
+            for p in ports:
                 ss += f"PublishPort={p}\n"
         else:
-            raise Exception(f"invalid port - {port}")
+            raise Exception(f"invalid port - {ports}")
 
     if mountBase:
         userHome = env.runOutput(f"mkdir -p ~/ctrs/{name} && echo ~").strip()
@@ -1839,14 +1917,14 @@ def quadletUserGen(
 
     # ss += f"Timezone=local"
 
-    # 혹시 기존 정의가 있으면 제거
-    pp = f"~/.config/systemd/user/{name}.service"
-    if env.runSafe(f"test -f {pp}"):
-        # env.run(f"systemctl --user disable --now {name}.service")
-        env.run(f"systemctl --user stop {name}.service")
-        env.run(f"rm -f {pp}")
-
     if run:
+        # 혹시 기존 정의가 있으면 제거
+        pp = f"~/.config/systemd/user/{name}.service"
+        if env.runSafe(f"test -f {pp}"):
+            # env.run(f"systemctl --user disable --now {name}.service")
+            env.run(f"systemctl --user stop {name}.service")
+            env.run(f"rm -f {pp}")
+
         if containerExists(env, name):
             env.run(f"podman start {name}")
             dk = env.containerConn(name)
@@ -1862,20 +1940,25 @@ def quadletUserGen(
         ss,
         path=f"~/.config/containers/systemd/{name}.container",
     )
+    # test
+    # /usr/libexec/podman/quadlet -dryrun --user
 
     if run:
         env.run(f"systemctl --user daemon-reload")
-        env.run(f"systemctl --user start {name}.service")
+        env.run(f"systemctl --user restart {name}.service")
         # env.run(f"systemctl --user enable --now {name}")
 
 
 def containerRunCmd(
     name,
     image,
+    env=None,  # execute cmd if env is specified
     port=None,
     mountBase=True,
     net=None,
-    env=None,  # execute cmd if env is specified
+    envs={},
+    volumes=[],
+    entrypoint=None,
     extra="",
     useHost=True,  # podman always uses host
     hostname=None,
@@ -1904,6 +1987,9 @@ def containerRunCmd(
     if net is not None:
         # host, bridge(default)
         cmd += f"--network {net} "
+
+    if entrypoint is not None:
+        cmd += f"--entrypoint {entrypoint} "
 
     if port is not None:
         portCmd = ""
@@ -1934,6 +2020,12 @@ def containerRunCmd(
         else:
             # "-v /data/common:/common "	일단은 common도 없애자 - eweb설정등은 god레벨에서 직접 올리자
             cmd += f"-v /data/{name}:/data -v /work/{name}:/work "
+
+    for v in volumes:
+        cmd += f"-v {v} "
+
+    for k, v in envs.items():
+        cmd += f"-e {k}={v} "
 
     if awsLogsGroup is not None:
         awsLogsRegion = awsLogsRegion or "us-west-1"
