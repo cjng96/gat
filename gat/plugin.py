@@ -1742,13 +1742,131 @@ def systemdInstall(env, ctrName):
 
 def systemdRemove(env, ctrName, force=False):
     pp = "~/.config/systemd/user"
-    #env.runSafe(f"systemctl --user disable --now {ctrName}.socket")
+    # env.runSafe(f"systemctl --user disable --now {ctrName}.socket")
     env.runSafe(f"systemctl --user disable --now {ctrName}.service")
     # env.runSafe(f"rm -f {pp}/{ctrName}.socket")
     env.runSafe(f"rm -f {pp}/{ctrName}.service")
     env.runSafe(f"podman rm -f {ctrName}")
     if force:
         env.run(f"podman unshare rm -rf {pp}")
+
+
+def quadletUserGen(
+    env,
+    name,
+    image,
+    port,
+    run=True,
+    mountBase=True,
+    net=None,
+    hostname=None,
+    envs={},
+    volumes=[],
+    awsLogsGroup=None,
+    awsLogsStream=None,
+    awsLogsRegion=None,
+):
+    """
+    net='pasta,-T,5001,-T,3306'
+      22.04에서는 net
+    port: "3306:3306", "9018-9019:9018-9019", ["9018-9019:9018-9019"]
+    envs: {'dbDataDir': '/data/db'...}
+    volumes: ['/data/db:/var/lib/mysql'...]
+    """
+
+    ss = ""
+    ss += f"[Unit]\n"
+    # ss += f'Description=The sleep container'
+    ss += f"After=local-fs.target\n"
+    ss += f"\n"
+    ss += f"[Install]\n"
+    ss += f"# Start by default on boot\n"
+    ss += f"WantedBy=multi-user.target default.target\n"
+    ss += f"\n"
+
+    ss += f"[Service]\n"
+    ss += f"Restart=always\n"
+    # Extend Timeout to allow time to pull the image
+    ss += f"TimeoutStartSec=900\n"
+    # ExecStartPre flag and other systemd commands can go here, see systemd.unit(5) man page.
+    # ss += f"ExecStartPre=/usr/share/mincontainer/setup.sh\n"
+    ss += f"\n"
+
+    # https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html
+    ss += f"[Container]\n"
+    ss += f"Image={image}\n"
+    ss += f"ContainerName={name}\n"
+    ss += f"Exec=\n"
+    ss += f"HostName={hostname or name}\n"
+    if net is not None:
+        ss += f"Network={net}\n"
+
+    if port is not None:
+        t = type(port)
+        if t is int or t is str:
+            ss += f"PublishPort={port}\n"
+        elif t is list:
+            for p in port:
+                ss += f"PublishPort={p}\n"
+        else:
+            raise Exception(f"invalid port - {port}")
+
+    if mountBase:
+        userHome = env.runOutput(f"mkdir -p ~/ctrs/{name} && echo ~").strip()
+        ss += f"Volume={userHome}/ctrs/{name}:/data\n"
+
+        # 나중에 없앨꺼다
+        workPath = f"{userHome}/work/{name}"
+        env.run(f"mkdir -p {workPath}")
+        ss += f"Volume={workPath}:/work\n"
+
+    for v in volumes:
+        ss += f"Volume={v}\n"
+
+    if awsLogsGroup is not None:
+        # 잘 동작하지 않는다
+        ss += f"LogDriver=awslogs"
+        ss += f"LogOpts=awslogs-region={awsLogsRegion or 'us-west-1'}"
+        ss += f"LogOpts=awslogs-group={awsLogsGroup}"
+        ss += f"LogOpts=awslogs-stream={awsLogsStream or name}"
+    else:
+        ss += f"LogDriver=journald\n"
+        # ss += f"LogOpts=max-size=30m"
+        # ss += f"LogOpts=max-file=3"
+
+    for k, v in envs.items():
+        ss += f"Environment={k}={v}\n"
+
+    # ss += f"Timezone=local"
+
+    # 혹시 기존 정의가 있으면 제거
+    pp = f"~/.config/systemd/user/{name}.service"
+    if env.runSafe(f"test -f {pp}"):
+        # env.run(f"systemctl --user disable --now {name}.service")
+        env.run(f"systemctl --user stop {name}.service")
+        env.run(f"rm -f {pp}")
+
+    if run:
+        if containerExists(env, name):
+            env.run(f"podman start {name}")
+            dk = env.containerConn(name)
+            # 이 부분에서도 에러 발생
+            dk.run("! test -f /update || /update")
+
+            # env.run(f"sudo docker rm -f {env.vars.dkName}")
+            # env.run(f"{prog} rm -f {name}")
+            # systemdRemove(env, name)
+
+    env.run("mkdir -p ~/.config/containers/systemd")
+    env.makeFile(
+        ss,
+        path=f"~/.config/containers/systemd/{name}.container",
+    )
+
+    if run:
+        env.run(f"systemctl --user daemon-reload")
+        env.run(f"systemctl --user start {name}.service")
+        # env.run(f"systemctl --user enable --now {name}")
 
 
 def containerRunCmd(
@@ -1835,7 +1953,6 @@ def containerRunCmd(
     cmd += f" {image}"
 
     if env is not None:
-        # if dockerContainerExists(env, env.vars.dkName):
         if containerExists(env, name):
             env.run(f"{prog} start {name}")
             dk = env.containerConn(name)
