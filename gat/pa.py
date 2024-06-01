@@ -647,8 +647,12 @@ def ctrRemove(ctr, force=False):
         if ss.lower() != "y":
             return
 
+    runSafe(f"systemctl --user stop {ctr}")
+    runSafe(f"rm ~/.config/containers/systemd/{ctr}.container")
+
     runSafe(f"systemctl --user disable --now {ctr}.service")
     runSafe(f"rm ~/.config/systemd/user/{ctr}.service")
+
     runSafe(f"podman rm -if {ctr}")
 
     # argv = sys.argv
@@ -694,7 +698,7 @@ async def main():
             sys.exit(1)
 
         ctr = argv[1]
-        ctrRemove(ctr, opts.f != None)
+        ctrRemove(ctr, opts.f)
         return
     elif scriptName in ["pe", "de"]:
         ss = genArgsStr(sys.argv[1:])
