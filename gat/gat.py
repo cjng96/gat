@@ -53,8 +53,11 @@ from .myutil import (
     ObjectEncoder,
     pathRemove,
     pathIsChild,
+    ct,
+    cprt,
 )  # NonBlockingStreamReader,
 from .coCollection import dictMerge, Dict2, dict2Merge
+
 
 g_cwd = ""
 g_scriptPath = ""
@@ -672,7 +675,10 @@ class Conn:
     #     else:
     #         return f"{self.dkName}[{self.server.host}:{self.server.port}]"
 
-    def run(self, cmd, expandVars=True, printLog=True):
+    def run(self, cmd, expandVars=True, printLog=True, skip=False):
+        if skip:
+            return
+
         if printLog:
             ss = cmd[:100] + "..." if g_logLv == 0 and len(cmd) > 100 else cmd
             self.log(f"run [{ss}]")
