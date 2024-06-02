@@ -263,10 +263,13 @@ class MyUtil:
 
 
 class Conn:
-    def __init__(self, server, config, dkTunnel=None, dkName=None, dkId=None):
+    def __init__(
+        self, server, config, ctrTunnel=None, ctrName=None, ctrId=None, ctrType=None
+    ):
         """
         server: can be none
-        config = {name, host, port, id, pw}
+        config: {name, host, port, id, pw}
+        ctrType: None, "docker", "podman"
         """
         self.proc = None
         self._uploadHelper = False
@@ -274,6 +277,7 @@ class Conn:
         self.server = server
         self.ssh = None
         self.config = config
+        self.ctrType = ctrType
 
         # accessbility
         self.data = g_data
@@ -285,13 +289,13 @@ class Conn:
         if server is None:
             self.logName = "local"
         else:
-            if dkTunnel is None:
+            if ctrTunnel is None:
                 self.logName = f"{server.host}:{server.port}"
             else:
-                self.logName = f"{dkTunnel.logName}/{dkName}"
+                self.logName = f"{ctrTunnel.logName}/{ctrName}"
 
         if server is not None:
-            if dkTunnel is None:
+            if ctrTunnel is None:
                 port = server.get("port", 22)
                 # port 0 is local conn
                 if port != 0:
@@ -305,12 +309,12 @@ class Conn:
             self.vars = server.vars
 
         # docker일 경우 dkTunnel, dkName가 필수며, 부모의 server도 있어야 함
-        self.dkTunnel = dkTunnel
-        self.dkName = dkName
+        self.ctrTunnel = ctrTunnel
+        self.ctrName = ctrName
 
-        if dkId is not None:
-            dkId = strExpand(dkId, g_dic)
-        self.dkId = dkId
+        if ctrId is not None:
+            ctrId = strExpand(ctrId, g_dic)
+        self.ctrId = ctrId
 
         self.tempPath = None
 
@@ -350,8 +354,8 @@ class Conn:
                     # ignore it
                     return
 
-        if self.dkTunnel is not None:
-            self.dkTunnel.tempPathClear()
+        if self.ctrTunnel is not None:
+            self.ctrTunnel.tempPathClear()
 
     def log(self, msg):
         print(f"[{self.logName}]: {msg}")
@@ -375,20 +379,23 @@ class Conn:
         return str2arg(ss)
 
     def parentConn(self):
-        if self.dkTunnel is None:
+        if self.ctrTunnel is None:
             raise Exception("This connection is not docker connection.")
-        return self.dkTunnel
+        return self.ctrTunnel
 
-    def containerConn(self, name, ctrId=None):
-        if self.dkTunnel is not None:
+    def containerConn(self, name, ctrId=None, ctrType=None):
+        """
+        ctrType: None, "docker", "podman"
+        """
+        if self.ctrTunnel is not None:
             # raise Exception("containerConn can be called only on remote connection.")
-            return self.dkTunnel.containerConn(name, ctrId)
+            return self.ctrTunnel.containerConn(name, ctrId, ctrType=ctrType)
 
-        dk = Conn(self.server, self.config, self, name, ctrId)
+        dk = Conn(self.server, self.config, self, name, ctrId, ctrType)
         return dk
 
     def dockerConn(self, name, dkId=None):
-        return self.containerConn(name, dkId)
+        return self.containerConn(name, ctrId=dkId, ctrType="docker")
 
     def otherContainerConn(self, name, ctrId=None):
         # if self.dkTunnel is None:
@@ -427,7 +434,7 @@ class Conn:
             raise Exception("this method only can be used in local service.")
 
     def onlyRemote(self):
-        if self.dkTunnel is None and self.ssh is None:
+        if self.ctrTunnel is None and self.ssh is None:
             raise Exception("this method only can be used in remote service.")
 
     def setupApp(self, path, profile, serverOvr=None, varsOvr=None, subCmd=""):
@@ -593,14 +600,17 @@ class Conn:
         log = g_logLv > 0 and printLog
 
         out = ""
-        if self.dkTunnel is not None:
-            dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
+        if self.ctrTunnel is not None:
+            dkRunUser = "-u %s" % self.ctrId if self.ctrId is not None else ""
             cmd = str2arg(cmd)
-            prog = "podman" if g_config.podman else "sudo docker"
+            if self.ctrType == None:
+                prog = "podman" if g_config.podman else "sudo docker"
+            else:
+                prog = "podman" if self.ctrType == "podman" else "sudo docker"
 
-            cmd = f'{prog} exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
+            cmd = f'{prog} exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
             # alias defined in .bashrc is working but -l should be used for something in /etc/profile.d and .profile
-            out = self.dkTunnel.ssh.runOutput(cmd, log=log)
+            out = self.ctrTunnel.ssh.runOutput(cmd, log=log)
         elif self.ssh is not None:
             out = self.ssh.runOutput(cmd, log=log)
         else:
@@ -667,13 +677,13 @@ class Conn:
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
 
-        if self.dkTunnel is not None:
-            dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
+        if self.ctrTunnel is not None:
+            dkRunUser = "-u %s" % self.ctrId if self.ctrId is not None else ""
             cmd = str2arg(cmd)
-            cmd = f'podman exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
+            cmd = f'podman exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
             if g_config.get("podman") != True:
-                cmd = f'docker exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
-            return self.dkTunnel.ssh.runOutputAll(cmd)
+                cmd = f'docker exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
+            return self.ctrTunnel.ssh.runOutputAll(cmd)
         elif self.ssh is not None:
             return self.ssh.runOutputAll(cmd)
         else:
@@ -700,15 +710,19 @@ class Conn:
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
 
-        if self.dkTunnel is not None:
+        if self.ctrTunnel is not None:
             # it하면 오류 난다
-            dkRunUser = "-u %s" % self.dkId if self.dkId is not None else ""
+            dkRunUser = "-u %s" % self.ctrId if self.ctrId is not None else ""
             cmd = str2arg(cmd)
             # sudo docker로 하면 cmd에 '가 있으면 centos에서 실행이 안된다
-            prog = "podman" if g_config.podman else "sudo docker"
-            cmd = f'{prog} exec -i {dkRunUser} {self.dkName} bash -c "{cmd}"'
+            if self.ctrType == None:
+                prog = "podman" if g_config.podman else "sudo docker"
+            else:
+                prog = "podman" if self.ctrType == "podman" else "sudo docker"
+
+            cmd = f'{prog} exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
             # print("run cmd(dk) - %s" % cmd)
-            return self.dkTunnel.ssh.run(cmd)
+            return self.ctrTunnel.ssh.run(cmd)
         elif self.ssh is not None:
             # print('run cmd(ssh) - %s' % cmd)
             return self.ssh.run(cmd)
@@ -773,7 +787,7 @@ class Conn:
     def downloadFile(self, src, dest):
         src = os.path.expanduser(src)
         dest = os.path.expanduser(dest)
-        if self.dkTunnel is not None:
+        if self.ctrTunnel is not None:
             raise Exception("not supported")
         elif self.ssh is None:
             self.run(f"cp {src} {dest}")
@@ -795,14 +809,14 @@ class Conn:
         # self.onlyRemote()
         src = os.path.expanduser(src)
         dest = os.path.expanduser(dest)
-        if self.dkTunnel is not None:
+        if self.ctrTunnel is not None:
             # pp = f'/tmp/upload-{g_main.uid}.tmp'
             pp = f"{self.tempPathGet()}/upload.tmp"
-            self.dkTunnel.ssh.uploadFile(src, pp)
+            self.ctrTunnel.ssh.uploadFile(src, pp)
             prog = "podman" if g_config.podman else "sudo docker"
-            cmd = f"{prog} cp {pp} {self.dkName}:{dest} && rm -f {pp}"
+            cmd = f"{prog} cp {pp} {self.ctrName}:{dest} && rm -f {pp}"
 
-            self.dkTunnel.ssh.run(cmd)
+            self.ctrTunnel.ssh.run(cmd)
         elif self.ssh is None:
             self.run(f"cp {src} {dest}")
         else:
@@ -823,26 +837,26 @@ class Conn:
 
     def uploadFolder(self, src, dest):
         self.onlyRemote()
-        if self.dkTunnel is not None:
-            self.dkTunnel.ssh.run("rm -rf /tmp/gat_upload && mkdir /tmp/gat_upload")
+        if self.ctrTunnel is not None:
+            self.ctrTunnel.ssh.run("rm -rf /tmp/gat_upload && mkdir /tmp/gat_upload")
             # allDir = []
             # allFile = []
             src = src.rstrip("/") + "/"
             for pp, dirs, files in os.walk(src):
                 for dir in dirs:
-                    self.dkTunnel.ssh.run(
+                    self.ctrTunnel.ssh.run(
                         "mkdir " + os.path.join("/tmp/gat_upload", pp, dir)
                     )
                 for file in files:
-                    self.dkTunnel.ssh.uploadFile(
+                    self.ctrTunnel.ssh.uploadFile(
                         os.path.join(src, pp, file),
                         os.path.join("/tmp/gat_upload", pp[len(src) :], file),
                     )
 
             self.run(f"rm -rf {dest}")
             prog = "podman" if g_config.podman else "sudo docker"
-            cmd = f"{prog} cp /tmp/gat_upload {self.dkName}:{dest} && rm -rf /tmp/gat_upload"
-            self.dkTunnel.ssh.run(cmd)
+            cmd = f"{prog} cp /tmp/gat_upload {self.ctrName}:{dest} && rm -rf /tmp/gat_upload"
+            self.ctrTunnel.ssh.run(cmd)
         else:
             self.ssh.uploadFolder(src, dest)
 
@@ -855,17 +869,17 @@ class Conn:
         pp2 = f"/tmp/gatHelper.py"
         src = os.path.join(g_scriptPath, "gatHelper.py")
 
-        if self.dkTunnel is None and self.ssh is None:
+        if self.ctrTunnel is None and self.ssh is None:
             shutil.copyfile(src, pp2)
         else:
             if not self._uploadHelper:
-                if self.dkTunnel is not None:
+                if self.ctrTunnel is not None:
                     pp3 = f"/tmp/gatHelperDk.py"
-                    self.dkTunnel.uploadFile(src, pp3)
+                    self.ctrTunnel.uploadFile(src, pp3)
 
                     prog = "podman" if g_config.podman else "sudo docker"
-                    cmd = f"{prog} cp {pp3} {self.dkName}:{pp2} && rm -f {pp3}"
-                    self.dkTunnel.ssh.run(cmd)
+                    cmd = f"{prog} cp {pp3} {self.ctrName}:{pp2} && rm -f {pp3}"
+                    self.ctrTunnel.ssh.run(cmd)
                 else:
                     self.uploadFile(src, pp2)
 
