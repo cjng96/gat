@@ -407,7 +407,9 @@ class Conn:
     def otherDockerConn(self, name, dkId=None):
         return self.otherContainerConn(name, dkId)
 
-    def remoteConn(self, host, port, id, pw=None, dkName=None, dkId=None, keyFile=None):
+    def remoteConn(
+        self, host, port, id, pw=None, ctrName=None, ctrId=None, keyFile=None
+    ):
         """
         지정해서 커넥션을 만들어낸다.
         docker지정까지 가능하다. 이거 설정을 컨피그로 할수 있게 하자
@@ -424,8 +426,8 @@ class Conn:
         # Tasks 생성자에서 접속하는듯...
         # dk.initSsh(host, port, id, keyFile=keyFile)
 
-        if dkName is not None:
-            dk = dk.containerConn(dkName, dkId)
+        if ctrName is not None:
+            dk = dk.containerConn(ctrName, ctrId)
 
         return dk
 
@@ -483,8 +485,8 @@ class Conn:
             server.vars.fill(varsOvr)
 
         # remote = Tasks(server)
-        # if "dkName" in server.dic:
-        #     remote = remote.containerConn(server.dkName, dkId=server.get("dkId"))
+        # if "ctrName" in server.dic:
+        #     remote = remote.containerConn(server.ctrName, dkId=server.get("dkId"))
 
         pp = os.path.abspath(os.curdir)
         os.chdir(dir)
@@ -536,8 +538,8 @@ class Conn:
             server.vars.fill(varsOvr)
 
         # remote = Tasks(server)
-        # if "dkName" in server.dic:
-        #     remote = remote.containerConn(server.dkName, dkId=server.get("dkId"))
+        # if "ctrName" in server.dic:
+        #     remote = remote.containerConn(server.ctrName, dkId=server.get("dkId"))
 
         pp = os.path.abspath(os.curdir)
         os.chdir(dir)
@@ -603,12 +605,8 @@ class Conn:
         if self.ctrTunnel is not None:
             dkRunUser = "-u %s" % self.ctrId if self.ctrId is not None else ""
             cmd = str2arg(cmd)
-            if self.ctrType == None:
-                prog = "podman" if g_config.podman else "sudo docker"
-            else:
-                prog = "podman" if self.ctrType == "podman" else "sudo docker"
-
-            cmd = f'{prog} exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
+            ctrCmd = self.ctrCmdGet()
+            cmd = f'{ctrCmd} exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
             # alias defined in .bashrc is working but -l should be used for something in /etc/profile.d and .profile
             out = self.ctrTunnel.ssh.runOutput(cmd, log=log)
         elif self.ssh is not None:
@@ -697,7 +695,7 @@ class Conn:
     #     elif self.dkTunnel is None:
     #         return f"{self.server.host}:{self.server.port}"
     #     else:
-    #         return f"{self.dkName}[{self.server.host}:{self.server.port}]"
+    #         return f"{self.ctrName}[{self.server.host}:{self.server.port}]"
 
     def run(self, cmd, expandVars=True, printLog=True, skip=False):
         if skip:
@@ -715,12 +713,14 @@ class Conn:
             dkRunUser = "-u %s" % self.ctrId if self.ctrId is not None else ""
             cmd = str2arg(cmd)
             # sudo docker로 하면 cmd에 '가 있으면 centos에서 실행이 안된다
-            if self.ctrType == None:
-                prog = "podman" if g_config.podman else "sudo docker"
-            else:
-                prog = "podman" if self.ctrType == "podman" else "sudo docker"
 
-            cmd = f'{prog} exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
+            # if self.ctrType == None:
+            #     prog = "podman" if g_config.podman else "sudo docker"
+            # else:
+            #     prog = "podman" if self.ctrType == "podman" else "sudo docker"
+            ctrCmd = self.ctrCmdGet()
+
+            cmd = f'{ctrCmd} exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
             # print("run cmd(dk) - %s" % cmd)
             return self.ctrTunnel.ssh.run(cmd)
         elif self.ssh is not None:
@@ -813,8 +813,9 @@ class Conn:
             # pp = f'/tmp/upload-{g_main.uid}.tmp'
             pp = f"{self.tempPathGet()}/upload.tmp"
             self.ctrTunnel.ssh.uploadFile(src, pp)
-            prog = "podman" if g_config.podman else "sudo docker"
-            cmd = f"{prog} cp {pp} {self.ctrName}:{dest} && rm -f {pp}"
+            # prog = "podman" if g_config.podman else "sudo docker"
+            ctrCmd = self.ctrCmdGet()
+            cmd = f"{ctrCmd} cp {pp} {self.ctrName}:{dest} && rm -f {pp}"
 
             self.ctrTunnel.ssh.run(cmd)
         elif self.ssh is None:
@@ -854,8 +855,9 @@ class Conn:
                     )
 
             self.run(f"rm -rf {dest}")
-            prog = "podman" if g_config.podman else "sudo docker"
-            cmd = f"{prog} cp /tmp/gat_upload {self.ctrName}:{dest} && rm -rf /tmp/gat_upload"
+            # prog = "podman" if g_config.podman else "sudo docker"
+            ctrCmd = self.ctrCmdGet()
+            cmd = f"{ctrCmd} cp /tmp/gat_upload {self.ctrName}:{dest} && rm -rf /tmp/gat_upload"
             self.ctrTunnel.ssh.run(cmd)
         else:
             self.ssh.uploadFolder(src, dest)
@@ -863,6 +865,15 @@ class Conn:
     def uploadFolderTo(self, src, dest):
         self.onlyRemote()
         self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
+
+    def ctrCmdGet(self):
+        # print("ctrCmdGet - self.ctrType: %s - %s" % (self.ctrType, g_config.podman))
+        if self.ctrType != None:
+            prog = "podman" if self.ctrType == "podman" else "sudo docker"
+        else:
+            prog = "podman" if g_config.podman else "sudo docker"
+        # print('  -> prog: "%s"' % prog)
+        return prog
 
     def _helperRun(self, args, sudo=False):
         # pp2 = f"{self.tempPathGet()}/gatHelper.py"
@@ -877,8 +888,9 @@ class Conn:
                     pp3 = f"/tmp/gatHelperDk.py"
                     self.ctrTunnel.uploadFile(src, pp3)
 
-                    prog = "podman" if g_config.podman else "sudo docker"
-                    cmd = f"{prog} cp {pp3} {self.ctrName}:{pp2} && rm -f {pp3}"
+                    ctrCmd = self.ctrCmdGet()
+
+                    cmd = f"{ctrCmd} cp {pp3} {self.ctrName}:{pp2} && rm -f {pp3}"
                     self.ctrTunnel.ssh.run(cmd)
                 else:
                     self.uploadFile(src, pp2)
@@ -1310,7 +1322,9 @@ class Main:
             raise Exception(f"Invalid sub command[{subCmd}] for setup task")
 
         env = Conn(server, config)
-        if "dkName" in server.dic:
+        if "ctrName" in server.dic:
+            env = env.containerConn(server.ctrName, ctrId=server.get("ctrId"))
+        elif "dkName" in server.dic:
             env = env.containerConn(server.dkName, ctrId=server.get("dkId"))
 
         # print(env.config)
@@ -1473,7 +1487,9 @@ class Main:
         llw("taskDeploy: deploy the app...")
 
         env = Conn(server, config)
-        if "dkName" in server.dic:
+        if "ctrName" in server.dic:
+            env = env.containerConn(server.ctrName, ctrId=server.get("ctrId"))
+        elif "dkName" in server.dic:
             env = env.containerConn(server.dkName, ctrId=server.get("dkId"))
 
         self.buildTask(mygat)

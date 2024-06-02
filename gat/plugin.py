@@ -3714,6 +3714,7 @@ def setupWebApp(
     allow 45.77.21.99; # tk1
     allow 115.178.67.152; # rt
     """
+    # print("setup - %s ------------------------------------", env.ctrType)
 
     privPath = f"/data/nginx/{name}.priv"
     if privateFilter is not None:
