@@ -134,6 +134,9 @@ class Dict2:
     def __contains__(self, key):
         return key in self.dic
 
+    def items(self):
+        return self.dic.items()
+
     # merge all attributes but array is replaced
     def fill(self, dic):
         if isinstance(dic, Dict2):
