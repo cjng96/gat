@@ -1841,6 +1841,10 @@ def containerUserRun(
     volumes: ['/data/db:/var/lib/mysql'...]
     """
 
+    if not env.config.podman:
+        # podman이 아니면 언제나 runCmd로 실행
+        runAsCmd = True
+
     if runAsCmd:
         containerRunCmd(
             name,
