@@ -594,11 +594,9 @@ def containerNextcloudFpm(
         "MYSQL_PASSWORD": dbPw,
     }
     if overwriteDomain is not None:
-        envs = {
-            "OVERWRITEPROTOCOL": overwriteProt,
-            "OVERWRITEHOST": overwriteDomain,
-            "OVERWRITECLIURL": f"{overwriteProt}://{overwriteDomain}",
-        }
+        envs["OVERWRITEPROTOCOL"] = overwriteProt
+        envs["OVERWRITEHOST"] = overwriteDomain
+        envs["OVERWRITECLIURL"] = f"{overwriteProt}://{overwriteDomain}"
 
     quadletUserGen(
         env,
@@ -610,7 +608,7 @@ def containerNextcloudFpm(
         hostname=name,
         envs=envs,
         volumes=volumes,
-        runAsCmd=True,
+        # runAsCmd=True,
     )
 
     systemdRemove(env, f"{name}Cron")
@@ -635,13 +633,14 @@ def containerNextcloudFpm(
         f"{name}Cron",
         img,
         # ports,
-        entrypoint="/cron.sh",
+        # entrypoint="/cron.sh",
+        exec="/cron.sh",
         mountBase=False,
         net=net,
         # hostname=name,
         envs=envs,
         volumes=volumes,
-        runAsCmd=True,
+        # runAsCmd=True,
     )
 
     # if env.config.podman:
@@ -1816,6 +1815,7 @@ def quadletUserGen(
     net=None,
     hostname=None,
     entrypoint=None,
+    exec=None,
     envs={},
     volumes=[],
     awsLogsGroup=None,
@@ -1846,6 +1846,7 @@ def quadletUserGen(
             awsLogsStream=awsLogsStream,
             awsLogsRegion=awsLogsRegion,
         )
+        systemdInstall(env, name)
         return
 
     ss = ""
@@ -1870,11 +1871,14 @@ def quadletUserGen(
     ss += f"[Container]\n"
     ss += f"Image={image}\n"
     ss += f"ContainerName={name}\n"
-    ss += f"Exec=\n"
     ss += f"HostName={hostname or name}\n"
 
+    # ss += f"Exec=\n"
+    # quadlet이 Entrypoint지원 안하는듯. 그냥 exec써도 된다
     if entrypoint is not None:
         ss += f"Entrypoint={entrypoint}\n"
+    if exec is not None:
+        ss += f"Exec={exec}\n"
 
     if net is not None:
         ss += f"Network={net}\n"
@@ -1980,16 +1984,16 @@ def containerRunCmd(
     # 	portCmd = '-p {0}:{0}'.format(port)
     hostname = hostname or name
 
-    cmd = f"{prog} run -itd  --name {name} --hostname {hostname} "
+    cmd = f"{prog} run -itd  --name={name} --hostname={hostname} "
     if not env.config.podman:
-        cmd += "--restart unless-stopped "
+        cmd += "--restart=unless-stopped "
 
     if net is not None:
         # host, bridge(default)
-        cmd += f"--network {net} "
+        cmd += f"--net={net} "
 
     if entrypoint is not None:
-        cmd += f"--entrypoint {entrypoint} "
+        cmd += f"--entrypoint={entrypoint} "
 
     if port is not None:
         portCmd = ""
@@ -2011,32 +2015,32 @@ def containerRunCmd(
             # home = env.runOutput("echo ~%s" % account).strip()
             userHome = env.runOutput(f"mkdir -p ~/ctrs/{name} && echo ~").strip()
             ctrs = f"{userHome}/ctrs"
-            cmd += f"-v {ctrs}/{name}:/data "
+            cmd += f"-v={ctrs}/{name}:/data "
 
             # /work는 현재 app.st, upcnt, sql backup만 사용 - 다 data로 옮겨도 문제없다. - 나중에 없애자
             workPath = f"{userHome}/work/{name}"
             env.run(f"mkdir -p {workPath}")
-            cmd += f"-v {workPath}:/work "
+            cmd += f"-v={workPath}:/work "
         else:
             # "-v /data/common:/common "	일단은 common도 없애자 - eweb설정등은 god레벨에서 직접 올리자
-            cmd += f"-v /data/{name}:/data -v /work/{name}:/work "
+            cmd += f"-v=/data/{name}:/data -v=/work/{name}:/work "
 
     for v in volumes:
-        cmd += f"-v {v} "
+        cmd += f"-v={v} "
 
     for k, v in envs.items():
-        cmd += f"-e {k}={v} "
+        cmd += f"-e={k}={v} "
 
     if awsLogsGroup is not None:
         awsLogsRegion = awsLogsRegion or "us-west-1"
         awsLogsStream = awsLogsStream or name
 
         cmd += f"--log-driver=awslogs "
-        cmd += f"--log-opt awslogs-region={awsLogsRegion} "
-        cmd += f"--log-opt awslogs-group={awsLogsGroup} "
-        cmd += f"--log-opt awslogs-stream={awsLogsStream} "
+        cmd += f"--log-opt=awslogs-region={awsLogsRegion} "
+        cmd += f"--log-opt=awslogs-group={awsLogsGroup} "
+        cmd += f"--log-opt=awslogs-stream={awsLogsStream} "
     else:
-        cmd += "--log-opt max-size=30m --log-opt max-file=3 "
+        cmd += "--log-opt=max-size=30m --log-opt=max-file=3 "
 
     if useHost and not env.config.podman:
         cmd += "--add-host=host.docker.internal:host-gateway "
