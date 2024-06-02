@@ -7,6 +7,8 @@ import hashlib
 import datetime
 import subprocess
 
+from .myutil import ct, cprt
+
 # import gattool.coSsh as coSsh
 # from .coS3 import CoS3
 
@@ -1451,7 +1453,8 @@ def containerUpdateImage(
     """
     return: true(created new one), false(already exists)
     """
-    print(f"containerUpdateImage: {newName}:{newVer} from {baseName}:{baseVer}")
+    name = f"{newName}:{newVer}"
+    print(f"containerUpdateImage: {name} from {baseName}:{baseVer}")
     # baseVer = verStr(baseVer)
     # newVer = verStr(newVer)
 
@@ -1460,7 +1463,7 @@ def containerUpdateImage(
         prog = "sudo docker"
 
     # 해당 버젼이 이미 있으면 생략
-    ret = env.runOutputProf(f"{prog} images -q {newName}:{newVer}").strip()
+    ret = env.runOutputProf(f"{prog} images -q {name}").strip()
     if ret != "":
         # 기존 이미지와 hash label이 동일한지 확인 - 다르면 다시 생성
         def checkParentRev():
@@ -1469,7 +1472,7 @@ def containerUpdateImage(
                 f"{prog} images -q {baseName}:{baseVer}"
             ).strip()
 
-            ret = env.runOutputProf(f"{prog} image history -q {newName}:{newVer}")
+            ret = env.runOutputProf(f"{prog} image history -q {name}")
             lst = ret.split()
             if baseHash not in lst:
                 raise Exception(f"no matched parent[bashHash:{baseHash}]")
@@ -1480,15 +1483,20 @@ def containerUpdateImage(
 
         # we should use sudo for docker?
         ret = env.runOutput(
-            f"""{prog} image inspect -f '{{{{index .Config.Labels "hash"}}}}' {newName}:{newVer}"""
+            f"""{prog} image inspect -f '{{{{index .Config.Labels "hash"}}}}' {name}"""
         ).strip()
         # print(f"hash - {hash} {ret}")
         if ret != hash:
-            print(f"Regenerated image[{newName}:{newVer} whose hash is not match.")
-            env.run(f"docker rmi -f {newName}:{newVer}")
+            cprt(
+                ct.red,
+                f"Regenerated image[{name}] whose hash is not match.",
+            )
+            env.run(f"docker rmi -f {name}")
         else:
             checkParentRev()
             return False
+
+    cprt(ct.red, f">> create new image[{name}]...")
 
     opt = ""
     if env.config.podman:
@@ -1512,7 +1520,7 @@ def containerUpdateImage(
     if hash is not None:
         extra = f"""-c 'LABEL hash="{hash}"'"""
 
-    env.run(f"{prog} commit {extra} {newName}-con {newName}:{newVer}")
+    env.run(f"{prog} commit {extra} {newName}-con {name}")
     # env.run(f"sudo docker tag {newName}:{newVer} {newName}:latest")
     env.run(f"{prog} rm -f {newName}-con")
     return True
@@ -2046,6 +2054,7 @@ def containerRunCmd(
 
     if useHost and not env.config.podman:
         cmd += "--add-host=host.docker.internal:host-gateway "
+        cmd += "--add-host=host.containers.internal:host-gateway "
 
     cmd += extra
     cmd += f" {image}"
