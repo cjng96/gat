@@ -600,7 +600,7 @@ def containerNextcloudFpm(
         envs["OVERWRITEHOST"] = overwriteDomain
         envs["OVERWRITECLIURL"] = f"{overwriteProt}://{overwriteDomain}"
 
-    quadletUserGen(
+    containerUserRun(
         env,
         name,
         img,
@@ -630,7 +630,7 @@ def containerNextcloudFpm(
 """,
         skip=True,
     )
-    quadletUserGen(
+    containerUserRun(
         env,
         f"{name}Cron",
         img,
@@ -1814,7 +1814,8 @@ def systemdRemove(env, ctrName, force=False):
 
 
 # runAsCmd쓰면 기존 containerRunCmd를 대체한다.
-def quadletUserGen(
+# old: quadletUserGen
+def containerUserRun(
     env,
     name,
     image,
@@ -1916,7 +1917,7 @@ def quadletUserGen(
         ss += f"Volume={v}\n"
 
     if awsLogsGroup is not None:
-        # 잘 동작하지 않는다
+        # podman은 지원하지 않는다
         ss += f"LogDriver=awslogs"
         ss += f"LogOpts=awslogs-region={awsLogsRegion or 'us-west-1'}"
         ss += f"LogOpts=awslogs-group={awsLogsGroup}"
@@ -1963,6 +1964,7 @@ def quadletUserGen(
         # env.run(f"systemctl --user enable --now {name}")
 
 
+# use containerUserRun instead(with runAsCmd=True for docker)
 def containerRunCmd(
     name,
     image,
@@ -2143,7 +2145,10 @@ CMD ["/start"]
     env.runProf(f"{prog} cp /tmp/dockerCmd {name}:/cmd")
 
 
-def writeRunScript(env, cmd, targetPath="/app/current", appName="app"):
+def writeRunScript(env, cmd, appName="app", targetPath="/app/current"):
+    """
+    targetPath: None - /etc/service/app
+    """
     env.log(f">> writeRunScript: {cmd}")
 
     pp = f"/etc/service/{appName}" if targetPath is None else targetPath
@@ -3660,11 +3665,17 @@ server {{
 
 
 def nginxResolver(env):
-    gwIp = env.runOutput("ip route | grep default | awk '{print $3}'").strip()
-    if env.config.podman:
-        resolver = f"resolver {gwIp} valid=30s ipv6=off;"
-    else:
-        resolver = "resolver 127.0.0.11 valid=30s ipv6=off;"
+    # gwIp = env.runOutput("ip route | grep default | awk '{print $3}'").strip()
+    # if env.config.podman:
+    #     resolver = f"resolver {gwIp} valid=30s ipv6=off;"
+    # else:
+    #     resolver = "resolver 127.0.0.11 valid=30s ipv6=off;"
+
+    # podman이 또 갑자기 127.0.0.11에서만 된다 - 전에는 custom net이고 지금은 empty라?
+    # dnsmsgq실행하고 127.0.0.11로 하니까 되네?
+    resolver = "resolver 127.0.0.11 valid=30s ipv6=off;"
+    # docker bridge는 127.0.0.1로 해야한다
+    resolver = "resolver 127.0.0.1 valid=30s ipv6=off;"
 
     return resolver
 
