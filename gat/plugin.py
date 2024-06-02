@@ -1805,6 +1805,7 @@ def systemdRemove(env, ctrName, force=False):
         env.run(f"podman unshare rm -rf {pp}")
 
 
+# runAsCmd쓰면 기존 containerRunCmd를 대체한다.
 def quadletUserGen(
     env,
     name,
@@ -1821,7 +1822,7 @@ def quadletUserGen(
     awsLogsGroup=None,
     awsLogsStream=None,
     awsLogsRegion=None,
-    runAsCmd=False,  # true면 podman run으로 실행한다
+    runAsCmd=False,  # true면 containerRunCmd로 실행한다
 ):
     """
     net='pasta,-T,5001,-T,3306'
@@ -1846,7 +1847,8 @@ def quadletUserGen(
             awsLogsStream=awsLogsStream,
             awsLogsRegion=awsLogsRegion,
         )
-        systemdInstall(env, name)
+        if env.config.podman:
+            systemdInstall(env, name)
         return
 
     ss = ""
@@ -3349,9 +3351,8 @@ def certbotCopy(pubWeb, web, domain, cfgName):
 
 
 def bupInstall(env, bupPath):
-    env.run(
-        "sudo add-apt-repository -y ppa:ulikoehler/bup && sudo apt update && sudo apt -y install bup git"
-    )
+    # env.run("sudo add-apt-repository -y ppa:ulikoehler/bup")
+    env.run("sudo apt update && sudo apt -y install bup git")
 
     # bup 준비
     # profile에 놓으면 de sql로 들어갔을때 못찾고(bash -l 해야만 함), .bashrc로 하면 sh에서는 못쓴다
@@ -4223,6 +4224,7 @@ alias sz="sudo du -hd1 | sort -h"
     )
 
 
+# use scriptCtr
 def scriptDocker(env, saYml="./resource/sa.yml"):
     env.makeFile(
         path="/usr/local/bin/de", content="""docker exec -it "$@" bash -l """, sudo=True
