@@ -234,8 +234,22 @@ class MyUtil:
     def str2arg(self, ss):
         return str2arg(ss)
 
+    # return: Dict2
     def dictMerge(self, dic1, dic2):
-        return dictMerge(dic1, dic2)
+        return dict2Merge(dic1, dic2)
+
+    # return: Dict2
+    def yamlLoad(self, *yamls):
+        cfg = None
+        for pp in yamls:
+            with open(pp, "r") as fp:
+                cur = Dict2(yaml.safe_load(fp.read()))
+                if cfg is not None:
+                    cfg = dict2Merge(cfg, cur)
+                    continue
+                cfg = cur
+
+        return cfg
 
     def deployFileListProd(self, env, func):
         include = env.config.deploy.include
