@@ -727,7 +727,15 @@ async def main():
             " ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}({{.RunningFor}})\t{{.ID}} {{.Networks}}\t{{.Ports}}' -a %s"
             % ss
         )
-        run(cmd)
+        ss = runOutput(cmd)
+        ss = ss.replace("0.0.0.0:", ":")
+        ss = re.sub(r", :::.+?/(udp|tcp)", ", ", ss)
+        ss = ss.replace(", ,", ",")
+        ss = ss.replace(", \n", "\n")
+        # lst = ss.splitlines()
+        # lst = map(lambda ll: ll if not ll.endswith(",") else ll[:-1], lst)
+        # ss = "\n".join(lst)
+        print(ss)
         return
     elif scriptName in ["pi", "di"]:
         run(f"{ctrCmd} images")
