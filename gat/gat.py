@@ -1686,6 +1686,8 @@ class Main:
 
         # TODO: postTask에서 오류 발생시 다시 돌려놔야
 
+        env.clearConn()
+
 
 def initSamples(type, fn):
     with open(fn, "w") as fp:
