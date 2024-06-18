@@ -84,9 +84,12 @@ class CoSsh:
 
         if not connected:
             try:
-                # self.ssh.load_system_host_keys()
+                self.ssh.load_system_host_keys()
                 self.ssh.connect(
-                    host, port=port, username=id, key_filename=keyFile, allow_agent=True
+                    host,
+                    port=port,
+                    username=id,
+                    key_filename=keyFile,
                 )
                 # , password='lol')
             except paramiko.PasswordRequiredException:
@@ -95,11 +98,11 @@ class CoSsh:
                     host, port=port, username=id, key_filename=keyFile, passphrase=pw
                 )
 
-        transport = self.ssh.get_transport()
-        s = transport.open_session()
-        paramiko.agent.AgentRequestHandler(s)
-
-        self.sftp = paramiko.SFTPClient.from_transport(transport)
+        # transport = self.ssh.get_transport()
+        # s = transport.open_session()
+        # paramiko.agent.AgentRequestHandler(s)
+        # self.sftp = paramiko.SFTPClient.from_transport(transport)
+        self.sftp = self.ssh.open_sftp()
 
         self.uploadFilterFunc = falseFunc
 

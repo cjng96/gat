@@ -1973,7 +1973,7 @@ def containerRunCmd(
     name,
     image,
     env=None,  # execute cmd if env is specified
-    port=None,
+    ports=None,
     mountBase=True,
     net=None,
     envs={},
@@ -2011,18 +2011,18 @@ def containerRunCmd(
     if entrypoint is not None:
         cmd += f"--entrypoint={entrypoint} "
 
-    if port is not None:
+    if ports is not None:
         portCmd = ""
-        if type(port) is str:
-            if port != "":
-                portCmd += f"-p {port} "
-        elif type(port) is int:
-            portCmd += f"-p {port} "
-        elif type(port) is list:
-            for p in port:
+        if type(ports) is str:
+            if ports != "":
+                portCmd += f"-p {ports} "
+        elif type(ports) is int:
+            portCmd += f"-p {ports} "
+        elif type(ports) is list:
+            for p in ports:
                 portCmd += f"-p {p} "
         else:
-            raise Exception(f"******** invalid port type is {type(port)}")
+            raise Exception(f"******** invalid port type is {type(ports)}")
 
         cmd += f"{portCmd} "
 
