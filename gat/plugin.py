@@ -7,7 +7,9 @@ import hashlib
 import datetime
 import subprocess
 
-from .myutil import ct, cprt
+from .coTerm import ct, cprt
+
+# from .myutil import ct, cprt
 
 # import gattool.coSsh as coSsh
 # from .coS3 import CoS3
@@ -1531,11 +1533,11 @@ dockerUpdateImage = containerUpdateImage
 
 # nodeVer는 coimg에 포함된거라 매번 바뀌지 않는다
 # def containerCoImage(env, nodeVer="16.13.1", dartVer="3.2.3"):
-def containerCoImage(env, nodeVer="16.13.1", dartVer="3.4.1"):
+def containerCoImage(env, nodeVer="lts-gallium", dartVer="3.4.1"):
     baseName, baseVer = containerBaseImage(env)
 
     newName = "coimg"
-    newVer = "9"
+    newVer = "a"
     newVer = f"{baseVer}{newVer}"
     # 1~9, a~z, A~Z까지 쓰자
     # 최악으로 coImg와 baseImg버젼이 겹쳐져도 1 11과 11 1처럼 중복되도, 부모가 다르기때문에 오류난다
