@@ -395,7 +395,8 @@ class Conn:
         return dk
 
     def dockerConn(self, name, dkId=None):
-        return self.containerConn(name, ctrId=dkId, ctrType="docker")
+        # return self.containerConn(name, ctrId=dkId, ctrType="docker")
+        return self.containerConn(name, ctrId=dkId)
 
     def otherContainerConn(self, name, ctrId=None):
         # if self.dkTunnel is None:
@@ -408,13 +409,23 @@ class Conn:
         return self.otherContainerConn(name, dkId)
 
     def remoteConn(
-        self, host, port, id, pw=None, ctrName=None, ctrId=None, keyFile=None
+        self,
+        host,
+        port,
+        id,
+        pw=None,
+        ctrName=None,
+        ctrId=None,
+        keyFile=None,
+        dkName=None,
     ):
         """
         지정해서 커넥션을 만들어낸다.
         docker지정까지 가능하다. 이거 설정을 컨피그로 할수 있게 하자
         이건 util로 가는게 나을까
         """
+        if ctrName is None:
+            ctrName = dkName
         # dk = Tasks(Dict2(dict(name="remote", host=host, port=port, id=id)), g_config)  # no have owner
         serverCfg = Dict2(
             dict(name="remote", host=host, port=port, id=id, pw=pw, keyFile=keyFile)
