@@ -1975,6 +1975,7 @@ def containerRunCmd(
     name,
     image,
     env=None,  # execute cmd if env is specified
+    port=None,  # backward compatibility
     ports=None,
     mountBase=True,
     net=None,
@@ -1995,6 +1996,10 @@ def containerRunCmd(
     # print("port", port)
 
     prog = "podman" if env.config.podman else "sudo docker"
+
+    # backward compatibility
+    if ports is None:
+        ports = port
 
     # if portCnt != 1:
     # 	portCmd = '-p {0}-{1}:{0}-{1}'.format(port, port+portCnt-1)
@@ -2376,6 +2381,45 @@ def setupTz(env):
         "sudo ln -fs /usr/share/zoneinfo/Asia/Seoul /etc/localtime && "
         "sudo apt install -y tzdata && "
         "sudo dpkg-reconfigure --frontend noninteractive tzdata"
+    )
+
+
+def pgUserDel(env, id, db):
+    hr = env.runOutput(
+        f"""setuser postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='{id}'";"""
+    )
+    if hr == "":
+        return
+
+    env.run(f'setuser postgres psql -c "DROP USER {id};"')
+
+
+def pgUserGen(env, id, pw, db):
+    exist = env.runOutput(
+        f"""setuser postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='{id}';" """
+    )
+    if exist.strip() == "1":
+        return
+
+    env.run(f"setuser postgres psql -c \"CREATE USER {id} WITH PASSWORD '{pw}';\"")
+    # env.run(f'setuser postgres psql -c "CREATE DATABASE {db} OWNER {id};"')
+
+    # 데이터베이스 연결 권한
+    env.run(f'setuser postgres psql -c "GRANT CONNECT ON DATABASE {db} TO {id};"')
+
+    # 데이터베이스에 대한 모든 권한
+    env.run(
+        f'setuser postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE {db} TO {id};"'
+    )
+
+    # 특정 스키마의 테이블에 대한 권한 부여
+    env.run(
+        f'setuser postgres psql -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {id};"'
+    )
+
+    # env.run(f'setuser postgres psql -c "GRANT USAGE ON SCHEMA public TO {id};"')
+    env.run(
+        f'setuser postgres psql -c "GRANT ALL PRIVILEGES ON SCHEMA public TO {id};"'
     )
 
 

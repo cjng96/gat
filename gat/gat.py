@@ -415,9 +415,10 @@ class Conn:
         id,
         pw=None,
         ctrName=None,
+        dkName=None,  # backward compatibility
         ctrId=None,
         keyFile=None,
-        dkName=None,
+        ctrType=None,
     ):
         """
         지정해서 커넥션을 만들어낸다.
@@ -438,7 +439,7 @@ class Conn:
         # dk.initSsh(host, port, id, keyFile=keyFile)
 
         if ctrName is not None:
-            dk = dk.containerConn(ctrName, ctrId)
+            dk = dk.containerConn(ctrName, ctrId, ctrType=ctrType)
 
         return dk
 
