@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import getpass
 import os
 import sys
 import time
@@ -264,7 +265,13 @@ class MyUtil:
 
 class Conn:
     def __init__(
-        self, server, config, ctrTunnel=None, ctrName=None, ctrId=None, ctrType=None
+        self,
+        server,
+        config,
+        ctrTunnel=None,
+        ctrName=None,
+        ctrId=None,
+        ctrType=None,
     ):
         """
         server: can be none
@@ -317,8 +324,57 @@ class Conn:
         self.ctrId = ctrId
 
         self.tempPath = None
+        self.sudoPw = None
 
         g_connList.append(self)
+
+    def prepareSudo(self):
+        def checkValidPw(pw):
+            # cmd = f"echo '{pw}' | sudo -S echo -n"
+            cmd = f"echo '{pw}' | sudo -S ls /"
+            cmd = str2arg(cmd)
+            if self.runSafe(cmd, printLog=False, nosudo=True):
+                self.sudoPw = pw
+                pp = self.runOutput("echo ~").strip()
+                pp = f"{pp}/.askpass"
+                self.makeFile(
+                    content="""\
+#!/bin/bash
+echo "$PASS"\
+""",
+                    path=pp,
+                )
+
+                return True
+
+            return False
+
+        if self.sudoPw is not None:
+            return
+
+        for _ in range(3):
+            ss = self.runOutput(
+                "sudo -k -n true 2>&1 > /dev/null && echo success || echo fail",
+                printLog=False,
+            )
+            if ss != "success":
+                pp = "~/.gat_sudo_pw"
+                pp = os.path.expanduser(pp)
+                if os.path.exists(pp):
+                    with open(pp) as fp:
+                        pw = fp.read().strip()
+                        if checkValidPw(pw):
+                            return
+
+                pw = getpass.getpass(prompt=f"Enter sudo password for {self.logName}: ")
+                if pw != "":
+                    if checkValidPw(pw):
+                        return
+
+            else:
+                return
+
+        raise Exception("sudo password is incorrect")
 
     def clearConn(self):
         self.tempPathClear()
@@ -593,45 +649,10 @@ class Conn:
         content = str2arg(content)
 
         self.run(
-            f'echo "{content}" | {sudoCmd} tee {path} > /dev/null && {sudoCmd} chmod {mode} {path}'
+            f'echo "{content}" | {sudoCmd} tee {path} > /dev/null && {sudoCmd} chmod {mode} {path}',
+            sudo=sudo,
         )
         # self.run(f'echo "{content}" > {path}')
-
-    def runOutput(self, cmd, expandVars=True, printLog=True):
-        """
-        cmd: string or array
-        expandVars:
-        return: stdout string
-        exception: subprocess.CalledProcessError(returncode, output)
-        """
-        if printLog:
-            ss = cmd[:100] + "..." if g_logLv == 0 and len(cmd) > 100 else cmd
-            self.log(f"runOutput [{ss}]")
-
-        # if expandVars:
-        #     cmd = strExpand(cmd, g_dic)
-
-        log = g_logLv > 0 and printLog
-
-        out = ""
-        if self.ctrTunnel is not None:
-            dkRunUser = "-u %s" % self.ctrId if self.ctrId is not None else ""
-            cmd = str2arg(cmd)
-            ctrCmd = self.ctrCmdGet()
-            cmd = f'{ctrCmd} exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
-            # alias defined in .bashrc is working but -l should be used for something in /etc/profile.d and .profile
-            out = self.ctrTunnel.ssh.runOutput(cmd, log=log)
-        elif self.ssh is not None:
-            out = self.ssh.runOutput(cmd, log=log)
-        else:
-            out = subprocess.check_output(
-                cmd, shell=True, executable="/bin/bash"
-            ).decode()
-
-        if log:
-            print("  -> output:%s" % (out))
-
-        return out
 
     # return os name of remote server
     def getOS(self):
@@ -659,7 +680,7 @@ class Conn:
 
     # runOutput 래퍼 함수
     # os 별 ~/.profile 명령이 다르기 때문에 대응하기 위해
-    def runOutputProf(self, cmd, expandVars=True):
+    def runOutputProf(self, cmd, expandVars=True, sudo=False):
         os = self.getOS()
 
         if os == "ubuntu":
@@ -672,34 +693,84 @@ class Conn:
             raise Exception(f"Unknown OS - {os}")
 
         cmd = f". ~/.{profile} && " + cmd
-        return self.runOutput(cmd, expandVars=expandVars)
+        return self.runOutput(cmd, expandVars=expandVars, sudo=sudo)
 
-    def runOutputAll(self, cmd, expandVars=True):
+    def runOutput(self, cmd, expandVars=True, printLog=True, sudo=False):
+        """
+        cmd: string or array
+        expandVars:
+        return: stdout string
+        exception: subprocess.CalledProcessError(returncode, output)
+        """
+        if printLog:
+            ss = cmd[:100] + "..." if g_logLv == 0 and len(cmd) > 100 else cmd
+            self.log(f"runOutput [{ss}]")
+
+        # if expandVars:
+        #     cmd = strExpand(cmd, g_dic)
+
+        log = g_logLv > 0 and printLog
+
+        if sudo:
+            self.prepareSudo()
+            cmd = f"echo '{self.sudoPw}' | sudo -S {cmd}"
+
+        out = ""
+        if self.ctrTunnel is not None:
+            dkRunUser = "-u %s" % self.ctrId if self.ctrId is not None else ""
+            cmd = str2arg(cmd)
+            ctrCmd = self.ctrCmdGet()
+            cmd = f'{ctrCmd} exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
+            # alias defined in .bashrc is working but -l should be used for something in /etc/profile.d and .profile
+            out = self.ctrTunnel.ssh.runOutput(cmd, log=log)
+        elif self.ssh is not None:
+            out = self.ssh.runOutput(cmd, log=log)
+        else:
+            out = subprocess.check_output(
+                cmd, shell=True, executable="/bin/bash"
+            ).decode()
+
+        if log:
+            print("  -> output:%s" % (out))
+
+        return out
+
+    def runOutputAll(self, cmd, expandVars=True, printLog=True, sudo=False):
         """
         cmd: string or array
         expandVars:
         return: stdout and stderr string
         exception: subprocess.CalledProcessError(returncode, output)
         """
-        ss = cmd[:100] + "..." if g_logLv == 0 and len(cmd) > 100 else cmd
-        self.log(f"runOutputAll [{ss}]")
+        if printLog:
+            ss = cmd[:100] + "..." if g_logLv == 0 and len(cmd) > 100 else cmd
+            self.log(f"runOutputAll [{ss}]")
 
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
 
+        log = g_logLv > 0 and printLog
+
+        if sudo:
+            cmd = f"echo '{self.sudoPw}' | sudo -S echo -n | {cmd}"
+
         if self.ctrTunnel is not None:
             dkRunUser = "-u %s" % self.ctrId if self.ctrId is not None else ""
             cmd = str2arg(cmd)
-            cmd = f'podman exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
-            if g_config.get("podman") != True:
-                cmd = f'docker exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
-            return self.ctrTunnel.ssh.runOutputAll(cmd)
+            ctrCmd = self.ctrCmdGet()
+            cmd = f'{ctrCmd} exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
+            out = self.ctrTunnel.ssh.runOutputAll(cmd)
         elif self.ssh is not None:
-            return self.ssh.runOutputAll(cmd)
+            out = self.ssh.runOutputAll(cmd)
         else:
-            return subprocess.check_output(
+            out = subprocess.check_output(
                 cmd, shell=True, stderr=subprocess.STDOUT, executable="/bin/bash"
             )
+
+        if log:
+            print("  -> output:%s" % (out))
+
+        return out
 
     # def _serverName(self):
     #     if self.server is None:
@@ -709,7 +780,12 @@ class Conn:
     #     else:
     #         return f"{self.ctrName}[{self.server.host}:{self.server.port}]"
 
-    def run(self, cmd, expandVars=True, printLog=True, skip=False):
+    def run(
+        self, cmd, expandVars=True, printLog=True, skip=False, sudo=False, nosudo=False
+    ):
+        """
+        nosudo: special opt for prepareSudo()
+        """
         if skip:
             return
 
@@ -719,6 +795,26 @@ class Conn:
 
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
+
+        # sudo가 사용되었으면 sudo를 자동 설정한다 - 이거 수정 필요함
+        # 명시적으로 할것인가...
+        sudo = False
+        if not nosudo and "sudo " in cmd:
+            sudo = True
+            cmd = cmd.replace("sudo ", "sudo -A ")
+
+        if sudo:
+            self.prepareSudo()
+            # cmd = f"echo '{self.sudoPw}' | sudo -S -n echo -n && {cmd}"
+            # cmd = "sudo touch /usr/local/bin/pa"
+            # sudo에 -n주면 안된다
+            # cmd = f"echo '{self.sudoPw}' | sudo -S echo -n 2>&1 > /dev/null && {cmd}"
+            # cmd = "ls /"
+            # cmd = "sudo touch /usr/local/bin/pa"
+            # cmd = "sudo ls /"
+            # cmd = f"echo '{self.sudoPw}' | sudo -S echo -n && {cmd}"
+
+            cmd = f'export PASS="{self.sudoPw}" SUDO_ASKPASS=~/.askpass && {cmd}'
 
         if self.ctrTunnel is not None:
             # it하면 오류 난다
@@ -784,12 +880,12 @@ class Conn:
         cmd = tmpCmd + cmd
         self.run(cmd, expandVars=expandVars)
 
-    def runSafe(self, cmd, printLog=True):
+    def runSafe(self, cmd, printLog=True, nosudo=False):
         """
         return: success flag
         """
         try:
-            self.run(cmd, printLog=printLog)
+            self.run(cmd, printLog=printLog, nosudo=nosudo)
             return True
         except subprocess.CalledProcessError as e:
             if printLog:
@@ -816,7 +912,7 @@ class Conn:
         """
         if sudo:
             # 꼼수
-            self.run(f"sudo touch {dest} && sudo chown -R $USER: {dest}")
+            self.run(f"sudo touch {dest} && sudo chown -R $USER: {dest}", sudo=sudo)
 
         # self.onlyRemote()
         src = os.path.expanduser(src)
@@ -839,7 +935,7 @@ class Conn:
             cmd = f"chmod {mode} {dest}"
             if sudo:
                 cmd = f"sudo {cmd}"
-            self.run(cmd)
+            self.run(cmd, sudo=sudo)
 
     def uploadFileTo(self, src, dest):
         # self.onlyRemote()
@@ -880,10 +976,9 @@ class Conn:
 
     def ctrCmdGet(self):
         # print("ctrCmdGet - self.ctrType: %s - %s" % (self.ctrType, g_config.podman))
-        if self.ctrType != None:
-            prog = "podman" if self.ctrType == "podman" else "sudo docker"
-        else:
-            prog = "podman" if g_config.podman else "sudo docker"
+        prog = "podman"
+        if self.ctrType == "docker" or not g_config.podman:
+            prog = "sudo docker"
         # print('  -> prog: "%s"' % prog)
         return prog
 
@@ -1517,7 +1612,7 @@ class Main:
         # name = config.name
         deployRoot = server.deployRoot
         env.run(f"mkdir -p {deployRoot}")
-        realTarget = env.runOutput("realpath %s" % deployRoot)
+        realTarget = env.runOutput(f"realpath {deployRoot}")
         realTarget = realTarget.strip("\r\n")  # for sftp
         todayName = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")[2:]
 

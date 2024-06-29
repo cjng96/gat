@@ -4207,11 +4207,11 @@ port     = 22
         _gen()
         return
 
-    env.run("sudo apt install --no-install-recommends -y fail2ban")
-    env.run("sudo systemctl enable fail2ban")
+    env.run("sudo apt install --no-install-recommends -y fail2ban", sudo=True)
+    env.run("sudo systemctl enable fail2ban", sudo=True)
 
     _gen()
-    env.run("sudo systemctl restart fail2ban")
+    env.run("sudo systemctl restart fail2ban", sudo=True)
 
 
 def rcloneSetupForN2(env, accountName, pubs):
@@ -4389,8 +4389,10 @@ def scriptCtr(env, saYml="./resource/sa.yml"):
         sudo=True,
         mode=755,
     )
-    env.run("cd /usr/local/bin && sudo ln -sf pa da")
-    env.run("cd /usr/local/bin && sudo ln -sf pa sa")  # backward compatibility
+    env.run("cd /usr/local/bin && sudo ln -sf pa da", sudo=True)
+    env.run(
+        "cd /usr/local/bin && sudo ln -sf pa sa", sudo=True
+    )  # backward compatibility
 
     env.copyFile(
         srcPath=saYml,
@@ -4411,8 +4413,12 @@ def scriptCtr(env, saYml="./resource/sa.yml"):
     #     env.run(f"cd /usr/local/bin && sudo ln -sf pa p{name}")
     #     env.run(f"cd /usr/local/bin && sudo ln -sf pa d{name}")
     ss = " ".join(arr)
-    env.run(f"cd /usr/local/bin && for n in {ss}; do sudo ln -sf pa p$n; done")
-    env.run(f"cd /usr/local/bin && for n in {ss}; do sudo ln -sf pa d$n; done")
+    env.run(
+        f"cd /usr/local/bin && for n in {ss}; do sudo ln -sf pa p$n; done", sudo=True
+    )
+    env.run(
+        f"cd /usr/local/bin && for n in {ss}; do sudo ln -sf pa d$n; done", sudo=True
+    )
 
     # env.run("mkdir -p ~/.local/bin")
     # env.makeFile(
