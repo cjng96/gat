@@ -42,7 +42,7 @@ from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 
 from . import __version__
-from .coSsh import CoSsh
+from .coSsh import CoSsh, MyCalledProcessError
 from .coPath import cutpath
 from .sampleFiles import sampleApp, sampleSys
 from .gatHelper import strExpand
@@ -69,26 +69,14 @@ g_scriptPath = ""
 # key(ubuntu) : value(centos)
 # 우분투 패키지 명 기준으로 매핑
 g_packages = {
-    "rssh": {
-        "centos": "rssh",
-    },
-    "sshfs": {
-        "centos": "sshfs",
-    },
     "knockd": {
         "centos": "epel-release knockd",
     },
     "openssh-client": {
         "centos": "openssh-clients",
     },
-    "git": {
-        "centos": "git",
-    },
     "libmysqlclient-dev": {
         "centos": "mysql-devel",
-    },
-    "mongodb-org": {
-        "centos": "mongodb-org",
     },
     "redis-server": {
         "centos": "redis",
@@ -108,38 +96,14 @@ g_packages = {
     "locales": {
         "centos": "glibc-locale-source glibc-langpack-en",
     },
-    "openssh-server": {
-        "centos": "openssh-server",
-    },
-    "tzdata": {
-        "centos": "tzdata",
-    },
     "cron": {
         "centos": "cronie",
-    },
-    "anacron": {
-        "centos": "anacron",
-    },
-    "rsyslog": {
-        "centos": "rsyslog",
-    },
-    "logrotate": {
-        "centos": "logrotate",
-    },
-    "sudo": {
-        "centos": "sudo",
     },
     "runit": {
         "centos": "epel-release runit",
     },
     "gnupg": {
         "centos": "gnupg2",
-    },
-    "fail2ban": {
-        "centos": "fail2ban",
-    },
-    "transmission-daemon": {
-        "centos": "transmission-daemon",
     },
     "bup": {"centos": "epel-release bup"},
 }
@@ -336,11 +300,11 @@ class Conn:
             if self.runSafe(cmd, printLog=False, nosudo=True):
                 self.sudoPw = pw
                 pp = self.runOutput("echo ~").strip()
-                pp = f"{pp}/.askpass"
+                pp = f"{pp}/.gat_askpass"
                 self.makeFile(
                     content="""\
 #!/bin/bash
-echo "$PASS"\
+echo "$GTPW"\
 """,
                     path=pp,
                 )
@@ -814,7 +778,8 @@ echo "$PASS"\
             # cmd = "sudo ls /"
             # cmd = f"echo '{self.sudoPw}' | sudo -S echo -n && {cmd}"
 
-            cmd = f'export PASS="{self.sudoPw}" SUDO_ASKPASS=~/.askpass && {cmd}'
+            # 일단은 이렇게 한다 - 나중에 그냥 통쉘로 바꾸던가 하자
+            cmd = f'export GTPW="{self.sudoPw}" SUDO_ASKPASS=~/.gat_askpass && {cmd}'
 
         if self.ctrTunnel is not None:
             # it하면 오류 난다
@@ -833,7 +798,14 @@ echo "$PASS"\
             return self.ctrTunnel.ssh.run(cmd)
         elif self.ssh is not None:
             # print('run cmd(ssh) - %s' % cmd)
-            return self.ssh.run(cmd)
+            logCmd = cmd
+            if cmd.startswith("export GTPW="):
+                tt = "SUDO_ASKPASS=~/.gat_askpass && "
+                pt = cmd.find(tt)
+                logCmd = cmd[pt + len(tt) :]
+
+            return self.ssh.run(cmd, logCmd=logCmd)
+
         else:
             """
             with Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, bufsize=1, universal_newlines=True) as p:

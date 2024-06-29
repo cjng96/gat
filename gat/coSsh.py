@@ -113,7 +113,7 @@ class CoSsh:
     def log(self, lv, msg):
         print("%d) %s" % (lv, msg))
 
-    def _run(self, cmd, doOutput, arg, log=False):
+    def _run(self, cmd, doOutput, arg, logCmd=None, log=False):
         s = time.time()
         chan = self.ssh.get_transport().open_session()
         # chan.get_pty()
@@ -152,10 +152,12 @@ class CoSsh:
             sys.stdout.flush()
             # raise CalledProcessError("ssh command failed with ret:%d" % ret)
             ss = "" if arg is None else arg[0]
-            raise MyCalledProcessError(ret, cmd, ss)
+            if logCmd is None:
+                logCmd = cmd
+            raise MyCalledProcessError(ret, logCmd, ss)
 
     # return: nothing
-    def run(self, cmd, log=False):
+    def run(self, cmd, logCmd=None, log=False):
         """
         exception: output이 빈채로 온다
         """
@@ -169,7 +171,7 @@ class CoSsh:
                 buf[0] += ss
 
         try:
-            self._run(cmd, doOutput, None, log=log)
+            self._run(cmd, doOutput, None, logCmd=logCmd, log=log)
         except MyCalledProcessError as e:
             # log가 아니라도 실패시에는 결과를 출력
             if not log:
