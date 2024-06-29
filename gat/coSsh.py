@@ -122,19 +122,19 @@ class CoSsh:
         isLoop = True
         while isLoop:
             try:
-                line = chan.recv(99999)
-                if len(line) == 0:
-                    isLoop = False
-                else:
-                    doOutput(True, line.decode("utf-8"), arg)
+                line = chan.recv_stderr(99999)
+                if len(line) > 0:
+                    doOutput(False, line.decode("utf-8"), arg)
 
             except socket.timeout as e:
                 pass
 
             try:
-                line = chan.recv_stderr(99999)
-                if len(line) > 0:
-                    doOutput(False, line.decode("utf-8"), arg)
+                line = chan.recv(99999)
+                if len(line) == 0:
+                    isLoop = False
+                else:
+                    doOutput(True, line.decode("utf-8"), arg)
 
             except socket.timeout as e:
                 pass
@@ -160,11 +160,21 @@ class CoSsh:
         exception: output이 빈채로 온다
         """
 
+        buf = [""]
+
         def doOutput(isStdout, ss, arg):
             if log:
                 print(ss, end="")
+            else:
+                buf[0] += ss
 
-        self._run(cmd, doOutput, None, log=log)
+        try:
+            self._run(cmd, doOutput, None, log=log)
+        except MyCalledProcessError as e:
+            # log가 아니라도 실패시에는 결과를 출력
+            if not log:
+                print(f"  -> output:{buf[0]}")
+            raise e
 
     def runOutput(self, cmd, log=False):
         """
