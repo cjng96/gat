@@ -36,7 +36,7 @@ def skipEnter(ss, pt):
 
 def skipEnterBackward(ss, pt):
     while pt >= 0:
-        if ss[pt - 1] not in "\r\n":
+        if pt == 0 or ss[pt - 1] not in "\r\n":
             return pt
         pt -= 1
 
