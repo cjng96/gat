@@ -20,6 +20,7 @@ import datetime
 import pathlib
 import re
 import base64
+import shlex
 
 # import inspect
 import fnmatch
@@ -162,6 +163,26 @@ def optRegister(os, optUbuntu, opt):
 # ######################################################################################3
 
 
+def checkUsedSudo(cmd):
+    tokens = shlex.split(cmd)
+    for token in tokens:
+        if token == "sudo":
+            return True
+
+    return False
+
+
+def test_checkUsedSudo():
+    assert checkUsedSudo("sudo ls /")
+    assert checkUsedSudo("echo haha | sudo tee")
+    assert not checkUsedSudo("ls /")
+    assert not checkUsedSudo("echo 'sudo ls' | tee")
+
+
+# print("\n\n\ntest1")
+# test_checkUsedSudo()
+
+
 g_logLv = 0
 g_force = False
 
@@ -261,7 +282,7 @@ class Conn:
             self.logName = "local"
         else:
             if ctrTunnel is None:
-                self.logName = f"{server.host}:{server.port}"
+                self.logName = f"{server.id}@{server.host}:{server.port}"
             else:
                 self.logName = f"{ctrTunnel.logName}/{ctrName}"
 
@@ -292,7 +313,7 @@ class Conn:
 
         g_connList.append(self)
 
-    def prepareSudo(self):
+    def prepareSudo(self, cmd):
         def checkValidPw(pw):
             # cmd = f"echo '{pw}' | sudo -S echo -n"
             cmd = f"echo '{pw}' | sudo -S ls /"
@@ -316,10 +337,11 @@ echo "$GTPW"\
         if self.sudoPw is not None:
             return
 
-        for _ in range(3):
+        for i in range(3):
             ss = self.runOutput(
                 "sudo -k -n true 2>&1 > /dev/null && echo success || echo fail",
                 printLog=False,
+                nosudo=True,
             )
             if ss != "success":
                 pp = "~/.gat_sudo_pw"
@@ -330,7 +352,9 @@ echo "$GTPW"\
                         if checkValidPw(pw):
                             return
 
-                pw = getpass.getpass(prompt=f"Enter sudo password for {self.logName}: ")
+                if i == 0:
+                    print(f"\n\ncmd: {cmd}")
+                pw = getpass.getpass(prompt=f"enter sudo password for {self.logName}: ")
                 if pw != "":
                     if checkValidPw(pw):
                         return
@@ -613,8 +637,7 @@ echo "$GTPW"\
         content = str2arg(content)
 
         self.run(
-            f'echo "{content}" | {sudoCmd} tee {path} > /dev/null && {sudoCmd} chmod {mode} {path}',
-            sudo=sudo,
+            f'echo "{content}" | {sudoCmd} tee {path} > /dev/null && {sudoCmd} chmod {mode} {path}'
         )
         # self.run(f'echo "{content}" > {path}')
 
@@ -657,9 +680,9 @@ echo "$GTPW"\
             raise Exception(f"Unknown OS - {os}")
 
         cmd = f". ~/.{profile} && " + cmd
-        return self.runOutput(cmd, expandVars=expandVars, sudo=sudo)
+        return self.runOutput(cmd, expandVars=expandVars)
 
-    def runOutput(self, cmd, expandVars=True, printLog=True, sudo=False):
+    def runOutput(self, cmd, expandVars=True, printLog=True, nosudo=False):
         """
         cmd: string or array
         expandVars:
@@ -675,9 +698,10 @@ echo "$GTPW"\
 
         log = g_logLv > 0 and printLog
 
-        if sudo:
-            self.prepareSudo()
-            cmd = f"echo '{self.sudoPw}' | sudo -S {cmd}"
+        if not nosudo and checkUsedSudo(cmd):
+            # cmd = f"echo '{self.sudoPw}' | sudo -S {cmd}"
+            self.prepareSudo(cmd)
+            cmd = cmd.replace("sudo ", "sudo -A ")
 
         out = ""
         if self.ctrTunnel is not None:
@@ -699,7 +723,7 @@ echo "$GTPW"\
 
         return out
 
-    def runOutputAll(self, cmd, expandVars=True, printLog=True, sudo=False):
+    def runOutputAll(self, cmd, expandVars=True, printLog=True, nosudo=False):
         """
         cmd: string or array
         expandVars:
@@ -715,8 +739,10 @@ echo "$GTPW"\
 
         log = g_logLv > 0 and printLog
 
-        if sudo:
-            cmd = f"echo '{self.sudoPw}' | sudo -S echo -n | {cmd}"
+        if not nosudo and checkUsedSudo(cmd):
+            # cmd = f"echo '{self.sudoPw}' | sudo -S echo -n | {cmd}"
+            self.prepareSudo(cmd)
+            cmd = cmd.replace("sudo ", "sudo -A ")
 
         if self.ctrTunnel is not None:
             dkRunUser = "-u %s" % self.ctrId if self.ctrId is not None else ""
@@ -744,9 +770,7 @@ echo "$GTPW"\
     #     else:
     #         return f"{self.ctrName}[{self.server.host}:{self.server.port}]"
 
-    def run(
-        self, cmd, expandVars=True, printLog=True, skip=False, sudo=False, nosudo=False
-    ):
+    def run(self, cmd, expandVars=True, printLog=True, skip=False, nosudo=False):
         """
         nosudo: special opt for prepareSudo()
         """
@@ -762,13 +786,8 @@ echo "$GTPW"\
 
         # sudo가 사용되었으면 sudo를 자동 설정한다 - 이거 수정 필요함
         # 명시적으로 할것인가...
-        sudo = False
-        if not nosudo and "sudo " in cmd:
-            sudo = True
-            cmd = cmd.replace("sudo ", "sudo -A ")
-
-        if sudo:
-            self.prepareSudo()
+        if not nosudo and checkUsedSudo(cmd):
+            self.prepareSudo(cmd)
             # cmd = f"echo '{self.sudoPw}' | sudo -S -n echo -n && {cmd}"
             # cmd = "sudo touch /usr/local/bin/pa"
             # sudo에 -n주면 안된다
@@ -777,6 +796,8 @@ echo "$GTPW"\
             # cmd = "sudo touch /usr/local/bin/pa"
             # cmd = "sudo ls /"
             # cmd = f"echo '{self.sudoPw}' | sudo -S echo -n && {cmd}"
+
+            cmd = cmd.replace("sudo ", "sudo -A ")
 
             # 일단은 이렇게 한다 - 나중에 그냥 통쉘로 바꾸던가 하자
             cmd = f'export GTPW="{self.sudoPw}" SUDO_ASKPASS=~/.gat_askpass && {cmd}'
