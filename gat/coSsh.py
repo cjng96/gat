@@ -19,25 +19,20 @@ class SshAllowAllKeys(paramiko.MissingHostKeyPolicy):
 class MyCalledProcessError(subprocess.CalledProcessError):
     def __init__(self, returncode, cmd, output=None, stderr=None):
         super(MyCalledProcessError, self).__init__(returncode, cmd, output, stderr)
+        self.errOutput = ""
 
     def __str__(self):
         if self.returncode and self.returncode < 0:
+            code = -self.returncode
+            v = "\n  err:[%s]" % self.errOutput if self.errOutput else ""
             try:
-                return "Command '%s' died with %r." % (
-                    self.cmd,
-                    signal.Signals(-self.returncode),
-                )
+                return f"Command '{self.cmd}' died with {signal.Signals(code)}.{v}"
             except ValueError:
-                return "Command '%s' died with unknown signal %d." % (
-                    self.cmd,
-                    -self.returncode,
-                )
+                return f"Command '{self.cmd}' died with unknown signal {code}.{v}"
         else:
-            return "Command '%s' returned non-zero exit status %d.%s" % (
-                self.cmd,
-                self.returncode,
-                "\n out:[%s]" % self.output if self.output else "",
-            )
+            v = f"\n  out:[{self.output}]" if self.output != "" else ""
+            v += f"\n  err:[{self.errOutput}]" if self.errOutput != "" else ""
+            return f"Command '{self.cmd}' returned non-zero exit status {self.returncode}.{v}"
 
 
 def falseFunc(pp):
@@ -174,8 +169,9 @@ class CoSsh:
             self._run(cmd, doOutput, None, logCmd=logCmd, log=log)
         except MyCalledProcessError as e:
             # log가 아니라도 실패시에는 결과를 출력
-            if not log:
-                print(f"  -> output:{buf[0]}")
+            # if not log:
+            #     print(f"  -> error:{buf[0]}")
+            e.errOutput = buf[0]
             raise e
 
     def runOutput(self, cmd, log=False):
@@ -184,15 +180,27 @@ class CoSsh:
         exception: output에 stdout만 포함
         """
         out = [""]
+        buf = [""]
 
         def doOutput(isStdout, ss, arg):
             if isStdout:
                 arg[0] += ss
+                buf[0] += ss
             else:
                 if log:
                     print(" stderr: ", ss)
+                else:
+                    buf[0] += ss
 
-        self._run(cmd, doOutput, out, log=log)
+        try:
+            self._run(cmd, doOutput, out, log=log)
+        except MyCalledProcessError as e:
+            # log가 아니라도 실패시에는 결과를 출력
+            # if not log:
+            #     print(f"  -> error:{buf[0]}")
+            e.errOutput = buf[0]
+            raise e
+
         # print("  -> output:%s" % (out[0]))
         return out[0]
 
