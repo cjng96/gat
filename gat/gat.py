@@ -905,7 +905,7 @@ echo "$GTPW"\
         """
         if sudo:
             # 꼼수
-            self.run(f"sudo touch {dest} && sudo chown -R $USER: {dest}", sudo=sudo)
+            self.run(f"sudo touch {dest} && sudo chown -R $USER: {dest}")
 
         # self.onlyRemote()
         src = os.path.expanduser(src)
@@ -928,7 +928,7 @@ echo "$GTPW"\
             cmd = f"chmod {mode} {dest}"
             if sudo:
                 cmd = f"sudo {cmd}"
-            self.run(cmd, sudo=sudo)
+            self.run(cmd)
 
     def uploadFileTo(self, src, dest):
         # self.onlyRemote()

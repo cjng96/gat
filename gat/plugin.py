@@ -1920,6 +1920,11 @@ def containerUserRun(
         ss += f"Volume={workPath}:/work\n"
 
     for v in volumes:
+        arr = v.split(":")
+        if len(arr) > 1:
+            arr[0] = arr[0].replace("~", userHome)
+            v = ":".join(arr)
+
         ss += f"Volume={v}\n"
 
     if awsLogsGroup is not None:
@@ -4389,10 +4394,9 @@ def scriptCtr(env, saYml="./resource/sa.yml"):
         sudo=True,
         mode=755,
     )
-    env.run("cd /usr/local/bin && sudo ln -sf pa da", sudo=True)
-    env.run(
-        "cd /usr/local/bin && sudo ln -sf pa sa", sudo=True
-    )  # backward compatibility
+    env.run("cd /usr/local/bin && sudo ln -sf pa da")
+    # backward compatibility
+    env.run("cd /usr/local/bin && sudo ln -sf pa sa")
 
     env.copyFile(
         srcPath=saYml,
@@ -4413,12 +4417,8 @@ def scriptCtr(env, saYml="./resource/sa.yml"):
     #     env.run(f"cd /usr/local/bin && sudo ln -sf pa p{name}")
     #     env.run(f"cd /usr/local/bin && sudo ln -sf pa d{name}")
     ss = " ".join(arr)
-    env.run(
-        f"cd /usr/local/bin && for n in {ss}; do sudo ln -sf pa p$n; done", sudo=True
-    )
-    env.run(
-        f"cd /usr/local/bin && for n in {ss}; do sudo ln -sf pa d$n; done", sudo=True
-    )
+    env.run(f"cd /usr/local/bin && for n in {ss}; do sudo ln -sf pa p$n; done")
+    env.run(f"cd /usr/local/bin && for n in {ss}; do sudo ln -sf pa d$n; done")
 
     # env.run("mkdir -p ~/.local/bin")
     # env.makeFile(
