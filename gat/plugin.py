@@ -1627,7 +1627,7 @@ def containerBaseImage(env):
         return name, version
 
     # 이미지가 지정되어 있지 않으면 기본 이미지로 같은 이름으로 만든다.
-    installDocker(env, arch="amd64")
+    # installDocker(env, arch="amd64")
 
     # make docker image
     env.run("rm -rf /tmp/ctr && mkdir /tmp/ctr")
