@@ -313,6 +313,26 @@ class Conn:
 
         g_connList.append(self)
 
+    def prepareSudoWithAskPass(self, cmd):
+        if not self.prepareSudo(cmd):
+            return cmd
+
+        # cmd = f"echo '{self.sudoPw}' | sudo -S -n echo -n && {cmd}"
+        # cmd = "sudo touch /usr/local/bin/pa"
+        # sudo에 -n주면 안된다
+        # cmd = f"echo '{self.sudoPw}' | sudo -S echo -n 2>&1 > /dev/null && {cmd}"
+        # cmd = "ls /"
+        # cmd = "sudo touch /usr/local/bin/pa"
+        # cmd = "sudo ls /"
+        # cmd = f"echo '{self.sudoPw}' | sudo -S echo -n && {cmd}"
+
+        cmd = cmd.replace("sudo ", "sudo -A ")
+
+        # 일단은 이렇게 한다 - 나중에 그냥 통쉘로 바꾸던가 하자
+        cmd = f'export GTPW="{self.sudoPw}" SUDO_ASKPASS=~/.gat_askpass && {cmd}'
+        return cmd
+
+    # return: true(needed pw and prepared it), false(no needed pw)
     def prepareSudo(self, cmd):
         def checkValidPw(pw):
             # cmd = f"echo '{pw}' | sudo -S echo -n"
@@ -335,7 +355,7 @@ echo "$GTPW"\
             return False
 
         if self.sudoPw is not None:
-            return
+            return True
 
         for i in range(3):
             ss = self.runOutput(
@@ -343,24 +363,24 @@ echo "$GTPW"\
                 printLog=False,
                 nosudo=True,
             )
-            if ss != "success":
-                pp = "~/.gat_sudo_pw"
-                pp = os.path.expanduser(pp)
-                if os.path.exists(pp):
-                    with open(pp) as fp:
-                        pw = fp.read().strip()
-                        if checkValidPw(pw):
-                            return
+            if ss == "success":
+                return False
 
-                if i == 0:
-                    print(f"\n\ncmd: {cmd}")
-                pw = getpass.getpass(prompt=f"enter sudo password for {self.logName}: ")
-                if pw != "":
+            pp = "~/.gat_sudo_pw"
+            pp = os.path.expanduser(pp)
+            if os.path.exists(pp):
+                with open(pp) as fp:
+                    pw = fp.read().strip()
                     if checkValidPw(pw):
-                        return
+                        return True
 
-            else:
-                return
+            if i == 0:
+                print(f"\n\ncmd: {cmd}")
+
+            pw = getpass.getpass(prompt=f"enter sudo password for {self.logName}: ")
+            if pw != "":
+                if checkValidPw(pw):
+                    return True
 
         raise Exception("sudo password is incorrect")
 
@@ -699,15 +719,14 @@ echo "$GTPW"\
         log = g_logLv > 0 and printLog
 
         if not nosudo and checkUsedSudo(cmd):
-            # cmd = f"echo '{self.sudoPw}' | sudo -S {cmd}"
-            self.prepareSudo(cmd)
-            cmd = cmd.replace("sudo ", "sudo -A ")
+            cmd = self.prepareSudoWithAskPass(cmd)
 
         out = ""
         if self.ctrTunnel is not None:
             dkRunUser = "-u %s" % self.ctrId if self.ctrId is not None else ""
             cmd = str2arg(cmd)
             ctrCmd = self.ctrCmdGet()
+            # sudo docker이고 sudo pw가 필요할 경우 또 열어야한다
             cmd = f'{ctrCmd} exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
             # alias defined in .bashrc is working but -l should be used for something in /etc/profile.d and .profile
             out = self.ctrTunnel.ssh.runOutput(cmd, log=log)
@@ -740,9 +759,7 @@ echo "$GTPW"\
         log = g_logLv > 0 and printLog
 
         if not nosudo and checkUsedSudo(cmd):
-            # cmd = f"echo '{self.sudoPw}' | sudo -S echo -n | {cmd}"
-            self.prepareSudo(cmd)
-            cmd = cmd.replace("sudo ", "sudo -A ")
+            cmd = self.prepareSudoWithAskPass(cmd)
 
         if self.ctrTunnel is not None:
             dkRunUser = "-u %s" % self.ctrId if self.ctrId is not None else ""
@@ -784,24 +801,6 @@ echo "$GTPW"\
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
 
-        # sudo가 사용되었으면 sudo를 자동 설정한다 - 이거 수정 필요함
-        # 명시적으로 할것인가...
-        if not nosudo and checkUsedSudo(cmd):
-            self.prepareSudo(cmd)
-            # cmd = f"echo '{self.sudoPw}' | sudo -S -n echo -n && {cmd}"
-            # cmd = "sudo touch /usr/local/bin/pa"
-            # sudo에 -n주면 안된다
-            # cmd = f"echo '{self.sudoPw}' | sudo -S echo -n 2>&1 > /dev/null && {cmd}"
-            # cmd = "ls /"
-            # cmd = "sudo touch /usr/local/bin/pa"
-            # cmd = "sudo ls /"
-            # cmd = f"echo '{self.sudoPw}' | sudo -S echo -n && {cmd}"
-
-            cmd = cmd.replace("sudo ", "sudo -A ")
-
-            # 일단은 이렇게 한다 - 나중에 그냥 통쉘로 바꾸던가 하자
-            cmd = f'export GTPW="{self.sudoPw}" SUDO_ASKPASS=~/.gat_askpass && {cmd}'
-
         if self.ctrTunnel is not None:
             # it하면 오류 난다
             dkRunUser = "-u %s" % self.ctrId if self.ctrId is not None else ""
@@ -815,9 +814,20 @@ echo "$GTPW"\
             ctrCmd = self.ctrCmdGet()
 
             cmd = f'{ctrCmd} exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
+
+            # sudo가 사용되었으면 sudo를 자동 설정한다 - 이거 수정 필요함
+            # 명시적으로 할것인가...
+            if not nosudo and checkUsedSudo(cmd):
+                cmd = self.prepareSudoWithAskPass(cmd)
+
             # print("run cmd(dk) - %s" % cmd)
             return self.ctrTunnel.ssh.run(cmd)
         elif self.ssh is not None:
+            # sudo가 사용되었으면 sudo를 자동 설정한다 - 이거 수정 필요함
+            # 명시적으로 할것인가...
+            if not nosudo and checkUsedSudo(cmd):
+                cmd = self.prepareSudoWithAskPass(cmd)
+
             # print('run cmd(ssh) - %s' % cmd)
             logCmd = cmd
             if cmd.startswith("export GTPW="):
@@ -971,7 +981,8 @@ echo "$GTPW"\
         # print("ctrCmdGet - self.ctrType: %s - %s" % (self.ctrType, g_config.podman))
         prog = "podman"
         if self.ctrType == "docker" or not g_config.podman:
-            prog = "sudo docker"
+            # prog = "sudo docker"
+            prog = "docker"
         # print('  -> prog: "%s"' % prog)
         return prog
 

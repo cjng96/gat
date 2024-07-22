@@ -1334,9 +1334,11 @@ def _skipSameVersion(env, prefix, ver):
         #     f". ~/.{cmdBash}profile && sudo docker images -q {prefix}{ver}"
         # ).strip()
 
-        cmd = f"podman images -q {prefix}{ver}"
+        ctrCmd = "podman"
         if not env.config.podman:
-            cmd = f"sudo docker images -q {prefix}{ver}"
+            ctrCmd = "sudo docker"
+
+        cmd = f"{ctrCmd} images -q {prefix}{ver}"
 
         ret = env.runOutputProf(cmd).strip()
         if ret == "":
@@ -3725,6 +3727,8 @@ def nginxResolver(env):
     #     resolver = f"resolver {gwIp} valid=30s ipv6=off;"
     # else:
     #     resolver = "resolver 127.0.0.11 valid=30s ipv6=off;"
+
+    # dk에서 wiki같은 이름은 11로 해야하고, host.docker.internal은 11, 1 다 안된다
 
     # podman이 또 갑자기 127.0.0.11에서만 된다 - 전에는 custom net이고 지금은 empty라?
     # dnsmsgq실행하고 127.0.0.11로 하니까 되네?
