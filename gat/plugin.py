@@ -2391,6 +2391,17 @@ def setupTz(env):
     )
 
 
+def pgDbGen(env, name):
+    exist = env.runOutput(
+        f"""setuser postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='{name}';" """
+    )
+    if exist.strip() == "1":
+        return
+
+    env.run(f'setuser postgres psql -c "CREATE DATABASE {name}"')
+    env.run(f'setuser postgres psql -d {name} -c "CREATE EXTENSION pg_trgm;"')
+
+
 def pgUserDel(env, id, db):
     hr = env.runOutput(
         f"""setuser postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='{id}'";"""
@@ -3484,6 +3495,7 @@ def certbotSetup(
         regexp=r"^ *listen +443 +ssl;",
         line=f"  listen {port} ssl http2 {proxyStr}; # managed by Certbot",
         sudo=True,
+        ignore=True,  # 이미 등록된 경우..
     )
     # env.run(f"cat /data/nginx/{name}")
 
