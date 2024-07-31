@@ -2819,6 +2819,8 @@ innodb_flush_log_at_trx_commit=0
         block=ss,
         sudo=True,
     )
+    # 60-galera.conf가 따로 있는데 거기다 하는게 맞다
+
     # ignore_sb=true는 split brain상태일때도 쓰기가 가능함, 한개만 쓰기일때는 안전하다
     # https://whitekeyboard.tistory.com/620?category=881248
 
