@@ -141,7 +141,8 @@ def test_size2str():
 
 def doPrune():
     # with open("/etc/sa.yml", "r") as fp:
-    with open("/usr/local/share/sa.yml", "r") as fp:
+    pp = "/usr/local/share/sa.yml"
+    with open(pp, "r") as fp:
         info = yaml.safe_load(fp.read())
         deleteTargets = info["prune"]
 
@@ -164,7 +165,7 @@ def doPrune():
 
     cmd = ctrCmd
     cmd += """ images --format '{"id":"{{.ID}}", "img":"{{.Repository}}:{{.Tag}}"}' """
-    print("deleteTargets", deleteTargets)
+    print(f"deleteTargets {deleteTargets} by {pp}")
 
     ss = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
     images = ss.splitlines()
