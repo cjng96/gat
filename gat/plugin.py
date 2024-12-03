@@ -4396,11 +4396,11 @@ time zstd -d $fn -c | docker import --change 'CMD ["/start"]' - $image
         sudo=True,
     )
 
-    env.copyFile(
-        srcPath=saYml,
-        targetPath="/etc/sa.yml",
-        sudo=True,
-    )
+    # env.copyFile(
+    #     srcPath=saYml,
+    #     targetPath="/etc/sa.yml",
+    #     sudo=True,
+    # )
 
 
 def scriptCtr(env, saYml="./resource/sa.yml"):
