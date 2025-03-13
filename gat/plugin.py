@@ -1614,7 +1614,7 @@ dockerCoImage = containerCoImage
 
 def containerBaseImage(env):
     name = "baseimg"
-    version = 1
+    version = 2
     # 이게 서버에 동일한 버젼이 있었던 경우가 유일한 취약점이다
     # version = _skipSameVersion(env, f"{name}:", version)
 
@@ -1641,7 +1641,8 @@ def containerBaseImage(env):
     env.makeFile(
         f"""\
 # FROM phusion/baseimage:focal-1.0.0
-FROM {origin}phusion/baseimage:jammy-1.0.4
+# FROM {origin}phusion/baseimage:jammy-1.0.4
+FROM {origin}phusion/baseimage:noble-1.0.0
 LABEL title="gattool"
 CMD ["/sbin/my_init"]
 RUN mkdir -p /data && mkdir -p /work
@@ -1819,6 +1820,7 @@ def systemdRemove(env, ctrName, force=False):
 
 # runAsCmd쓰면 기존 containerRunCmd를 대체한다.
 # old: quadletUserGen
+# systemctl --user
 def containerUserRun(
     env,
     name,

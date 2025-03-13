@@ -1951,6 +1951,7 @@ gat SERVER_NAME run - Setup and Run the system.
 
 For system(GAT_FILE_NAME.py file should be exist),
 gat GAT_FILE_NAME SERVER_NAME - Setup server defined in GAT_FILE.
+gat GAT_FILE_NAME SERVER_NAME run - Setup and Run the system.
 """
     )
     if target is not None:
