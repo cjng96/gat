@@ -26,5 +26,5 @@ class ct:
     bgWhite = "\033[47m"
 
 
-def cprt(cr, text, bgCr="", style=""):
-    print(f"{style}{cr}{bgCr}{text}{RESET}")
+def cprt(style, text, bgCr="", style2=""):
+    print(f"{style}{style2}{bgCr}{text}{RESET}")
