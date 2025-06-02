@@ -2166,6 +2166,8 @@ def mainDo():
 
     sys.path.append(g_cwd)
     pyFileName = ma.gatName[:-3]
+    # for it in dir(ma):
+    #     print(it, getattr(ma, it))
     mymod = __import__(pyFileName, fromlist=[""])
     g_mygat = mymod.myGat(helper=helper)
     # g_config 객체 생성 지점 -> 여기부터 설정 객체 사용 가능

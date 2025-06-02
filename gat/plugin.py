@@ -1914,8 +1914,9 @@ def containerUserRun(
         else:
             raise Exception(f"invalid port - {ports}")
 
+    userHome = env.runOutput(f"echo ~").strip()
     if mountBase:
-        userHome = env.runOutput(f"mkdir -p ~/ctrs/{name} && echo ~").strip()
+        env.runOutput(f"mkdir -p ~/ctrs/{name}").strip()
         ss += f"Volume={userHome}/ctrs/{name}:/data\n"
 
         # 나중에 없앨꺼다
