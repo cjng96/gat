@@ -1558,10 +1558,12 @@ def containerCoImage(env, nodeVer="lts-gallium", dartVer="3.4.1"):
 
         # 이거 공용 컴포넌트는 별도로 층을 나눌것인가
         env.run(
-            "pip3 install setuptools aiomysql aiohttp aiohttp-cors aiosmtplib multidict"
+            "pip3 install --break-system-packages setuptools aiomysql aiohttp aiohttp-cors aiosmtplib multidict"
         )
-        env.run("pip3 install bcrypt requests google-auth google-auth-oauthlib")
-        env.run("pip3 install pyyaml pyOpenSSL")
+        env.run(
+            "pip3 install --break-system-packages bcrypt requests google-auth google-auth-oauthlib"
+        )
+        env.run("pip3 install --break-system-packages pyyaml pyOpenSSL")
 
         # /data/envs/TZ 사용용
         env.run("mkdir -p /data/envs")
