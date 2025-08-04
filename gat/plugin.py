@@ -503,6 +503,11 @@ def containerNextcloudFpm(
     net=None,
 ):
     """
+    최초생성시
+    1. next로 db 생성
+    2. /mnt/data/nextcloud는 권한이...
+    nextcloud 들어가서 /var/www/html# chown www-data: data -R
+
     /var/www/html/occ
     podman exec -it --user www-data next occ files:scan --all
     podman exec -it --user www-data next occ files:cleanup
@@ -552,7 +557,8 @@ def containerNextcloudFpm(
   -e OVERWRITECLIURL={overwriteProt}://{overwriteDomain} \
   """
 
-    img = "docker.io/library/nextcloud:28.0.5-fpm"
+    # img = "docker.io/library/nextcloud:28.0.5-fpm"
+    img = "docker.io/nextcloud:fpm"
     if not env.config.podman:
         img = "nextcloud:fpm"
 
@@ -602,10 +608,11 @@ def containerNextcloudFpm(
         envs["OVERWRITEHOST"] = overwriteDomain
         envs["OVERWRITECLIURL"] = f"{overwriteProt}://{overwriteDomain}"
 
-    containerUserRun(
+    cmd = containerUserRun(
         env,
         name,
         img,
+        # isRun=False,
         ports=ports,
         mountBase=False,
         net=net,
@@ -614,6 +621,7 @@ def containerNextcloudFpm(
         volumes=volumes,
         # runAsCmd=True,
     )
+    # print("run cmd is: ", cmd)
 
     systemdRemove(env, f"{name}Cron")
     env.run(
@@ -1804,10 +1812,12 @@ def systemdInstall(env, ctrName):
 
 
 def systemdRemove(env, ctrName, force=False):
+    # 이건 새 버젼
     pp = "~/.config/containers/systemd/"
     env.runSafe(f"systemctl stop {ctrName}")
     env.runSafe(f"rm -f {pp}/{ctrName}.containers")
 
+    # 이건 옛날버젼 수동으로 만든것들
     pp = "~/.config/systemd/user"
     # env.runSafe(f"systemctl --user disable --now {ctrName}.socket")
     env.runSafe(f"systemctl --user disable --now {ctrName}.service")
@@ -1828,7 +1838,7 @@ def containerUserRun(
     name,
     image,
     ports=None,
-    run=True,
+    run=True,  # true: systemctrl start까지
     mountBase=True,
     net=None,
     hostname=None,
@@ -1853,24 +1863,27 @@ def containerUserRun(
         # podman이 아니면 언제나 runCmd로 실행
         runAsCmd = True
 
+    # 실행 커멘드는 언제나 반환해준다
+    runCmd = containerRunCmd(
+        env,  # always run
+        name,
+        image,
+        doRun=runAsCmd,
+        port=ports,
+        entrypoint=entrypoint,
+        mountBase=mountBase,
+        net=net,  # no use extra
+        envs=envs,
+        volumes=volumes,
+        awsLogsGroup=awsLogsGroup,
+        awsLogsStream=awsLogsStream,
+        awsLogsRegion=awsLogsRegion,
+    )
+
     if runAsCmd:
-        containerRunCmd(
-            name,
-            image,
-            env=env,  # always run
-            port=ports,
-            entrypoint=entrypoint,
-            mountBase=mountBase,
-            net=net,  # no use extra
-            envs=envs,
-            volumes=volumes,
-            awsLogsGroup=awsLogsGroup,
-            awsLogsStream=awsLogsStream,
-            awsLogsRegion=awsLogsRegion,
-        )
         if env.config.podman:
             systemdInstall(env, name)
-        return
+        return runCmd
 
     ss = ""
     ss += f"[Unit]\n"
@@ -1981,12 +1994,15 @@ def containerUserRun(
         env.run(f"systemctl --user restart {name}.service")
         # env.run(f"systemctl --user enable --now {name}")
 
+    return runCmd
+
 
 # use containerUserRun instead(with runAsCmd=True for docker)
 def containerRunCmd(
+    env,  # 원래 env None이면 실행은 안하고 커멘드만 반환했었다
     name,
     image,
-    env=None,  # execute cmd if env is specified
+    doRun=True,  # false: just return running cmd only
     port=None,  # backward compatibility
     ports=None,
     mountBase=True,
@@ -2084,7 +2100,8 @@ def containerRunCmd(
     cmd += extra
     cmd += f" {image}"
 
-    if env is not None:
+    # if env is not None:
+    if doRun:
         if containerExists(env, name):
             env.run(f"{prog} start {name}")
             dk = env.containerConn(name)
