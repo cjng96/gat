@@ -4026,7 +4026,7 @@ def installTransmission(env, port, userName, pw, downDir, incompleteDir, watchDi
         raise Exception("transmission - specify incompletedir")
 
     if env.runSafe("command -v transmission-cli"):
-        return
+       return
 
     env.run("sudo apt install -y transmission-daemon")
     env.run("sudo /etc/init.d/transmission-daemon stop")
@@ -4057,7 +4057,7 @@ def installTransmission(env, port, userName, pw, downDir, incompleteDir, watchDi
     dic["rpc-username"] = userName
     dic["rpc-password"] = pw
     dic["rpc-port"] = port
-    dic['rpc-whitelist-enabled"'] = False
+    dic["rpc-whitelist-enabled"] = False
     dic["download-dir"] = downDir
     dic["incomplete-dir"] = incompleteDir
     dic["incomplete-dir-enabled"] = True
@@ -4077,6 +4077,9 @@ def installTransmission(env, port, userName, pw, downDir, incompleteDir, watchDi
     env.makeFile(ss, path=pp, sudo=True)
 
     env.run("sudo /etc/init.d/transmission-daemon start")
+    # 혹시 실행 안되면 sudo systemctl edit --full transmission-daemon.service
+    # Type=notify -> simple로 바꾼다
+    # sudo systemctl daemon-reload; sudo /etc/init.d/transmission-daemon restart
 
 
 def pm2Register(env, nvmPath="~/.nvm", useNvm=True):
