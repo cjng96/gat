@@ -4026,7 +4026,7 @@ def installTransmission(env, port, userName, pw, downDir, incompleteDir, watchDi
         raise Exception("transmission - specify incompletedir")
 
     if env.runSafe("command -v transmission-cli"):
-       return
+        return
 
     env.run("sudo apt install -y transmission-daemon")
     env.run("sudo /etc/init.d/transmission-daemon stop")
@@ -4255,11 +4255,11 @@ port     = 22
         _gen()
         return
 
-    env.run("sudo apt install --no-install-recommends -y fail2ban", sudo=True)
-    env.run("sudo systemctl enable fail2ban", sudo=True)
+    env.run("sudo apt install --no-install-recommends -y fail2ban")
+    env.run("sudo systemctl enable fail2ban")
 
     _gen()
-    env.run("sudo systemctl restart fail2ban", sudo=True)
+    env.run("sudo systemctl restart fail2ban")
 
 
 def rcloneSetupForN2(env, accountName, pubs):
