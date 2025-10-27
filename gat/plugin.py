@@ -1833,6 +1833,11 @@ def systemdRemove(env, ctrName, force=False):
 # runAsCmd쓰면 기존 containerRunCmd를 대체한다.
 # old: quadletUserGen
 # systemctl --user
+# ~/.config/containers/systemd/{name}.container
+# 삭제는 
+# systemctl --user disable --now {name}.service
+# rm -f ~/.config/containers/systemd/{name}.container
+# systemctl --user daemon-reload
 def containerUserRun(
     env,
     name,
@@ -1854,7 +1859,7 @@ def containerUserRun(
     """
     net='pasta,-T,5001,-T,3306'
       22.04에서는 net
-    port: "3306:3306", "9018-9019:9018-9019", ["9018-9019:9018-9019"]
+    port: int | "3306:3306" | "9018-9019:9018-9019" | ["9018-9019:9018-9019"]
     envs: {'dbDataDir': '/data/db'...}
     volumes: ['/data/db:/var/lib/mysql'...]
     """
@@ -1885,26 +1890,27 @@ def containerUserRun(
             systemdInstall(env, name)
         return runCmd
 
+    # quadlet file
     ss = ""
-    ss += f"[Unit]\n"
+    ss += "[Unit]\n"
     # ss += f'Description=The sleep container'
-    ss += f"After=local-fs.target\n"
-    ss += f"\n"
-    ss += f"[Install]\n"
-    ss += f"# Start by default on boot\n"
-    ss += f"WantedBy=multi-user.target default.target\n"
-    ss += f"\n"
+    ss += "After=local-fs.target\n"
+    ss += "\n"
+    ss += "[Install]\n"
+    ss += "# Start by default on boot\n"
+    ss += "WantedBy=multi-user.target default.target\n"
+    ss += "\n"
 
-    ss += f"[Service]\n"
-    ss += f"Restart=always\n"
+    ss += "[Service]\n"
+    ss += "Restart=always\n"
     # Extend Timeout to allow time to pull the image
-    ss += f"TimeoutStartSec=900\n"
+    ss += "TimeoutStartSec=900\n"
     # ExecStartPre flag and other systemd commands can go here, see systemd.unit(5) man page.
     # ss += f"ExecStartPre=/usr/share/mincontainer/setup.sh\n"
-    ss += f"\n"
+    ss += "\n"
 
     # https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html
-    ss += f"[Container]\n"
+    ss += "[Container]\n"
     ss += f"Image={image}\n"
     ss += f"ContainerName={name}\n"
     ss += f"HostName={hostname or name}\n"
@@ -1949,12 +1955,12 @@ def containerUserRun(
 
     if awsLogsGroup is not None:
         # podman은 지원하지 않는다
-        ss += f"LogDriver=awslogs"
+        ss += "LogDriver=awslogs"
         ss += f"LogOpts=awslogs-region={awsLogsRegion or 'us-west-1'}"
         ss += f"LogOpts=awslogs-group={awsLogsGroup}"
         ss += f"LogOpts=awslogs-stream={awsLogsStream or name}"
     else:
-        ss += f"LogDriver=journald\n"
+        ss += "LogDriver=journald\n"
         # ss += f"LogOpts=max-size=30m"
         # ss += f"LogOpts=max-file=3"
 
@@ -1990,7 +1996,7 @@ def containerUserRun(
     # /usr/libexec/podman/quadlet -dryrun --user
 
     if run:
-        env.run(f"systemctl --user daemon-reload")
+        env.run("systemctl --user daemon-reload")
         env.run(f"systemctl --user restart {name}.service")
         # env.run(f"systemctl --user enable --now {name}")
 
@@ -2086,7 +2092,7 @@ def containerRunCmd(
         awsLogsRegion = awsLogsRegion or "us-west-1"
         awsLogsStream = awsLogsStream or name
 
-        cmd += f"--log-driver=awslogs "
+        cmd += "--log-driver=awslogs "
         cmd += f"--log-opt=awslogs-region={awsLogsRegion} "
         cmd += f"--log-opt=awslogs-group={awsLogsGroup} "
         cmd += f"--log-opt=awslogs-stream={awsLogsStream} "
