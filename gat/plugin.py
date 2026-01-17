@@ -1835,8 +1835,8 @@ def systemdRemove(env, ctrName, force=False):
 # systemctl --user
 # ~/.config/containers/systemd/{name}.container
 # 삭제는 
-# systemctl --user disable --now {name}.service
-# rm -f ~/.config/containers/systemd/{name}.container
+#   systemctl --user disable --now {name}.service
+#   rm -f ~/.config/containers/systemd/{name}.container
 # systemctl --user daemon-reload
 def containerUserRun(
     env,
@@ -1884,6 +1884,7 @@ def containerUserRun(
         awsLogsStream=awsLogsStream,
         awsLogsRegion=awsLogsRegion,
     )
+    print(f"containerUserRun runCmd: {runCmd}")
 
     if runAsCmd:
         if env.config.podman:
@@ -1935,7 +1936,7 @@ def containerUserRun(
         else:
             raise Exception(f"invalid port - {ports}")
 
-    userHome = env.runOutput(f"echo ~").strip()
+    userHome = env.runOutput("echo ~").strip()
     if mountBase:
         env.runOutput(f"mkdir -p ~/ctrs/{name}").strip()
         ss += f"Volume={userHome}/ctrs/{name}:/data\n"
@@ -2083,7 +2084,16 @@ def containerRunCmd(
             cmd += f"-v=/data/{name}:/data -v=/work/{name}:/work "
 
     for v in volumes:
-        cmd += f"-v={v} "
+        userHome = env.runOutput("echo ~").strip()
+        if ":" in v:
+            arr = v.split(":")
+            if len(arr) > 1:
+                arr[0] = arr[0].replace("~", userHome)
+                v = ":".join(arr)
+
+            cmd += f"-v={v} "
+        else:
+            cmd += f"-v={v} "
 
     for k, v in envs.items():
         cmd += f"-e={k}={v} "
