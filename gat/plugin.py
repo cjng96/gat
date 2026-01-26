@@ -1543,11 +1543,11 @@ dockerUpdateImage = containerUpdateImage
 
 # nodeVer는 coimg에 포함된거라 매번 바뀌지 않는다
 # def containerCoImage(env, nodeVer="16.13.1", dartVer="3.2.3"):
-def containerCoImage(env, nodeVer="lts-gallium", dartVer="3.4.1"):
+def containerCoImage(env, nodeVer="lts-gallium", dartVer="3.10.7"):
     baseName, baseVer = containerBaseImage(env)
 
     newName = "coimg"
-    newVer = "a"
+    newVer = "b"
     newVer = f"{baseVer}{newVer}"
     # 1~9, a~z, A~Z까지 쓰자
     # 최악으로 coImg와 baseImg버젼이 겹쳐져도 1 11과 11 1처럼 중복되도, 부모가 다르기때문에 오류난다
@@ -1592,7 +1592,7 @@ def containerCoImage(env, nodeVer="lts-gallium", dartVer="3.4.1"):
         env.configLine(
             path="/etc/crontab",
             regexp=r"^25\s6\s+",
-            line=f"25 2    * * *   root    test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.daily )",
+            line="25 2    * * *   root    test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.daily )",
             sudo=True,
         )
 
@@ -1602,7 +1602,7 @@ def containerCoImage(env, nodeVer="lts-gallium", dartVer="3.4.1"):
         fnmInstall(env, nodeVer=nodeVer)
         # env.run(". /etc/profile && fnm exec npm install -g gulp")
         # env.run(f". /etc/profile && fnm exec --using {nodeVer} npm install -g gulp")
-        env.run(f". /etc/profile && npm install -g gulp")
+        env.run(". /etc/profile && npm install -g gulp")
 
         # lastest가 3.1.0인데 컴포넌트들이 아직 지원이 안된다
         installDart(env, ver=dartVer)
