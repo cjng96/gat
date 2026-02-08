@@ -1435,9 +1435,9 @@ def deployCheckVersion(env, util, imgName, prefix):
     sha = hashlib.sha256()
 
     def doProd(src, dest):
-        # print(f"deployCheckVersion: file - {src}")
+        util.lld(f"deployCheckVersion: file - {src}")
         if src == "./version.yml":
-            print("deployCheckVersion: skip version.yml file")
+            util.llw("deployCheckVersion: skip version.yml file")
             return
 
         with open(src, "rb") as fp:
@@ -1854,7 +1854,9 @@ def containerUserRun(
     awsLogsGroup=None,
     awsLogsStream=None,
     awsLogsRegion=None,
+    capAddList=[],
     runAsCmd=False,  # true면 containerRunCmd로 실행한다
+    rootfull=False,
 ):
     """
     net='pasta,-T,5001,-T,3306'
@@ -1880,6 +1882,7 @@ def containerUserRun(
         net=net,  # no use extra
         envs=envs,
         volumes=volumes,
+        capAddList=capAddList,
         awsLogsGroup=awsLogsGroup,
         awsLogsStream=awsLogsStream,
         awsLogsRegion=awsLogsRegion,
@@ -1936,6 +1939,9 @@ def containerUserRun(
         else:
             raise Exception(f"invalid port - {ports}")
 
+    for cap in capAddList:
+        ss += f"AddCapability={cap}\n"
+
     userHome = env.runOutput("echo ~").strip()
     if mountBase:
         env.runOutput(f"mkdir -p ~/ctrs/{name}").strip()
@@ -1970,36 +1976,63 @@ def containerUserRun(
 
     # ss += f"Timezone=local"
 
-    if run:
-        # 혹시 기존 정의가 있으면 제거
-        pp = f"~/.config/systemd/user/{name}.service"
-        if env.runSafe(f"test -f {pp}"):
-            # env.run(f"systemctl --user disable --now {name}.service")
-            env.run(f"systemctl --user stop {name}.service")
-            env.run(f"rm -f {pp}")
 
-        if containerExists(env, name):
-            env.run(f"podman start {name}")
-            dk = env.containerConn(name)
-            # 이 부분에서도 에러 발생
-            dk.run("! test -f /update || /update")
+    if rootfull:
+        if run:
+            # 혹시 기존 정의가 있으면 제거
+            pp = f"/etc/containers/systemd/{name}.service"
+            if env.runSafe(f"test -f {pp}"):
+                env.run(f"sudo systemctl stop {name}.service")
+                env.run(f"sudo rm -f {pp}")
 
-            # env.run(f"sudo docker rm -f {env.vars.dkName}")
-            # env.run(f"{prog} rm -f {name}")
-            # systemdRemove(env, name)
+            if containerExists(env, name, rootfull):
+                env.run(f"sudo podman start {name}")
+                dk = env.containerConn(name, ctrType="podmanRoot")
+                # 이 부분에서도 에러 발생
+                dk.run("! test -f /update || /update")
 
-    env.run("mkdir -p ~/.config/containers/systemd")
-    env.makeFile(
-        ss,
-        path=f"~/.config/containers/systemd/{name}.container",
-    )
-    # test
-    # /usr/libexec/podman/quadlet -dryrun --user
+        env.run("mkdir -p /etc/containers/systemd")
+        env.makeFile(
+            ss,
+            path=f"/etc/containers/systemd/{name}.container",
+            sudo=True,
+        )
 
-    if run:
-        env.run("systemctl --user daemon-reload")
-        env.run(f"systemctl --user restart {name}.service")
-        # env.run(f"systemctl --user enable --now {name}")
+        if run:
+            env.run("sudo systemctl daemon-reload")
+            env.run(f"sudo systemctl restart {name}.service")
+    else:
+            
+        if run:
+            # 혹시 기존 정의가 있으면 제거
+            pp = f"~/.config/systemd/user/{name}.service"
+            if env.runSafe(f"test -f {pp}"):
+                # env.run(f"systemctl --user disable --now {name}.service")
+                env.run(f"systemctl --user stop {name}.service")
+                env.run(f"rm -f {pp}")
+
+            if containerExists(env, name, rootfull):
+                env.run(f"podman start {name}")
+                dk = env.containerConn(name)
+                # 이 부분에서도 에러 발생
+                dk.run("! test -f /update || /update")
+
+                # env.run(f"sudo docker rm -f {env.vars.dkName}")
+                # env.run(f"{prog} rm -f {name}")
+                # systemdRemove(env, name)
+
+        env.run("mkdir -p ~/.config/containers/systemd")
+        env.makeFile(
+            ss,
+            path=f"~/.config/containers/systemd/{name}.container",
+        )
+        # test
+        # /usr/libexec/podman/quadlet -dryrun --user
+
+        if run:
+            env.run("systemctl --user daemon-reload")
+            env.run(f"systemctl --user restart {name}.service")
+            # env.run(f"systemctl --user enable --now {name}")
 
     return runCmd
 
@@ -2020,6 +2053,7 @@ def containerRunCmd(
     extra="",
     useHost=True,  # podman always uses host
     hostname=None,
+    capAddList=[],
     awsLogsGroup=None,
     awsLogsStream=None,
     awsLogsRegion=None,
@@ -2067,6 +2101,9 @@ def containerRunCmd(
             raise Exception(f"******** invalid port type is {type(ports)}")
 
         cmd += f"{portCmd} "
+
+    for cap in capAddList:
+        cmd += f"--cap-add={cap} "
 
     if mountBase:
         if env.config.podman:
@@ -2142,8 +2179,11 @@ def containerRunCmd(
 dockerRunCmd = containerRunCmd
 
 
-def containerExists(env, name):
-    prog = "podman" if env.config.podman else "sudo docker"
+def containerExists(env, name, rootfull=False):
+    if rootfull:
+        prog = "sudo podman"
+    else:
+        prog = "podman" if env.config.podman else "sudo docker"
 
     ret = env.runOutputProf(f'{prog} ps -aqf name="^{name}$"')
     return ret.strip() != ""
@@ -2257,7 +2297,7 @@ def promptSetHostname(env):
     env.configBlock(
         path="~/.bashrc",
         marker="# {mark} PS1",
-        block=f'PS1="$hostname $PS1"',
+        block='PS1="$hostname $PS1"',
     )
 
 
@@ -2447,6 +2487,10 @@ def pgUserDel(env, id, db):
     if hr == "":
         return
 
+
+    env.run(f'setuser postgres psql -d {db} -c "REVOKE ALL PRIVILEGES ON SCHEMA public FROM {id};"')
+    env.run(f'setuser postgres psql -d {db} -c "REVOKE ALL PRIVILEGES ON DATABASE {db} FROM {id};"')
+
     env.run(f'setuser postgres psql -c "DROP USER {id};"')
 
 
@@ -2460,22 +2504,24 @@ def pgUserGen(env, id, pw, db):
     env.run(f"setuser postgres psql -c \"CREATE USER {id} WITH PASSWORD '{pw}';\"")
     # env.run(f'setuser postgres psql -c "CREATE DATABASE {db} OWNER {id};"')
 
+    # create user빼곤 schema등은 db에 종속적이다
+
     # 데이터베이스 연결 권한
-    env.run(f'setuser postgres psql -c "GRANT CONNECT ON DATABASE {db} TO {id};"')
+    env.run(f'setuser postgres psql -d {db} -c "GRANT CONNECT ON DATABASE {db} TO {id};"')
 
     # 데이터베이스에 대한 모든 권한
     env.run(
-        f'setuser postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE {db} TO {id};"'
+        f'setuser postgres psql -d {db} -c "GRANT ALL PRIVILEGES ON DATABASE {db} TO {id};"'
     )
 
     # 특정 스키마의 테이블에 대한 권한 부여
     env.run(
-        f'setuser postgres psql -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {id};"'
+        f'setuser postgres psql -d {db} -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {id};"'
     )
 
     # env.run(f'setuser postgres psql -c "GRANT USAGE ON SCHEMA public TO {id};"')
     env.run(
-        f'setuser postgres psql -c "GRANT ALL PRIVILEGES ON SCHEMA public TO {id};"'
+        f'setuser postgres psql -d {db} -c "GRANT ALL PRIVILEGES ON SCHEMA public TO {id};"'
     )
 
 

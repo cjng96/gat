@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import getpass
+from ntpath import isfile
 import os
 import sys
 import time
@@ -193,6 +194,9 @@ def lld(ss):
     if g_logLv >= 1:
         print(ss)
 
+def llv(ss):
+    if g_logLv >= 2:
+        print(ss)
 
 def llw(ss):
     cprint(ss, "magenta", attrs=["bold"])
@@ -247,6 +251,20 @@ class MyUtil:
             include, exclude, func, followLinks=followLinks, localSrcPath=srcPath
         )
 
+    def lld(self, ss):
+        if g_logLv >= 1:
+            print(ss)
+
+    def llv(self, ss):
+        if g_logLv >= 2:
+            print(ss)
+
+    def llw(self, ss):
+        cprint(ss, "magenta", attrs=["bold"])
+
+    def lle(self, ss):
+        cprint(ss, "red", attrs=["bold"])
+
 
 class Conn:
     def __init__(
@@ -261,7 +279,7 @@ class Conn:
         """
         server: can be none
         config: {name, host, port, id, pw}
-        ctrType: None, "docker", "podman"
+        ctrType: None, "docker", "podman", "podmanRoot"
         """
         self.proc = None
         self._uploadHelper = False
@@ -983,12 +1001,14 @@ echo "$GTPW"\
         if self.ctrType == "docker" or not g_config.podman:
             # prog = "sudo docker"
             prog = "docker"
+        elif self.ctrType == "podmanRoot":
+            prog = "sudo podman"
         # print('  -> prog: "%s"' % prog)
         return prog
 
     def _helperRun(self, args, sudo=False):
         # pp2 = f"{self.tempPathGet()}/gatHelper.py"
-        pp2 = f"/tmp/gatHelper.py"
+        pp2 = "/tmp/gatHelper.py"
         src = os.path.join(g_scriptPath, "gatHelper.py")
 
         if self.ctrTunnel is None and self.ssh is None:
@@ -996,7 +1016,7 @@ echo "$GTPW"\
         else:
             if not self._uploadHelper:
                 if self.ctrTunnel is not None:
-                    pp3 = f"/tmp/gatHelperDk.py"
+                    pp3 = "/tmp/gatHelperDk.py"
                     self.ctrTunnel.uploadFile(src, pp3)
 
                     ctrCmd = self.ctrCmdGet()
@@ -1523,62 +1543,76 @@ class Main:
     def targetFileListProd(
         self, include, exclude, func, localSrcPath="", followLinks=True
     ):
+        lld(f"targetFileListProd: include: {include}, exclude: {exclude}, localSrcPath: {localSrcPath}, followLinks: {followLinks}")
         for pp in include:
-            if type(pp) == str:
+            if isinstance(pp, str):
+                lld(f"targetFileListProd: pp: {pp}")
                 if pp == "*":
                     pp = "."
 
                 # daemon
                 pp = _pathExpand(pp)
                 pp = os.path.join(localSrcPath, pp)
+                # pp = os.path.normpath(pp) # root/../web/out 같은거 지원을 위해서
+                # lld(f"---->>: pp: {pp}")
 
                 p = pathlib.Path(pp)
                 if not p.exists():
                     llw(f"targetList: not exists - {pp}")
                     continue
 
-                if p.is_dir():
-                    if _excludeFilter(exclude, pp):
-                        lld(f"targetList: skip - {pp}")
-                        continue
-
-                    for folder, dirs, files in os.walk(pp, followlinks=followLinks):
-                        # filtering dirs too
-                        dirs2 = []
-                        for d in dirs:
-                            dd = os.path.join(folder, d)
-                            if _excludeFilter(exclude, dd):
-                                lld(f"targetList: skip - {dd}")
-                                continue
-
-                            dirs2.append(d)
-
-                        dirs[:] = dirs2  # 이걸 변경하면 다음 files가 바뀌나?
-
-                        for ff in files:
-                            # _zipAdd(os.path.join(folder, ff), os.path.join(folder, ff))
-                            full = os.path.join(folder, ff)
-                            if _excludeFilter(exclude, full):
-                                lld(f"targetList: skip - {full}")
-                                continue
-
-                            func(full, None)
-                else:
+                if p.is_file():
                     # _zipAdd(pp, pp)
                     if _excludeFilter(exclude, pp):
                         lld(f"targetList: skip - {pp}")
                         continue
 
+                    # llv(f"added file: {pp} -> None")
                     func(pp, None)
+                    return
+
+                if _excludeFilter(exclude, pp):
+                    lld(f"targetList: skip - {pp}")
+                    continue
+
+                for folder, dirs, files in os.walk(pp, followlinks=followLinks):
+                    # filtering dirs too
+                    dirs2 = []
+                    for d in dirs:
+                        dd = os.path.join(folder, d)
+                        if _excludeFilter(exclude, dd):
+                            lld(f"targetList: skip - {dd}")
+                            continue
+
+                        dirs2.append(d)
+
+                    dirs[:] = dirs2  # 이걸 변경하면 다음 files가 바뀌나?
+
+                    for ff in files:
+                        # _zipAdd(os.path.join(folder, ff), os.path.join(folder, ff))
+                        full = os.path.join(folder, ff)
+                        if _excludeFilter(exclude, full):
+                            lld(f"targetList: skip - {full}")
+                            continue
+
+                        # lld(f"added file: {full} -> None")
+                        func(full, None)
 
             else:
                 src = pp["src"]
                 src = _pathExpand(src)
                 dest = pp["dest"]
 
+                lld(f"targetFileListProd: src: {src}, dest: {dest}")
+
                 exclude2 = []
                 if "exclude" in pp:
                     exclude2 = pp["exclude"]
+
+                # support file path
+                if os.path.isfile(src):
+                    func(src, dest)
+                    continue
 
                 for folder, dirs, files in os.walk(src):
                     for ff in files:
@@ -1589,10 +1623,11 @@ class Main:
                             continue
 
                         # _zipAdd(os.path.join(folder, ff), os.path.join(dest, cutpath(src, folder), ff))
-                        func(
-                            os.path.join(folder, ff),
-                            os.path.join(dest, cutpath(src, folder), ff),
-                        )
+                        srcPath = os.path.join(folder, ff)
+                        destPath = os.path.join(dest, cutpath(src, folder), ff)
+
+                        # lld(f"added file: {srcPath} -> {destPath}")
+                        func(srcPath, destPath)
 
     def taskDeploy(self, server, mygat, config):
         llw("taskDeploy: deploy the app...")
@@ -2212,12 +2247,14 @@ def mainDo():
         if ma.cmd not in ["run", "setup", "deploy"]:
             raise Exception(f"Invalid command[{ma.cmd}]")
 
+        global g_logLv
+        global g_force
         for opt in ma.opts:
             if opt == "-v":
-                global g_logLv
                 g_logLv = 1
+            elif opt == "--vv":
+                g_logLv = 2
             elif opt == "-f":
-                global g_force
                 g_force = True
             elif opt == "--git":
                 deployStrategy = "git"
