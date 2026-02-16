@@ -107,11 +107,13 @@ fi
     )
 
 
-def installHomebrew(env):
-    if not env.runSafe(". ~/.zshrc && command -v brew"):
-        env.run(
-            'bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
-        )
+def installHomebrewSafe(env):
+    if env.runSafe(". ~/.zshrc && command -v brew"):
+        return
+
+    env.run(
+        'bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+    )
 
 
 def installSshfsMount(env, name, src, target, port=22, id=None):
@@ -2213,7 +2215,7 @@ def makeDockerContainer(env, name, image=None, port=None, mountBase=True):
         # 이미지가 지정되어 있지 않으면 기본 이미지로 같은 이름으로 만든다.
         image = name
         if env.config.podman:
-            installPodman(env)
+            installPodmanSafe(env)
         else:
             installDocker(env, arch="amd64")
 
@@ -3359,10 +3361,46 @@ def installDocker(env, arch=None):
     time.sleep(3)  # boot up
 
 
-def installPodman(env, arch=None):
+def installZreplSafe(env):
+    if env.runSafe("command -v zrepl"):
+        return
+
+    env.run("""
+    (
+set -ex
+zrepl_apt_key_url=https://zrepl.cschwarz.com/apt/apt-key.asc
+zrepl_apt_key_dst=/usr/share/keyrings/zrepl.gpg
+zrepl_apt_repo_file=/etc/apt/sources.list.d/zrepl.list
+
+# Install dependencies for subsequent commands
+sudo apt update && sudo apt install curl gnupg lsb-release
+
+# Deploy the zrepl apt key.
+curl -fsSL "$zrepl_apt_key_url" | tee | gpg --dearmor | sudo tee "$zrepl_apt_key_dst" > /dev/null
+
+# Add the zrepl apt repo.
+ARCH="$(dpkg --print-architecture)"
+CODENAME="$(lsb_release -i -s | tr '[:upper:]' '[:lower:]') $(lsb_release -c -s | tr '[:upper:]' '[:lower:]')"
+echo "Using Distro and Codename: $CODENAME"
+echo "deb [arch=$ARCH signed-by=$zrepl_apt_key_dst] https://zrepl.cschwarz.com/apt/$CODENAME main" | sudo tee "$zrepl_apt_repo_file" > /dev/null
+
+# Update apt repos.
+sudo apt update
+)""")
+
+    env.run("sudo apt update")
+    env.run("sudo apt install -y zrepl")
+
+
+
+def installPodmanSafe(env, arch=None):
     """
     arch: amd64 | arm64
     """
+
+    if not env.runSafe("command -v podman"):
+        return
+
     if arch is None:
         arch = getArch(env)
 
