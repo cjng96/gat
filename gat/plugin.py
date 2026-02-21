@@ -400,11 +400,10 @@ server {{
     resolver = nginxResolver(env)
 
     env.makeFile(
-        f"""\
-server {{
-	listen			{listen};
-	server_name		{domain};
-	root			/data/{name};
+        fr"""server {{
+		listen			{listen};
+		server_name		{domain};
+		root			/data/{name};
     {resolver}
 
     {extra1}
@@ -969,7 +968,7 @@ exec chpst -u root:adm svlogd -t /var/log/{name}
 def setupInternalSftp(env):
     env.configLine(
         path="/etc/ssh/sshd_config",
-        regexp="Subsystem\s+sftp\s+",
+        regexp=r"Subsystem\s+sftp\s+",
         line="Subsystem sftp internal-sftp",
         sudo=True,
     )
@@ -1102,7 +1101,7 @@ def installRssh(env, home, useChroot=True):
     env.configLine("/etc/rssh.conf", "^#allowsftp", "allowsftp", sudo=True)
     env.configLine("/etc/rssh.conf", "^#allowrsync", "allowrsync", sudo=True)
     env.configLine(
-        "/etc/rssh.conf", "^#chrootpath\s*=", f"chrootpath={home}", sudo=True
+        "/etc/rssh.conf", r"^#chrootpath\s*=", f"chrootpath={home}", sudo=True
     )
     # env.run('sudo /etc/init.d/sshd restart')
 
@@ -2818,31 +2817,31 @@ def installMariaDb(env, dataDir="/var/lib/mysql", port=3306, repo=None):
     cfgPp = "/etc/mysql/mariadb.conf.d/50-server.cnf"
     env.configLine(
         cfgPp,
-        regexp="^datadir\s*=\s*",
+        regexp=r"^datadir\s*=\s*",
         line=f"datadir={dataDir}",
         appendAfterRe=r"^\[mysqld\]$",
     )
     env.configLine(
         cfgPp,
-        regexp="^port\s*=\s*[0-9]",
+        regexp=r"^port\s*=\s*[0-9]",
         line=f"port={port}",
         appendAfterRe=r"^\[mysqld\]$",
     )
     env.configLine(
         cfgPp,
-        regexp="^bind-address\s*=",
+        regexp=r"^bind-address\s*=",
         line="#bind-address =",
         ignore=True,
     )
     env.configLine(
         cfgPp,
-        regexp="^#?log_bin\s*=",
+        regexp=r"^#?log_bin\s*=",
         line="log_bin=binlog",
         ignore=True,
     )
     env.configLine(
         cfgPp,
-        regexp="^#?log_slave_updates\s*=",
+        regexp=r"^#?log_slave_updates\s*=",
         line="log_slave_updates=1",
         ignore=True,
     )
@@ -3513,8 +3512,7 @@ def certbotInstall(env):
     # PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
     # 0 */12 * * * root test -x /usr/bin/certbot -a \! -d /run/systemd/system && perl -e 'sleep int(rand(43200))' && certbot -q renew
     env.makeFile(
-        content="""\
-#!/bin/bash
+        content=r"""#!/bin/bash
 test -x /usr/bin/certbot -a \! -d /run/systemd/system && perl -e 'sleep int(rand(43200))' && certbot -q renew
 """,
         path="/etc/cron.weekly/certbot",
@@ -3641,8 +3639,7 @@ def nginxWebSite(
 
     cache = ""
     if cacheOn:
-        cache = """\
-location ~* \.(?:manifest|appcache|html?|xml|json)$ {
+        cache = r"""location ~* \.(?:manifest|appcache|html?|xml|json)$ {
   expires -1;
 }
 location ~* \.(?:jpg|jpeg|gif|png|ico|cur|gz|svg|svgz|mp4|ogg|ogv|webm|htc)$ {
@@ -4346,7 +4343,7 @@ port     = 22
         if blockType is not None:
             env.configLine(
                 path="/etc/fail2ban/action.d/iptables-common.conf",
-                regexp="blocktype\s*=",
+                regexp=r"blocktype\s*=",
                 line=f"blocktype = {blockType}",
                 sudo=True,
             )
@@ -4484,8 +4481,7 @@ docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}({{.RunningFor}})\t
 
     # docker backup script - 잘 안쓴다
     env.makeFile(
-        """\
-#!/bin/bash
+        r"""#!/bin/bash
 if [ "$#" -ne 1 ]; then
   echo 'Please docker_backup CONTAINER_NAME'
   exit 1
@@ -4500,8 +4496,7 @@ time nice docker export $(docker inspect --format="\{{.Id}}" $name) | zstd -o ~/
 
     # run할때 쓰는 cmd, port, volumes를 잃어버린다. run할때 해야 함
     env.makeFile(
-        """\
-#!/bin/bash
+        r"""#!/bin/bash
 if [ "$#" -ne 2 ]; then
   echo 'Please docker_restore BACKUP_FILE IMAGE_NAME'
   exit 1
@@ -4577,8 +4572,7 @@ def scriptCtr(env, saYml="./resource/sa.yml"):
 
     # docker backup script - 잘 안쓴다
     env.makeFile(
-        """\
-#!/bin/bash
+        r"""#!/bin/bash
 if [ "$#" -ne 1 ]; then
   echo 'Please docker_backup CONTAINER_NAME'
   exit 1

@@ -1,11 +1,11 @@
 import os
-import boto3
-import botocore
 import io
 #from myutil import glog
 
 class CoS3:
   def __init__(self, key=None, secret=None):
+    import boto3
+    import botocore
     if key is None:
       self.client = boto3.client('s3')
       self.res = boto3.resource('s3')

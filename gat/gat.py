@@ -1672,7 +1672,7 @@ class Main:
 
         res = env.runOutput(f"cd {deployRoot}/releases && ls -d *;echo")
         releases = list(
-            filter(lambda x: re.match("\d{6}_\d{6}", x) is not None, res.split())
+            filter(lambda x: re.match(r"\d{6}_\d{6}", x) is not None, res.split())
         )
         releases.sort()
 
@@ -2010,6 +2010,7 @@ class MyArgv:
             if arg.startswith("-"):
                 self.opts.append(arg)
                 removeIdxs.append(i)
+
         for i in reversed(removeIdxs):
             argv.pop(i)
 
