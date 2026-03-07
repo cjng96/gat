@@ -2536,6 +2536,9 @@ def mysqlUserDel(env, id, host):
 
     env.run('''sudo mysql -e "DROP USER '%s'@'%s';"''' % (id, host))
 
+def mysqlUserChangePw(env, id, host, pw, sudo=True):
+    cmd = "sudo " if sudo else ""
+    env.run(f'''{cmd}mysql -e "ALTER USER '{id}'@'{host}' IDENTIFIED BY '{pw}';"''')
 
 def mysqlUserGen(env, id, pw, host, priv, unixSocket=False, regen=False):
     """
@@ -2786,6 +2789,40 @@ def initGitea(env, dataDir="/var/lib/gitea"):
 
     # env.run('chmod 750 /etc/gitea')
     # env.run('chmod 640 /etc/gitea/app.ini')
+
+def brewInstallMariaDbSafe(env):
+    if env.runSafe("command -v mysql11d"):
+        return
+
+    # env.run(". ~/.zprofile && brew install mariadb")
+    # env.run(". ~/.zprofile && brew services restart mariadb")
+
+    # mariadb -u root -p
+    # brew info maridb
+    # /opt/homebrew/var/mysql
+    # /opt/homebrew/etc/my.cnf
+
+    env.makeFile(
+        content=f"""\
+[mysqld]
+log-bin=mysql-bin
+server-id=1
+binlog_format=ROW
+""",
+        path="/opt/homebrew/etc/my.cnf",
+        mode=600,
+    )
+
+    # mariadb-secure-installation
+    # env.run(". ~/.zprofile && sudo -E mysql -e 'ALTER USER root@localhost IDENTIFIED VIA unix_socket;'")
+    # env.run(". ~/.zprofile && which mysql ; echo $?")
+    env.run(". ~/.zprofile && mysql -e 'DROP DATABASE IF EXISTS test;'")
+
+    env.run(". ~/.zprofile && mysql -e 'DELETE FROM mysql.db WHERE Db=\"test\" OR Db LIKE \"test_%\";'")
+    env.run(". ~/.zprofile && mysql -e 'DROP USER IF EXISTS \"\"@localhost;'")
+
+    env.run(". ~/.zprofile && mysql -e 'DELETE FROM mysql.user WHERE user=\"root\" AND host NOT IN (\"localhost\", \"127.0.0.1\", \"::1\");'")
+    env.run(". ~/.zprofile && mysql -e 'FLUSH PRIVILEGES;'")
 
 
 def installMariaDb(env, dataDir="/var/lib/mysql", port=3306, repo=None):
