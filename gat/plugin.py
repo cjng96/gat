@@ -1150,6 +1150,7 @@ def userDel(env, id):
     env.run(cmd)
 
 
+# useradd쓰기
 def userAddRaw(
     env,
     id,
@@ -1504,7 +1505,7 @@ def containerUpdateImage(
                 ct.red,
                 f"Regenerated image[{name}] whose hash is not match.",
             )
-            env.run(f"docker rmi -f {name}")
+            env.run(f"{prog} rmi -f {name}")
         else:
             checkParentRev()
             return False
@@ -2245,6 +2246,7 @@ CMD ["/start"]
 def writeRunScript(env, cmd, appName="app", targetPath="/app/current"):
     """
     targetPath: None - /etc/service/app
+    내부적으로 phusion/baseimage의 runit기반이다.
     """
     env.log(f">> writeRunScript: {cmd}")
 
