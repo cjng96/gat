@@ -515,6 +515,33 @@ servers:
             },
         )
 
+    def test_vars_cfg_preserves_data_key_and_none_values(self):
+        varsCfg = GatVarsCfg(data="/data/sftp", net=None)
+
+        self.assertEqual(varsCfg.data, "/data/sftp")
+        self.assertIsNone(varsCfg.net)
+        self.assertEqual(varsCfg.toDict(), {"data": "/data/sftp", "net": None})
+
+    def test_none_values_override_default_vars(self):
+        cfg = GatAppCfg.sys(
+            name="demo",
+            defaultVars=GatVarsCfg(net="pasta", dbMount="/db"),
+            servers=[
+                GatServerCfg(
+                    name="dev",
+                    host="localhost",
+                    port=22,
+                    id="me",
+                    vars=GatVarsCfg(net=None, dbMount=None),
+                )
+            ],
+        )
+
+        varsDict = cfg.normalized().servers[0].vars.toDict()
+
+        self.assertIsNone(varsDict["net"])
+        self.assertIsNone(varsDict["dbMount"])
+
     def test_config_dic_view_keeps_legacy_mutation_access(self):
         config = Config()
 

@@ -517,10 +517,10 @@ class Config:
 
 
 class GatVarsCfg(GatDynamicCfg):
-    def __init__(self, data: Any = None, **kwargs: Any) -> None:
+    def __init__(self, _data: Any = None, **kwargs: Any) -> None:
         object.__setattr__(self, "_data", {})
-        self.fill(data or {})
-        self.fill({key: value for key, value in kwargs.items() if value is not None})
+        self.fill(_data or {})
+        self.fill(kwargs)
 
     @classmethod
     def fromDict(cls: type[Self], data: Any) -> Self:
