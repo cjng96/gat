@@ -1,0 +1,3 @@
+#!/bin/bash
+P=~/.gat/repo
+PYTHONPATH=$P/gdev uv run --project $P -m gdev "$@"
