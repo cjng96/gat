@@ -7,7 +7,10 @@
 모든 `gat` 설정 파일은 `myGat` 클래스를 포함해야 합니다.
 
 ```python
-class myGat:
+from gat.app_config import GatApp
+
+
+class myGat(GatApp):
     def __init__(self, helper, **_):
         # 1. YAML 설정 로드
         helper.configStr("yaml", """
@@ -140,7 +143,7 @@ servers:
     owner: www-data
 """
 
-class myGat:
+class myGat(GatApp):
     def __init__(self, helper, **_):
         helper.configStr("yaml", config)
 
@@ -155,7 +158,10 @@ class myGat:
 ### 시스템 설정 (`gat_sys.py`)
 
 ```python
-class myGat:
+from gat.app_config import GatApp
+
+
+class myGat(GatApp):
     def __init__(self, helper, **_):
         helper.configStr("yaml", """
 name: base-system
@@ -169,7 +175,7 @@ servers:
     def setupTask(self, util, remote, local, **_):
         # 패키지 설치
         remote.run("sudo apt-get update && sudo apt-get install -y nginx")
-        
+
         # Nginx 설정 수정
         remote.configLine(
             path="/etc/nginx/nginx.conf",
