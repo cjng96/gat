@@ -1,8 +1,8 @@
 import queue
 import subprocess
 from threading import Thread
-from copy import deepcopy
 import json, inspect
+from typing import Any, BinaryIO
 
 import re
 import os
@@ -10,7 +10,7 @@ import os
 import requests
 
 
-def str2arg(ss):
+def str2arg(ss: str) -> str:
     """
     기본적으로 ""로 감쌌다고 가정하고 랩핑한다.
     """
@@ -26,7 +26,7 @@ def str2arg(ss):
     return ss
 
 
-def envExpand(ss):
+def envExpand(ss: str) -> str:
     while True:
         m = re.search(r"\$\{\{([\w_]+)\}\}", ss)
         if m is None:
@@ -37,7 +37,7 @@ def envExpand(ss):
         ss = ss[: m.start()] + str(v) + ss[m.end() :]
 
 
-def pathRemove(pp, parent):
+def pathRemove(pp: str, parent: str) -> str:
     if parent[-1] != "/":
         parent += "/"
 
@@ -47,7 +47,7 @@ def pathRemove(pp, parent):
     return pp[len(parent) :]
 
 
-def pathIsChild(pp, parent):
+def pathIsChild(pp: str, parent: str) -> bool:
     if parent[-1] != "/":
         parent += "/"
 
@@ -86,7 +86,7 @@ def pathIsChild(pp, parent):
 # input
 # - directory : 이전 버전의 clone 폴더 이름
 # - cloneUrl : clone url
-def cloneRepo(cloneUrl, branch, clonePath):
+def cloneRepo(cloneUrl: str, branch: str, clonePath: str) -> None:
     # subprocess.run("pwd")
     print(f"gitClone: start proceeding with git clone")
     subprocess.run(["rm", "-rf", clonePath])
@@ -117,15 +117,15 @@ def cloneRepo(cloneUrl, branch, clonePath):
 
 
 class NonBlockingStreamReader:
-    def __init__(self, stream):
+    def __init__(self, stream: BinaryIO) -> None:
         """
             stream: the stream to read from.
         Usually a process' stdout or stderr.
         """
         self.stream = stream
-        self.queue = queue.Queue()
+        self.queue: queue.Queue[bytes] = queue.Queue()
 
-        def _populateQueue(stream, queue):
+        def _populateQueue(stream: BinaryIO, queue: queue.Queue[bytes]) -> None:
             """
             Collect lines from 'stream' and put them in 'quque'.
             """
@@ -139,7 +139,7 @@ class NonBlockingStreamReader:
         self.thread.daemon = True
         self.thread.start()
 
-    def readline(self, timeout=None):
+    def readline(self, timeout: float | None = None) -> bytes | None:
         """
         return: None(empty), ""(exit the app)
         """
@@ -154,7 +154,7 @@ class UnexpectedEndOfStream(Exception):
 
 
 class ObjectEncoder(json.JSONEncoder):
-    def default(self, obj):
+    def default(self, obj: Any) -> Any:
         if hasattr(obj, "toJson"):
             return self.default(obj.toJson())
         elif hasattr(obj, "__dict__"):
@@ -176,5 +176,7 @@ class ObjectEncoder(json.JSONEncoder):
 
 
 class HttpError(Exception):
-    def __init__(self, status_code, message):
-        super().__init__(*args)
+    def __init__(self, status_code: int, message: str) -> None:
+        super().__init__(status_code, message)
+        self.status_code = status_code
+        self.message = message

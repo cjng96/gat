@@ -8,15 +8,16 @@ import base64
 import platform
 import subprocess
 import os.path as pypath
+from typing import Any
 
-g_dic = {}
+g_dic: dict[str, Any] = {}
 
 
-def run(cmd):
+def run(cmd: str) -> bytes:
     return subprocess.check_output(cmd, shell=True)
 
 
-def runRet(cmd):
+def runRet(cmd: str) -> int:
     try:
         run(cmd)
         return 0
@@ -24,7 +25,7 @@ def runRet(cmd):
         return e.returncode
 
 
-def skipEnter(ss, pt):
+def skipEnter(ss: str, pt: int) -> int:
     sz = len(ss)
     while pt < sz:
         if ss[pt] not in "\r\n":
@@ -34,7 +35,7 @@ def skipEnter(ss, pt):
     return sz
 
 
-def skipEnterBackward(ss, pt):
+def skipEnterBackward(ss: str, pt: int) -> int:
     while pt >= 0:
         if pt == 0 or ss[pt - 1] not in "\r\n":
             return pt
@@ -43,7 +44,7 @@ def skipEnterBackward(ss, pt):
     return 0
 
 
-def configBlockStr(ss, start, end, block, insertAfter):
+def configBlockStr(ss: str, start: str, end: str, block: str, insertAfter: str | None) -> str:
     # marker
     start = f"\n{start}"
     end = f"{end}\n"
@@ -82,7 +83,7 @@ def configBlockStr(ss, start, end, block, insertAfter):
     return ss
 
 
-def configBlock(path, marker, block, insertAfter):
+def configBlock(path: str, marker: str, block: str, insertAfter: str | None) -> None:
     """
     marker: ### {mark} TEST
     block: vv=1
@@ -109,7 +110,7 @@ def configBlock(path, marker, block, insertAfter):
             print("configBlock - update file", path)
 
 
-def configAddStr(ss, marker, str, insertAfter):
+def configAddStr(ss: str, marker: str, str: str, insertAfter: str | None) -> str | None:
     # regexp
     m = re.search(marker, ss)
     if m is not None:
@@ -132,7 +133,7 @@ def configAddStr(ss, marker, str, insertAfter):
 # configBlock이 완전 대체할수 있다. 이건 추가된 내용을 수정 할수가 없다
 
 
-def configAdd(path, marker, str, insertAfter):
+def configAdd(path: str, marker: str, str: str, insertAfter: str | None) -> None:
     """
     marker: ### TEST\n
     block: vv=1\n
@@ -151,7 +152,7 @@ def configAdd(path, marker, str, insertAfter):
             fp.write(ss)
 
 
-def strEnsure(path, str):
+def strEnsure(path: str, str: str) -> None:
     path = os.path.expanduser(path)
     path = strExpand(path, g_dic)
     with open(path, "rt") as fp:
@@ -178,7 +179,7 @@ def userNew(name, existOk, sshKey):
 """
 
 
-def lineEndPos(ss, pt):
+def lineEndPos(ss: str, pt: int) -> int:
     """
     return: 01234\n 이면 5위치를 돌려준다.
             만약없으면 라인 길이
@@ -195,7 +196,14 @@ def lineEndPos(ss, pt):
 # append: True면 추가 - deprecated use appendAfterRe="" instead
 # appendAfterRe: ""이면 마지막에 덧붙이기
 # ignore: appendAfterRe를 안쓰는데 패턴을 못찾으면 원본을 반환
-def configLineStr(ss, regexp, line, append=False, appendAfterRe=None, ignore=False):
+def configLineStr(
+    ss: str,
+    regexp: str,
+    line: str,
+    append: bool = False,
+    appendAfterRe: str | None = None,
+    ignore: bool = False,
+) -> str | None:
     m = re.search(regexp, ss, re.MULTILINE)
     if m is None:
         if append or appendAfterRe is not None:
@@ -229,8 +237,14 @@ def configLineStr(ss, regexp, line, append=False, appendAfterRe=None, ignore=Fal
 
 
 def configLine(
-    path, regexp, line, items=None, append=False, appendAfterRe=None, ignore=False
-):
+    path: str,
+    regexp: str,
+    line: str,
+    items: str | None = None,
+    append: bool = False,
+    appendAfterRe: str | None = None,
+    ignore: bool = False,
+) -> None:
     """
     replace it to the [line] after finding [regexp]
     ignore: no action if there is no regexp
@@ -278,7 +292,7 @@ def configLine(
             fp.write(s2)
 
 
-def strExpand(ss, dic):
+def strExpand(ss: str, dic: dict[str, Any]) -> str:
     """
     convert {{target}} to the item in the dic
     """
@@ -304,7 +318,7 @@ def strExpand(ss, dic):
         ss = ss[: m.start()] + str(dic2) + ss[m.end() :]
 
 
-def main():
+def main() -> None:
     if len(sys.argv) <= 2:
         raise Exception("gatHelper.py runFile configPath")
     cmd = sys.argv[1]

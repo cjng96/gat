@@ -1,5 +1,7 @@
 from copy import deepcopy
 import collections
+from collections.abc import ItemsView, Iterator, Mapping
+from typing import Any
 
 
 # try:
@@ -8,7 +10,11 @@ import collections
 #     collectionsAbc = collections
 
 
-def dictGet(dic, pp, default):
+JsonDict = dict[str, Any]
+JsonMap = Mapping[str, Any]
+
+
+def dictGet(dic: JsonMap, pp: str, default: Any) -> Any:
     lst = pp.split(".")
     for item in lst:
         if item not in dic:
@@ -19,7 +25,7 @@ def dictGet(dic, pp, default):
     return dic
 
 
-def dictGetTest():
+def dictGetTest() -> None:
     dic = dict(a=1, b=dict(A=1, B=2))
     assert dictGet(dic, "", 99) == 99
     assert dictGet(dic, "a", 99) == 1
@@ -34,7 +40,7 @@ collectionsAbc = getattr(collections, "abc", collections)
 
 
 # https://gist.github.com/angstwad/bf22d1822c38a92ec0a9
-def dictMerge(dic, dic2):
+def dictMerge(dic: JsonMap, dic2: JsonMap) -> JsonDict:
     newDic = {}
 
     for k, v in dic.items():
@@ -56,7 +62,7 @@ def dictMerge(dic, dic2):
 
 
 # supported Dict2
-def dict2Merge(dic, dic2):
+def dict2Merge(dic: Any, dic2: Any) -> "Dict2":
     if isinstance(dic, Dict2):
         dic = dic.dic
 
@@ -90,55 +96,55 @@ class Dict2:
     dic.newV = 1
     """
 
-    def __init__(self, dic=None):
-        self.dic = dict()
+    def __init__(self, dic: Any = None) -> None:
+        self.dic: JsonDict = dict()
         if dic is not None:
             self.fill(dic)
 
-    def toJson(self):
+    def toJson(self) -> JsonDict:
         return self.dic
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         if "dic" in self.__dict__ and name in self.dic:
             return self.dic[name]
         return super().__getattribute__(name)
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, name: str, value: Any) -> None:
         if name != "dic":
             if name in self.dic:
                 self.dic[name] = value
         return super().__setattr__(name, value)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self.dic)  # __dict__)
 
     # dict compatiable
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Any:
         return self.dic[self.__keytransform__(key)]
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: str, value: Any) -> None:
         self.dic[self.__keytransform__(key)] = value
 
-    def __delitem__(self, key):
+    def __delitem__(self, key: str) -> None:
         del self.dic[self.__keytransform__(key)]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return iter(self.dic)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.dic)
 
-    def __keytransform__(self, key):
+    def __keytransform__(self, key: str) -> str:
         return key
 
-    def __contains__(self, key):
+    def __contains__(self, key: str) -> bool:
         return key in self.dic
 
-    def items(self):
+    def items(self) -> ItemsView[str, Any]:
         return self.dic.items()
 
     # merge all attributes but array is replaced
-    def fill(self, dic):
+    def fill(self, dic: Any) -> None:
         if isinstance(dic, Dict2):
             dic = deepcopy(dic.dic)
 
@@ -157,7 +163,7 @@ class Dict2:
             else:
                 self.dic[key] = value
 
-    def get(self, name, default=None):
+    def get(self, name: str, default: Any = None) -> Any:
         lst = name.split(".")
         dic = self.dic
         for item in lst:
@@ -167,13 +173,13 @@ class Dict2:
 
         return dic
 
-    def add(self, name, value):
+    def add(self, name: str, value: Any) -> None:
         if name in self.dic:
             print("%s is already defined. it will be overwritten." % name)
         self.dic[name] = value
 
 
-def dictMerge2Test():
+def dictMerge2Test() -> None:
     a = Dict2(dic={"a": 1, "d": {"a1": 1, "b1": 2}})
     b = Dict2(dic={"b": 1, "d": {"a1": 2, "c1": 3}})
     c = dict2Merge(a, b)

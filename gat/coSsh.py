@@ -7,21 +7,23 @@ import socket
 import subprocess
 import signal
 import getpass
+from collections.abc import Callable
+from typing import Any
 
 from .coPath import cutpath, path2folderList
 
 
 class SshAllowAllKeys(paramiko.MissingHostKeyPolicy):
-    def missing_host_key(self, client, hostname, key):
+    def missing_host_key(self, client: Any, hostname: str, key: Any) -> None:
         return
 
 
 class MyCalledProcessError(subprocess.CalledProcessError):
-    def __init__(self, returncode, cmd, output=None, stderr=None):
+    def __init__(self, returncode: int, cmd: str, output: Any = None, stderr: Any = None) -> None:
         super(MyCalledProcessError, self).__init__(returncode, cmd, output, stderr)
         self.errOutput = ""
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.returncode and self.returncode < 0:
             code = -self.returncode
             v = "\n  err:[%s]" % self.errOutput if self.errOutput else ""
@@ -35,7 +37,7 @@ class MyCalledProcessError(subprocess.CalledProcessError):
             return f"Command '{self.cmd}' returned non-zero exit status {self.returncode}.{v}"
 
 
-def falseFunc(pp):
+def falseFunc(pp: str) -> bool:
     return False
 
 
@@ -48,10 +50,10 @@ def falseFunc(pp):
 # https://gist.github.com/kdheepak/c18f030494fea16ffd92d95c93a6d40d
 # https://stackoverflow.com/questions/760978/long-running-ssh-commands-in-python-paramiko-module-and-how-to-end-them
 class CoSsh:
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
-    def init(self, host, port, id, pw=None, keyFile=None):
+    def init(self, host: str, port: int, id: str, pw: str | None = None, keyFile: str | None = None) -> None:
         self.ssh = paramiko.SSHClient()
         # ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.ssh.set_missing_host_key_policy(SshAllowAllKeys())
@@ -101,14 +103,21 @@ class CoSsh:
 
         self.uploadFilterFunc = falseFunc
 
-    def close(self):
+    def close(self) -> None:
         if hasattr(self, "ssh"):
             self.ssh.close()
 
-    def log(self, lv, msg):
+    def log(self, lv: int, msg: str) -> None:
         print("%d) %s" % (lv, msg))
 
-    def _run(self, cmd, doOutput, arg, logCmd=None, log=False):
+    def _run(
+        self,
+        cmd: str,
+        doOutput: Callable[[bool, str, Any], None],
+        arg: Any,
+        logCmd: str | None = None,
+        log: bool = False,
+    ) -> None:
         s = time.time()
         chan = self.ssh.get_transport().open_session()
         # chan.get_pty()
@@ -152,14 +161,14 @@ class CoSsh:
             raise MyCalledProcessError(ret, logCmd, ss)
 
     # return: nothing
-    def run(self, cmd, logCmd=None, log=False):
+    def run(self, cmd: str, logCmd: str | None = None, log: bool = False) -> None:
         """
         exception: output이 빈채로 온다
         """
 
         buf = [""]
 
-        def doOutput(isStdout, ss, arg):
+        def doOutput(isStdout: bool, ss: str, arg: Any) -> None:
             if log:
                 print(ss, end="")
             else:
@@ -174,7 +183,7 @@ class CoSsh:
             e.errOutput = buf[0]
             raise e
 
-    def runOutput(self, cmd, log=False):
+    def runOutput(self, cmd: str, log: bool = False) -> str:
         """
         return: stdout result
         exception: output에 stdout만 포함
@@ -182,7 +191,7 @@ class CoSsh:
         out = [""]
         buf = [""]
 
-        def doOutput(isStdout, ss, arg):
+        def doOutput(isStdout: bool, ss: str, arg: list[str]) -> None:
             if isStdout:
                 arg[0] += ss
                 buf[0] += ss
@@ -204,14 +213,14 @@ class CoSsh:
         # print("  -> output:%s" % (out[0]))
         return out[0]
 
-    def runOutputAll(self, cmd, log=False):
+    def runOutputAll(self, cmd: str, log: bool = False) -> str:
         """
         return: stdout + stderr result
         exception: output에 stderr, stdout 모두 포함
         """
         out = [""]
 
-        def doOutput(isStdout, ss, arg):
+        def doOutput(isStdout: bool, ss: str, arg: list[str]) -> None:
             arg[0] += ss
 
         self._run(cmd, doOutput, out, log=log)
@@ -220,7 +229,7 @@ class CoSsh:
 
     # sftp 상에 경로를 생성한다.
     # remote 경로가 directory이면, is_dir에 True를 전달한다.
-    def mkdirs(self, remote, isFolder=False):
+    def mkdirs(self, remote: str, isFolder: bool = False) -> None:
         dirs = []
         if isFolder:
             pp = remote
@@ -245,19 +254,19 @@ class CoSsh:
                 self.log(1, f"sftp: making dir -> {pp}")
                 self.sftp.mkdir(pp)
 
-    def uploadFileTo(self, srcPath, destFolder):
+    def uploadFileTo(self, srcPath: str, destFolder: str) -> None:
         # print("sftp: uploadFilesTo - %s %s" % (srcPath, destFolder))
         name = os.path.split(srcPath)[1]
         self.uploadFile(srcPath, os.path.join(destFolder, name))
 
-    def downloadFile(self, srcPath, destPath):
+    def downloadFile(self, srcPath: str, destPath: str) -> None:
         destPath = os.path.expanduser(destPath)
         self.log(1, f"sftp: download file {srcPath} -> {destPath}")
         self.sftp.get(srcPath, destPath)
 
     # sftp 상에 파일을 업로드한다.
     # src_path에 dest_path로 업로드한다. 두개 모두 file full path여야 한다.
-    def uploadFile(self, srcPath, destPath):
+    def uploadFile(self, srcPath: str, destPath: str) -> None:
         self.log(1, f"sftp: upload file {srcPath} -> {destPath}")
         srcPath = os.path.expanduser(srcPath)
 
@@ -281,7 +290,7 @@ class CoSsh:
         # print("sftp: success to upload " + srcPath + " ==> " + destPath)
 
     # srcPath, destPath둘다 full path여야한다.
-    def uploadFolder(self, srcPath, destPath):
+    def uploadFolder(self, srcPath: str, destPath: str) -> None:
         self.log(1, f"sftp: upload folder {srcPath} -> {destPath}")
         if not os.path.isdir(srcPath):
             raise Exception(f"uploadFolder: there is no folder[{srcPath}]")

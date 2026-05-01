@@ -1,14 +1,18 @@
 import argparse
 import curses
+import datetime
+import hashlib
+import json
 import os
 import re
 import shlex
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+import zipfile
+from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Callable, ClassVar, Sequence
+from typing import Any, Callable, ClassVar, Sequence
 
 
 class BuildError(RuntimeError):
@@ -40,6 +44,35 @@ class AndroidDevice:
     @property
     def label(self) -> str:
         return f"{self.serial}  {self.description}".rstrip()
+
+
+@dataclass(frozen=True)
+class AndroidCfg:
+    driveTarget: str = "test_driver/and.dart"
+    bundleTargetPlatforms: tuple[str, ...] = ("android-arm", "android-arm64", "android-x64")
+    signingProperties: str | Path | None = None
+    bundletoolJar: str | Path | None = None
+
+
+@dataclass(frozen=True)
+class DesktopCfg:
+    winDriveTarget: str = "test_driver/win.dart"
+    macDriveTarget: str = "test_driver/mac.dart"
+    ffiCommentFiles: tuple[str | Path, ...] = ()
+    ffiLockfile: str | Path | None = None
+    macPreBuildCommands: tuple[tuple[str | Path, tuple[str, ...]], ...] = ()
+    macConfigOnly: bool = True
+    winReleaseSource: str | Path = "app/build/windows/x64/runner/Release"
+    winExeName: str | None = None
+    winExtraFiles: tuple[str | Path, ...] = ()
+    winNsiCommand: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SshCfg:
+    host: str | None = None
+    port: int = 22
+    user: str | None = None
 
 
 class ToolCmd:
@@ -198,6 +231,28 @@ def parseLcovLineCoverage(lcov_text: str) -> tuple[int, int, float]:
     return covered, total, covered / total * 100
 
 
+def readPropertiesFile(path: Path) -> dict[str, str]:
+    properties: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or line.startswith("!"):
+            continue
+        key, separator, value = line.partition("=")
+        if not separator:
+            key, separator, value = line.partition(":")
+        if separator:
+            properties[key.strip()] = value.strip()
+    return properties
+
+
+def fileSha1(path: Path) -> str:
+    digest = hashlib.sha1()
+    with path.open("rb") as fp:
+        for chunk in iter(lambda: fp.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def appendSelectedCommandNumber(input_text: str, selected_index: int) -> str:
     prefix = input_text.rstrip()
     number = str(selected_index + 1)
@@ -207,18 +262,24 @@ def appendSelectedCommandNumber(input_text: str, selected_index: int) -> str:
 class GatDev:
     @dataclass(frozen=True)
     class PathCfg:
-        root: str | Path = Path.cwd()
+        root: str | Path | None = None
         appDir: str | Path = "app"
         serDir: str | Path = "ser"
         webDir: str | Path = "web"
         appPubspec: str | Path = "app/pubspec.yaml"
+        appBuildInfo: str | Path | None = None
         appCoverageInfo: str | Path = "app/coverage/lcov.info"
         appApkPath: str | Path = "app/build/app/outputs/flutter-apk/app-release.apk"
+        appBundlePath: str | Path = "app/build/app/outputs/bundle/release/app-release.aab"
+        appApksPath: str | Path = "app/app-rel.apks"
+        appUniversalApkPath: str | Path = "app/universal.apk"
         appApkRelPath: str | Path = "release/android"
+        releaseRoot: str | Path = "release"
         apkPrefix: str = "app"
 
-        def resolve(self) -> "GatDev.PathCfg":
-            root_path = Path(self.root)
+        def resolve(self, inferred_root: str | Path | None = None) -> "GatDev.PathCfg":
+            root = self.root if self.root is not None else inferred_root
+            root_path = Path.cwd() if root is None else Path(root)
             if not root_path.is_absolute():
                 root_path = Path.cwd() / root_path
 
@@ -226,36 +287,72 @@ class GatDev:
                 p = Path(value)
                 return p if p.is_absolute() else root_path / p
 
-            return type(self)(
-                root=root_path,
-                appDir=path(self.appDir),
-                serDir=path(self.serDir),
-                webDir=path(self.webDir),
-                appPubspec=path(self.appPubspec),
-                appCoverageInfo=path(self.appCoverageInfo),
-                appApkPath=path(self.appApkPath),
-                appApkRelPath=path(self.appApkRelPath),
-                apkPrefix=self.apkPrefix,
-            )
+            values = {}
+            for field in fields(self):
+                value = getattr(self, field.name)
+                if field.name == "root":
+                    values[field.name] = root_path
+                elif field.name == "apkPrefix" or value is None:
+                    values[field.name] = value
+                else:
+                    values[field.name] = path(value)
+            return type(self)(**values)
 
     class Cmds:
+        unitTest = "unitTest"
         andBuild = "andBuild"
         verUp = "verUp"
         serUp = "serUp"
         andInstall = "andInstall"
         andDeploy = "andDeploy"
         andTest = "andTest"
+        winTest = "winTest"
+        macTest = "macTest"
         serTest = "serTest"
         webTest = "webTest"
+        winBuild = "winBuild"
+        winDeploy = "winDeploy"
+        macBuild = "macBuild"
+        macXcodeBuild = "macXcodeBuild"
+        macFfiRestore = "macffiRestore"
+        macDeploy = "macDeploy"
+        linuxBuild = "linuxBuild"
+        iosBuild = "iosBuild"
+        iosDeploy = "iosDeploy"
+        webBuild = "webBuild"
         appCov = "appCov"
         serCov = "serCov"
         webCov = "webCov"
         allCov = "allCov"
 
     pathCfg: ClassVar[PathCfg] = PathCfg()
+    androidCfg: ClassVar[AndroidCfg] = AndroidCfg()
+    desktopCfg: ClassVar[DesktopCfg] = DesktopCfg()
+    sshCfg: ClassVar[SshCfg] = SshCfg()
     coverageMinLines: ClassVar[float] = 80.0
-    serUpArgs: ClassVar[tuple[str, ...]] = ("prod", "run")
-    cmdList: ClassVar[list[str]] = [
+    androidDriveTarget: ClassVar[str] = "test_driver/and.dart"
+    winDriveTarget: ClassVar[str] = "test_driver/win.dart"
+    macDriveTarget: ClassVar[str] = "test_driver/mac.dart"
+    writeBuildInfoBeforeBuild: ClassVar[bool] = False
+    buildInfoDateFormat: ClassVar[str] = "%y-%m-%dT%H"
+    androidBundleTargetPlatforms: ClassVar[tuple[str, ...]] = ("android-arm", "android-arm64", "android-x64")
+    androidSigningProperties: ClassVar[str | Path | None] = None
+    bundletoolJar: ClassVar[str | Path | None] = None
+    sshDeployHost: ClassVar[str | None] = None
+    sshDeployPort: ClassVar[int] = 22
+    sshDeployUser: ClassVar[str | None] = None
+    ffiCommentFiles: ClassVar[tuple[str | Path, ...]] = ()
+    ffiLockfile: ClassVar[str | Path | None] = None
+    macPreBuildCommands: ClassVar[tuple[tuple[str | Path, tuple[str, ...]], ...]] = ()
+    macConfigOnly: ClassVar[bool] = True
+    winReleaseSource: ClassVar[str | Path] = "app/build/windows/x64/runner/Release"
+    winExeName: ClassVar[str | None] = None
+    winExtraFiles: ClassVar[tuple[str | Path, ...]] = ()
+    winNsiCommand: ClassVar[tuple[str, ...]] = ()
+    commandMethodAliases: ClassVar[dict[str, str]] = {
+        Cmds.macFfiRestore: "cmdMacFfiRestore",
+    }
+    cmdDisplayOrder: ClassVar[list[str]] = [
         Cmds.andBuild,
         Cmds.verUp,
         Cmds.serUp,
@@ -271,15 +368,149 @@ class GatDev:
     ]
 
     def __init__(self) -> None:
-        self.pathCfg = self.pathCfg.resolve()
+        self.pathCfg = self.pathCfg.resolve(self.inferRoot())
+        self.androidCfg = self.resolveAndroidCfg()
+        self.desktopCfg = self.resolveDesktopCfg()
+        self.sshCfg = self.resolveSshCfg()
+
+    def inferRoot(self) -> Path:
+        module = sys.modules.get(type(self).__module__)
+        module_file = getattr(module, "__file__", None)
+        if module_file:
+            return Path(module_file).resolve().parent
+        return Path.cwd().resolve()
+
+    def resolveAndroidCfg(self) -> AndroidCfg:
+        cfg = type(self).androidCfg
+        return AndroidCfg(
+            driveTarget=self.androidDriveTarget if self.androidDriveTarget != "test_driver/and.dart" else cfg.driveTarget,
+            bundleTargetPlatforms=(
+                self.androidBundleTargetPlatforms
+                if self.androidBundleTargetPlatforms != ("android-arm", "android-arm64", "android-x64")
+                else cfg.bundleTargetPlatforms
+            ),
+            signingProperties=self.androidSigningProperties if self.androidSigningProperties is not None else cfg.signingProperties,
+            bundletoolJar=self.bundletoolJar if self.bundletoolJar is not None else cfg.bundletoolJar,
+        )
+
+    def resolveDesktopCfg(self) -> DesktopCfg:
+        cfg = type(self).desktopCfg
+        return DesktopCfg(
+            winDriveTarget=self.winDriveTarget if self.winDriveTarget != "test_driver/win.dart" else cfg.winDriveTarget,
+            macDriveTarget=self.macDriveTarget if self.macDriveTarget != "test_driver/mac.dart" else cfg.macDriveTarget,
+            ffiCommentFiles=self.ffiCommentFiles or cfg.ffiCommentFiles,
+            ffiLockfile=self.ffiLockfile if self.ffiLockfile is not None else cfg.ffiLockfile,
+            macPreBuildCommands=self.macPreBuildCommands or cfg.macPreBuildCommands,
+            macConfigOnly=self.macConfigOnly if self.macConfigOnly is not True else cfg.macConfigOnly,
+            winReleaseSource=self.winReleaseSource if self.winReleaseSource != "app/build/windows/x64/runner/Release" else cfg.winReleaseSource,
+            winExeName=self.winExeName if self.winExeName is not None else cfg.winExeName,
+            winExtraFiles=self.winExtraFiles or cfg.winExtraFiles,
+            winNsiCommand=self.winNsiCommand or cfg.winNsiCommand,
+        )
+
+    def resolveSshCfg(self) -> SshCfg:
+        cfg = type(self).sshCfg
+        return SshCfg(
+            host=self.sshDeployHost if self.sshDeployHost is not None else cfg.host,
+            port=self.sshDeployPort if self.sshDeployPort != 22 else cfg.port,
+            user=self.sshDeployUser if self.sshDeployUser is not None else cfg.user,
+        )
 
     def run(self, cmd: Sequence[str], *, cwd: Path | None = None) -> None:
         run(cmd, cwd=cwd or self.pathCfg.root)
 
+    def runShell(self, cmd: str, *, cwd: Path | None = None) -> None:
+        print(f"\n$ {cmd}")
+        subprocess.check_call(cmd, cwd=cwd or self.pathCfg.root, shell=True)
+
     def capture(self, cmd: Sequence[str], *, cwd: Path | None = None) -> str:
         return capture(cmd, cwd=cwd or self.pathCfg.root)
 
-    def parseCommandSequence(self, input_text: str) -> list[str]:
+    def resolveProjectPath(self, value: str | Path) -> Path:
+        path = Path(value).expanduser()
+        return path if path.is_absolute() else self.pathCfg.root / path
+
+    def getToolCmd(self, cmd: str) -> str:
+        return cmd
+
+    def toolCmd(self, cmd: str, *args: str) -> list[str]:
+        return ToolCmd.tool(f"{cmd.upper()}_BIN", self.getToolCmd(cmd)) + list(args)
+
+    def flutterCmd(self, *args: str) -> list[str]:
+        return self.toolCmd("flutter", *args)
+
+    def cargoCmd(self, *args: str) -> list[str]:
+        return self.toolCmd("cargo", *args)
+
+    def npmCmd(self, *args: str) -> list[str]:
+        return self.toolCmd("npm", *args)
+
+    def adbCmd(self, *args: str) -> list[str]:
+        return self.toolCmd("adb", *args)
+
+    def gatCmd(self, *args: str) -> list[str]:
+        return self.toolCmd("gat", *args)
+
+    def emulatorCmd(self, *args: str) -> list[str]:
+        return self.toolCmd("emulator", *args)
+
+    def javaCmd(self, *args: str) -> list[str]:
+        return self.toolCmd("java", *args)
+
+    def commandMethodName(self, command: str) -> str:
+        return self.commandMethodAliases.get(command, f"cmd{command[:1].upper()}{command[1:]}")
+
+    def commandNameFromMethodName(self, method_name: str) -> str | None:
+        for command, alias_method_name in self.commandMethodAliases.items():
+            if method_name == alias_method_name:
+                return command
+        if not method_name.startswith("cmd") or len(method_name) <= 3:
+            return None
+        command = method_name[3:]
+        return f"{command[:1].lower()}{command[1:]}"
+
+    def hasTask(self, command: str) -> bool:
+        method_name = self.commandMethodName(command)
+        method = getattr(type(self), method_name, None)
+        base_method = getattr(GatDev, method_name, None)
+        return callable(method) and method is not base_method
+
+    def orderedCmdList(self) -> list[str]:
+        commands: list[str] = []
+        for item in self.cmdDisplayOrder:
+            if item not in commands and self.hasTask(item):
+                commands.append(item)
+        return commands
+
+    def discoveredCmdList(self) -> list[str]:
+        commands: list[str] = []
+        for command in self.commandNames():
+            if self.hasTask(command):
+                commands.append(command)
+        for method_name in sorted(dir(type(self))):
+            command = self.commandNameFromMethodName(method_name)
+            if command and command not in commands and self.hasTask(command):
+                commands.append(command)
+        return commands
+
+    def availableCmdList(self) -> list[str]:
+        ordered = self.orderedCmdList()
+        for command in self.discoveredCmdList():
+            if command not in ordered:
+                ordered.append(command)
+        return ordered
+
+    def requireSupportedCommands(self) -> list[str]:
+        commands = self.availableCmdList()
+        if not commands:
+            raise BuildError("no supported gdev commands are configured")
+        return commands
+
+    def unsupportedTask(self, command: str) -> None:
+        raise BuildError(f"{command} task must be implemented by project gat_dev.py")
+
+    def parseCommandSequence(self, input_text: str, commands: Sequence[str] | None = None) -> list[str]:
+        command_list = list(commands or self.requireSupportedCommands())
         tokens = [token for token in re.split(r"[\s,]+", input_text.strip()) if token]
         if not tokens:
             raise BuildError("no command numbers were entered")
@@ -289,17 +520,25 @@ class GatDev:
             if not token.isdecimal():
                 raise BuildError(f"invalid command number: {token}")
             number = int(token)
-            if number < 1 or number > len(self.cmdList):
+            if number < 1 or number > len(command_list):
                 raise BuildError(f"command number is out of range: {number}")
-            commands.append(self.cmdList[number - 1])
+            commands.append(command_list[number - 1])
         return commands
 
-    def commandSequenceFromInput(self, input_text: str, selected_index: int) -> list[str]:
+    def commandSequenceFromInput(
+        self,
+        input_text: str,
+        selected_index: int,
+        commands: Sequence[str] | None = None,
+    ) -> list[str]:
+        command_list = list(commands or self.requireSupportedCommands())
         if not input_text.strip():
-            return [self.cmdList[selected_index]]
-        return self.parseCommandSequence(input_text)
+            return [command_list[selected_index]]
+        return self.parseCommandSequence(input_text, command_list)
 
     def selectCommandSequenceTui(self) -> list[str] | None:
+        commands = self.requireSupportedCommands()
+
         def menu(stdscr: curses.window) -> list[str] | None:
             try:
                 curses.curs_set(1)
@@ -318,7 +557,7 @@ class GatDev:
                     help_text = "Space: add selected  Enter: run  Up/Down: move  Esc: cancel"
                     stdscr.addnstr(1, 0, help_text, max(0, width - 1))
 
-                for index, command in enumerate(self.cmdList):
+                for index, command in enumerate(commands):
                     row = index + 3
                     if row >= height - 3:
                         break
@@ -339,15 +578,15 @@ class GatDev:
                     return None
                 if key in (curses.KEY_ENTER, 10, 13):
                     try:
-                        return self.commandSequenceFromInput(input_text, selected)
+                        return self.commandSequenceFromInput(input_text, selected, commands)
                     except BuildError as exc:
                         message = str(exc)
                         continue
                 if key in (curses.KEY_UP, ord("k")):
-                    selected = (selected - 1) % len(self.cmdList)
+                    selected = (selected - 1) % len(commands)
                     continue
                 if key in (curses.KEY_DOWN, ord("j")):
-                    selected = (selected + 1) % len(self.cmdList)
+                    selected = (selected + 1) % len(commands)
                     continue
                 if key in (curses.KEY_BACKSPACE, 8, 127):
                     input_text = input_text[:-1]
@@ -367,8 +606,116 @@ class GatDev:
         text = self.pathCfg.appPubspec.read_text(encoding="utf-8")
         self.pathCfg.appPubspec.write_text(replacePubspecVersion(text, version), encoding="utf-8")
 
-    def releaseApkName(self, version: AppVersion) -> str:
+    def apkFileName(self, version: AppVersion) -> str:
         return f"{self.pathCfg.apkPrefix}-{version.full}.apk"
+
+    def updateBuildInfo(self) -> None:
+        if self.pathCfg.appBuildInfo is None:
+            raise BuildError("appBuildInfo path is not configured")
+        version = self.readAppVersion()
+        build_time = datetime.datetime.now().strftime(self.buildInfoDateFormat)
+        self.pathCfg.appBuildInfo.parent.mkdir(parents=True, exist_ok=True)
+        self.pathCfg.appBuildInfo.write_text(
+            f"// 00 will be 0\nfinal g_version = '{version.name}';\nfinal g_buildDate = '{build_time}';",
+            encoding="utf-8",
+        )
+
+    def maybeUpdateBuildInfo(self) -> None:
+        if self.writeBuildInfoBeforeBuild and self.pathCfg.appBuildInfo is not None:
+            self.updateBuildInfo()
+
+    def readAndroidSigningProperties(self, *, signing_properties: str | Path | None) -> dict[str, str]:
+        if signing_properties is None:
+            raise BuildError("androidSigningProperties path is not configured")
+        path = self.resolveProjectPath(signing_properties)
+        if not path.exists():
+            raise BuildError(f"android signing properties file was not found: {path}")
+        return readPropertiesFile(path)
+
+    def bundletoolBuildApksCommand(
+        self,
+        *,
+        signing_properties: str | Path | None,
+        bundletool_jar: str | Path | None,
+        app_bundle_path: Path,
+        app_apks_path: Path,
+    ) -> list[str]:
+        if bundletool_jar is None:
+            raise BuildError("bundletoolJar path is not configured")
+        props = self.readAndroidSigningProperties(signing_properties=signing_properties)
+        required = ["storeFile", "storePassword", "keyAlias", "keyPassword"]
+        missing = [key for key in required if not props.get(key)]
+        if missing:
+            raise BuildError(f"android signing properties missing key(s): {', '.join(missing)}")
+        return self.javaCmd(
+            "-jar",
+            str(self.resolveProjectPath(bundletool_jar)),
+            "build-apks",
+            "--mode=universal",
+            "--bundle",
+            str(app_bundle_path),
+            "--output",
+            str(app_apks_path),
+            "--overwrite",
+            f"--ks={props['storeFile']}",
+            f"--ks-pass=pass:{props['storePassword']}",
+            f"--ks-key-alias={props['keyAlias']}",
+            f"--key-pass=pass:{props['keyPassword']}",
+        )
+
+    def buildAndroidAppBundle(self, *, app_dir: Path, target_platforms: Sequence[str]) -> None:
+        platforms = ",".join(target_platforms)
+        self.run(
+            self.flutterCmd("build", "appbundle", "--target-platform", platforms),
+            cwd=app_dir,
+        )
+
+    def extractUniversalApk(self) -> Path:
+        if not self.pathCfg.appApksPath.exists():
+            raise BuildError(f"APKS file was not found: {self.pathCfg.appApksPath}")
+        if self.pathCfg.appUniversalApkPath.exists():
+            self.pathCfg.appUniversalApkPath.unlink()
+        with zipfile.ZipFile(self.pathCfg.appApksPath) as apks:
+            apks.extract("universal.apk", self.pathCfg.appUniversalApkPath.parent)
+        extracted = self.pathCfg.appUniversalApkPath.parent / "universal.apk"
+        if extracted != self.pathCfg.appUniversalApkPath:
+            shutil.move(str(extracted), self.pathCfg.appUniversalApkPath)
+        return self.pathCfg.appUniversalApkPath
+
+    def copyAndroidUniversalApk(self, version: AppVersion, apk_path: Path) -> Path:
+        if not apk_path.exists():
+            raise BuildError(f"universal APK was not found: {apk_path}")
+        self.pathCfg.appApkRelPath.mkdir(parents=True, exist_ok=True)
+        versioned = self.pathCfg.appApkRelPath / self.apkFileName(version)
+        latest = self.pathCfg.appApkRelPath / "latest.apk"
+        shutil.copy2(apk_path, versioned)
+        shutil.copy2(apk_path, latest)
+        print(f"\nAPK: {versioned}")
+        print(f"APK latest: {latest}")
+        return versioned
+
+    def doAndBundleBuild(
+        self,
+        *,
+        app_dir: Path,
+        root_dir: Path,
+        target_platforms: Sequence[str],
+        signing_properties: str | Path | None,
+        bundletool_jar: str | Path | None,
+    ) -> Path:
+        self.maybeUpdateBuildInfo()
+        version = self.readAppVersion()
+        self.buildAndroidAppBundle(app_dir=app_dir, target_platforms=target_platforms)
+        self.run(
+            self.bundletoolBuildApksCommand(
+                signing_properties=signing_properties,
+                bundletool_jar=bundletool_jar,
+                app_bundle_path=self.pathCfg.appBundlePath,
+                app_apks_path=self.pathCfg.appApksPath,
+            ),
+            cwd=root_dir,
+        )
+        return self.copyAndroidUniversalApk(version, self.extractUniversalApk())
 
     def requireLineCoverage(self, name: str, covered: int, total: int) -> float:
         percent = covered / total * 100 if total else 0.0
@@ -390,56 +737,110 @@ class GatDev:
         except subprocess.CalledProcessError as exc:
             raise BuildError("current branch has no upstream; set upstream before verUp") from exc
 
-    def verUp(self) -> AppVersion:
-        self.ensureGitClean()
-        self.ensureUpstreamExists()
-        old_version = self.readAppVersion()
+    def doVerUp(self, *, root_dir: Path, app_pubspec: Path) -> AppVersion:
+        status = self.capture(["git", "status", "--porcelain"], cwd=root_dir)
+        if status:
+            raise BuildError("git worktree is not clean; arrange changes before verUp")
+        try:
+            self.capture(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd=root_dir)
+        except subprocess.CalledProcessError as exc:
+            raise BuildError("current branch has no upstream; set upstream before verUp") from exc
+        old_version = parseFlutterVersion(app_pubspec.read_text(encoding="utf-8"))
         new_version = bumpFlutterVersion(old_version)
         print(f"\nVersion: {old_version.full} -> {new_version.full}")
-        self.writeAppVersion(new_version)
-        self.run(["git", "add", "--", str(self.pathCfg.appPubspec.relative_to(self.pathCfg.root))], cwd=self.pathCfg.root)
-        self.run(["git", "commit", "-m", f"app: version - bump to {new_version.name}"], cwd=self.pathCfg.root)
-        self.run(["git", "push"], cwd=self.pathCfg.root)
+        app_pubspec.write_text(
+            replacePubspecVersion(app_pubspec.read_text(encoding="utf-8"), new_version),
+            encoding="utf-8",
+        )
+        self.run(["git", "add", "--", str(app_pubspec.relative_to(root_dir))], cwd=root_dir)
+        self.run(["git", "commit", "-m", f"app: version - bump to {new_version.name}"], cwd=root_dir)
+        self.run(["git", "push"], cwd=root_dir)
         return new_version
 
-    def andTest(self) -> None:
-        self.run(ToolCmd.flutter("pub", "get"), cwd=self.pathCfg.appDir)
-        self.run(ToolCmd.flutter("analyze"), cwd=self.pathCfg.appDir)
-        self.run(ToolCmd.flutter("test"), cwd=self.pathCfg.appDir)
+    def runConfiguredCommands(self, commands: Sequence[tuple[str | Path, tuple[str, ...]]]) -> None:
+        for cwd, cmd in commands:
+            self.run(cmd, cwd=self.resolveProjectPath(cwd))
 
-    def serTest(self) -> None:
-        self.run(ToolCmd.cargo("test"), cwd=self.pathCfg.serDir)
+    def doUnitTest(self, *, unit_test_commands: Sequence[tuple[str | Path, tuple[str, ...]]]) -> None:
+        if unit_test_commands:
+            self.runConfiguredCommands(unit_test_commands)
+            return
+        self.cmdAndTest()
 
-    def webTest(self) -> None:
-        self.run(ToolCmd.npm("test"), cwd=self.pathCfg.webDir)
+    def firstAndroidAvd(self) -> str:
+        output = self.capture(self.emulatorCmd("-list-avds"), cwd=self.pathCfg.root)
+        avds = [line.strip() for line in output.splitlines() if line.strip()]
+        if not avds:
+            raise BuildError("no Android AVDs were found")
+        return avds[0]
 
-    def appCov(self) -> None:
-        self.run(ToolCmd.flutter("pub", "get"), cwd=self.pathCfg.appDir)
-        self.run(ToolCmd.flutter("test", "--coverage", "--concurrency=1"), cwd=self.pathCfg.appDir)
-        if not self.pathCfg.appCoverageInfo.exists():
-            raise BuildError(f"app coverage file was not found: {self.pathCfg.appCoverageInfo}")
-        covered, total, _ = parseLcovLineCoverage(self.pathCfg.appCoverageInfo.read_text(encoding="utf-8"))
-        self.requireLineCoverage("app", covered, total)
+    def startAndroidEmulator(self, avd_name: str) -> None:
+        subprocess.Popen(self.emulatorCmd(f"@{avd_name}"), cwd=self.pathCfg.root)
 
-    def serCov(self) -> None:
+    def findRunningAndroidEmulator(self) -> str:
+        output = self.capture(self.adbCmd("devices"), cwd=self.pathCfg.root)
+        for line in output.splitlines():
+            if "emulator" in line and "\tdevice" in line:
+                return line.split()[0]
+        raise BuildError("running Android emulator was not found")
+
+    def doAndIntegrationTest(self, *, app_dir: Path, root_dir: Path, drive_target: str) -> None:
+        print("\nRunning android integration test...")
+        avd = self.firstAndroidAvd()
+        print(f"avd: {avd}")
+        self.startAndroidEmulator(avd)
+        import time
+        time.sleep(6)
+        emulator = self.findRunningAndroidEmulator()
+        self.run(self.flutterCmd("drive", "-d", emulator, f"--target={drive_target}"), cwd=app_dir)
+        self.run(self.adbCmd("-s", emulator, "emu", "kill"), cwd=root_dir)
+
+    def doWinTest(self, *, app_dir: Path, drive_target: str) -> None:
+        self.run(self.flutterCmd("drive", "-d", "windows", f"--target={drive_target}"), cwd=app_dir)
+
+    def doMacTest(self, *, app_dir: Path, drive_target: str) -> None:
+        self.run(self.flutterCmd("drive", "-d", "macos", f"--target={drive_target}"), cwd=app_dir)
+
+    def doAndTest(self, *, app_dir: Path) -> None:
+        self.run(self.flutterCmd("pub", "get"), cwd=app_dir)
+        self.run(self.flutterCmd("analyze"), cwd=app_dir)
+        self.run(self.flutterCmd("test"), cwd=app_dir)
+
+    def doSerTest(self, *, ser_dir: Path) -> None:
+        self.run(self.cargoCmd("test"), cwd=ser_dir)
+
+    def doWebTest(self, *, web_dir: Path) -> None:
+        self.run(self.npmCmd("test"), cwd=web_dir)
+
+    def doAppCov(self, *, app_dir: Path, coverage_info: Path, coverage_name: str) -> None:
+        self.run(self.flutterCmd("pub", "get"), cwd=app_dir)
+        self.run(self.flutterCmd("test", "--coverage", "--concurrency=1"), cwd=app_dir)
+        if not coverage_info.exists():
+            raise BuildError(f"app coverage file was not found: {coverage_info}")
+        covered, total, _ = parseLcovLineCoverage(coverage_info.read_text(encoding="utf-8"))
+        self.requireLineCoverage(coverage_name, covered, total)
+
+    def doSerCov(self, *, ser_dir: Path, coverage_min_lines: float) -> None:
         self.run(
-            ToolCmd.cargo("llvm-cov", "--fail-under-lines", str(int(self.coverageMinLines)), "--summary-only"),
-            cwd=self.pathCfg.serDir,
+            self.cargoCmd("llvm-cov", "--fail-under-lines", str(int(coverage_min_lines)), "--summary-only"),
+            cwd=ser_dir,
         )
 
-    def webCov(self) -> None:
-        self.run(ToolCmd.npm("run", "test:coverage"), cwd=self.pathCfg.webDir)
+    def doWebCov(self, *, web_dir: Path, npm_args: Sequence[str]) -> None:
+        self.run(self.npmCmd(*npm_args), cwd=web_dir)
 
-    def allCov(self) -> None:
-        self.appCov()
-        self.serCov()
-        self.webCov()
+    def doAllCov(self, *, commands: Sequence[str]) -> None:
+        commands_by_name = self.checkedCommandMap()
+        for command in commands:
+            if command not in commands_by_name:
+                raise BuildError(f"{command} task is not supported by this project")
+            commands_by_name[command]()
 
     def copyAndroidApk(self, version: AppVersion) -> Path:
         if not self.pathCfg.appApkPath.exists():
             raise BuildError(f"release APK was not found: {self.pathCfg.appApkPath}")
         self.pathCfg.appApkRelPath.mkdir(parents=True, exist_ok=True)
-        versioned = self.pathCfg.appApkRelPath / self.releaseApkName(version)
+        versioned = self.pathCfg.appApkRelPath / self.apkFileName(version)
         latest = self.pathCfg.appApkRelPath / "latest.apk"
         shutil.copy2(self.pathCfg.appApkPath, versioned)
         shutil.copy2(self.pathCfg.appApkPath, latest)
@@ -456,7 +857,7 @@ class GatDev:
         raise BuildError("release APK was not found; run andBuild first")
 
     def listAndroidDevices(self) -> list[AndroidDevice]:
-        devices = parseAdbDevices(self.capture(ToolCmd.adb("devices", "-l"), cwd=self.pathCfg.root))
+        devices = parseAdbDevices(self.capture(self.adbCmd("devices", "-l"), cwd=self.pathCfg.root))
         if not devices:
             raise BuildError("no installable Android devices were found by adb")
         return devices
@@ -486,7 +887,7 @@ class GatDev:
         )
         return None if selected is None else devices[selected]
 
-    def andInstall(self, apk_path: Path | None = None) -> AndroidDevice | None:
+    def doAndInstall(self, *, apk_path: Path | None = None) -> AndroidDevice | None:
         apk = apk_path or self.defaultInstallApk()
         if not apk.exists():
             raise BuildError(f"release APK was not found: {apk}")
@@ -494,48 +895,419 @@ class GatDev:
         if device is None:
             print("\nInstall cancelled.")
             return None
-        self.run(ToolCmd.adb("-s", device.serial, "install", "-r", "-d", str(apk)), cwd=self.pathCfg.root)
+        self.run(self.adbCmd("-s", device.serial, "install", "-r", "-d", str(apk)), cwd=self.pathCfg.root)
         return device
 
-    def andBuild(self) -> Path:
+    def doAndBuild(self, *, app_dir: Path) -> Path:
+        self.maybeUpdateBuildInfo()
         version = self.readAppVersion()
-        self.run(ToolCmd.flutter("pub", "get"), cwd=self.pathCfg.appDir)
-        self.run(ToolCmd.flutter("build", "apk", "--release"), cwd=self.pathCfg.appDir)
+        self.run(self.flutterCmd("pub", "get"), cwd=app_dir)
+        self.run(self.flutterCmd("build", "apk", "--release"), cwd=app_dir)
         apk = self.copyAndroidApk(version)
-        self.andInstall(apk)
+        self.doAndInstall(apk_path=apk)
         return apk
 
-    def andDeploy(self) -> None:
-        self.andTest()
-        self.serTest()
-        self.webTest()
-        self.verUp()
-        self.andBuild()
+    def doAndDeploy(self, *, commands: Sequence[str]) -> None:
+        commands_by_name = self.checkedCommandMap()
+        for command in commands:
+            if command not in commands_by_name:
+                raise BuildError(f"{command} task is not supported by this project")
+            commands_by_name[command]()
 
-    def serUp(self) -> None:
-        self.run(ToolCmd.gat(*self.serUpArgs), cwd=self.pathCfg.serDir)
+    def doSerUp(self, *, ser_dir: Path, ser_up_args: Sequence[str]) -> None:
+        self.run(self.gatCmd(*ser_up_args), cwd=ser_dir)
+
+    def cmdUnitTest(self) -> None:
+        self.unsupportedTask(self.Cmds.unitTest)
+
+    def cmdAndBuild(self) -> None:
+        self.unsupportedTask(self.Cmds.andBuild)
+
+    def cmdVerUp(self) -> None:
+        self.unsupportedTask(self.Cmds.verUp)
+
+    def cmdSerUp(self) -> None:
+        self.unsupportedTask(self.Cmds.serUp)
+
+    def cmdAndInstall(self) -> None:
+        self.unsupportedTask(self.Cmds.andInstall)
+
+    def cmdAndDeploy(self) -> None:
+        self.unsupportedTask(self.Cmds.andDeploy)
+
+    def cmdAndTest(self) -> None:
+        self.unsupportedTask(self.Cmds.andTest)
+
+    def cmdWinTest(self) -> None:
+        self.unsupportedTask(self.Cmds.winTest)
+
+    def cmdMacTest(self) -> None:
+        self.unsupportedTask(self.Cmds.macTest)
+
+    def cmdSerTest(self) -> None:
+        self.unsupportedTask(self.Cmds.serTest)
+
+    def cmdWebTest(self) -> None:
+        self.unsupportedTask(self.Cmds.webTest)
+
+    def cmdWinBuild(self) -> None:
+        self.unsupportedTask(self.Cmds.winBuild)
+
+    def cmdWinDeploy(self) -> None:
+        self.unsupportedTask(self.Cmds.winDeploy)
+
+    def cmdMacBuild(self) -> None:
+        self.unsupportedTask(self.Cmds.macBuild)
+
+    def cmdMacXcodeBuild(self) -> None:
+        self.unsupportedTask(self.Cmds.macXcodeBuild)
+
+    def cmdMacFfiRestore(self) -> None:
+        self.unsupportedTask(self.Cmds.macFfiRestore)
+
+    def cmdMacDeploy(self) -> None:
+        self.unsupportedTask(self.Cmds.macDeploy)
+
+    def cmdLinuxBuild(self) -> None:
+        self.unsupportedTask(self.Cmds.linuxBuild)
+
+    def cmdIosBuild(self) -> None:
+        self.unsupportedTask(self.Cmds.iosBuild)
+
+    def cmdIosDeploy(self) -> None:
+        self.unsupportedTask(self.Cmds.iosDeploy)
+
+    def cmdWebBuild(self) -> None:
+        self.unsupportedTask(self.Cmds.webBuild)
+
+    def cmdAppCov(self) -> None:
+        self.unsupportedTask(self.Cmds.appCov)
+
+    def cmdSerCov(self) -> None:
+        self.unsupportedTask(self.Cmds.serCov)
+
+    def cmdWebCov(self) -> None:
+        self.unsupportedTask(self.Cmds.webCov)
+
+    def cmdAllCov(self) -> None:
+        self.unsupportedTask(self.Cmds.allCov)
+
+    def commentPrefixForPath(self, path: Path) -> str:
+        return "#" if path.suffix in {".yaml", ".yml"} else "//"
+
+    def setFfiComments(self, comment: bool, *, ffi_comment_files: Sequence[str | Path]) -> None:
+        for raw_path in ffi_comment_files:
+            path = self.resolveProjectPath(raw_path)
+            if not path.exists():
+                continue
+            prefix = self.commentPrefixForPath(path)
+            lines: list[str] = []
+            for raw_line in path.read_text(encoding="utf-8").splitlines():
+                line = raw_line.rstrip(" \r\n")
+                stripped = line.lstrip(" ")
+                indent = line[:len(line) - len(stripped)]
+                if line.endswith("##ffiCmt"):
+                    if comment and not stripped.startswith(prefix):
+                        line = f"{indent}{prefix}{stripped}"
+                    elif not comment and stripped.startswith(prefix):
+                        line = f"{indent}{stripped[len(prefix):]}"
+                lines.append(line)
+            path.write_text("\n".join(lines), encoding="utf-8")
+
+    def sqfliteFfiCommentOut(
+        self,
+        *,
+        ffi_comment_files: Sequence[str | Path],
+        ffi_lockfile: str | Path | None,
+    ) -> None:
+        self.setFfiComments(True, ffi_comment_files=ffi_comment_files)
+        if ffi_lockfile is None:
+            return
+        lockfile = self.resolveProjectPath(ffi_lockfile)
+        if lockfile.exists():
+            shutil.move(str(lockfile), str(lockfile) + ".bak")
+
+    def sqfliteFfiRestore(
+        self,
+        *,
+        ffi_comment_files: Sequence[str | Path],
+        ffi_lockfile: str | Path | None,
+    ) -> None:
+        if ffi_lockfile is not None:
+            lockfile = self.resolveProjectPath(ffi_lockfile)
+            backup = Path(str(lockfile) + ".bak")
+            if backup.exists():
+                shutil.move(str(backup), str(lockfile))
+            else:
+                print(f"backup file {backup} not found")
+        self.setFfiComments(False, ffi_comment_files=ffi_comment_files)
+
+    def doMacFfiRestore(
+        self,
+        *,
+        ffi_lockfile: str | Path | None,
+        ffi_comment_files: Sequence[str | Path],
+    ) -> None:
+        self.sqfliteFfiRestore(
+            ffi_comment_files=ffi_comment_files,
+            ffi_lockfile=ffi_lockfile,
+        )
+
+    def doLinuxBuild(self, *, app_dir: Path, release_root: Path) -> None:
+        self.maybeUpdateBuildInfo()
+        version = self.readAppVersion()
+        self.run(self.flutterCmd("build", "linux", "--release"), cwd=app_dir)
+        target = release_root / "linux" / f"V{version.name}"
+        latest = release_root / "linux" / "latest"
+        shutil.rmtree(target, ignore_errors=True)
+        target.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(app_dir / "build/linux/x86/release/bundle", target / "bundle")
+        shutil.rmtree(latest, ignore_errors=True)
+        latest.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(target / "bundle", latest / "bundle")
+
+    def doWebBuild(self, *, app_dir: Path) -> None:
+        self.maybeUpdateBuildInfo()
+        self.run(self.flutterCmd("build", "web", "--no-tree-shake-icons"), cwd=app_dir)
+
+    def doIosBuild(self, *, app_dir: Path) -> None:
+        self.maybeUpdateBuildInfo()
+        self.run(self.flutterCmd("build", "ipa"), cwd=app_dir)
+
+    def doIosDeploy(self, *, app_dir: Path, upload_command: str) -> None:
+        self.runShell(upload_command, cwd=app_dir)
+
+    def doMacXcodeBuild(self, *, app_dir: Path) -> None:
+        self.run(["xcodebuild", "archive", "-workspace", "Runner.xcworkspace", "-scheme", "Runner", "-configuration", "Release"], cwd=app_dir / "macos")
+        self.run(["open", "Runner.xcworkspace"], cwd=app_dir / "macos")
+
+    def doMacBuild(
+        self,
+        *,
+        app_dir: Path,
+        ffi_comment_files: Sequence[str | Path],
+        ffi_lockfile: str | Path | None,
+        mac_pre_build_commands: Sequence[tuple[str | Path, tuple[str, ...]]],
+        mac_config_only: bool,
+    ) -> None:
+        if ffi_comment_files:
+            self.sqfliteFfiCommentOut(
+                ffi_comment_files=ffi_comment_files,
+                ffi_lockfile=ffi_lockfile,
+            )
+        self.runConfiguredCommands(mac_pre_build_commands)
+        self.maybeUpdateBuildInfo()
+        cmd = self.flutterCmd("build", "macos")
+        if mac_config_only:
+            cmd.append("--config-only")
+        else:
+            cmd.append("--release")
+        self.run(cmd, cwd=app_dir)
+
+    def doMacDeploy(
+        self,
+        *,
+        mac_app_path: str | Path,
+        mac_unsigned_pkg: str | Path,
+        mac_signed_pkg: str | Path,
+        mac_app_sign_identity: str | None,
+        mac_product_sign_identity: str | None,
+        mac_upload_command: Sequence[str],
+    ) -> None:
+        app_path = self.resolveProjectPath(mac_app_path)
+        unsigned_pkg = self.resolveProjectPath(mac_unsigned_pkg)
+        signed_pkg = self.resolveProjectPath(mac_signed_pkg)
+        if mac_app_sign_identity is None or mac_product_sign_identity is None:
+            raise BuildError("mac signing identities are not configured")
+        if unsigned_pkg.exists():
+            unsigned_pkg.unlink()
+        self.run(["codesign", "-vfs", mac_app_sign_identity, str(app_path)], cwd=self.pathCfg.root)
+        self.run(["xcrun", "productbuild", "--component", str(app_path), "/Applications/", str(unsigned_pkg)], cwd=self.pathCfg.root)
+        self.run(["xcrun", "productsign", "--sign", mac_product_sign_identity, str(unsigned_pkg), str(signed_pkg)], cwd=self.pathCfg.root)
+        if mac_upload_command:
+            self.run(mac_upload_command, cwd=self.pathCfg.root)
+
+    def doWinBuild(
+        self,
+        *,
+        app_dir: Path,
+        release_root: Path,
+        win_release_source: str | Path,
+        win_exe_name: str | None,
+        win_extra_files: Sequence[str | Path],
+        win_nsi_command: Sequence[str],
+    ) -> None:
+        self.maybeUpdateBuildInfo()
+        version = self.readAppVersion()
+        self.run(self.flutterCmd("build", "windows"), cwd=app_dir)
+        target = release_root / "win" / f"V{version.name}"
+        shutil.rmtree(target, ignore_errors=True)
+        shutil.copytree(self.resolveProjectPath(win_release_source), target)
+        if win_exe_name:
+            default_exe = target / "app.exe"
+            if default_exe.exists():
+                default_exe.rename(target / win_exe_name)
+        for raw_file in win_extra_files:
+            source = self.resolveProjectPath(raw_file)
+            if source.exists():
+                shutil.copy2(source, target / source.name)
+        self.writeWindowsUpdateInfo(target, version)
+        latest = release_root / "win" / "latest"
+        shutil.rmtree(latest, ignore_errors=True)
+        shutil.copytree(target, latest)
+        (app_dir / ".appVer.txt").write_text(f'!define APP_VERSION "{version.name}.0"', encoding="utf-8")
+        if win_nsi_command:
+            self.run(win_nsi_command, cwd=app_dir)
+
+    def writeWindowsUpdateInfo(self, target: Path, version: AppVersion) -> None:
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        files = []
+        for root, _, names in os.walk(target):
+            for name in names:
+                if name == "updateInfo.json":
+                    continue
+                path = Path(root) / name
+                files.append({
+                    "name": str(path.relative_to(target)).replace("\\", "/"),
+                    "size": path.stat().st_size,
+                    "hash": fileSha1(path),
+                })
+        (target / "updateInfo.json").write_text(
+            json.dumps({
+                "version": version.name,
+                "build-time": now,
+                "buildTime": now,
+                "files": files,
+            }, indent=1),
+            encoding="utf-8",
+        )
+
+    def doWinDeploy(self, *, release_root: Path, apk_prefix: str, deploy_path: str | None = None) -> None:
+        version = self.readAppVersion()
+        target = release_root / "win" / f"V{version.name}"
+        zip_path = release_root / "win" / f"{apk_prefix}-win-{version.name}.zip"
+        zip_path.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(zip_path, "w") as zip_work:
+            for root, _, files in os.walk(target):
+                for name in files:
+                    path = Path(root) / name
+                    zip_work.write(path, path.relative_to(target), compress_type=zipfile.ZIP_DEFLATED)
+        self.uploadWindowsZip(zip_path, deploy_path=deploy_path)
+
+    def openCoSsh(self) -> Any:
+        from . import ssh_deploy
+        try:
+            return ssh_deploy.openCoSsh(
+                host=self.sshCfg.host,
+                port=self.sshCfg.port,
+                user=self.sshCfg.user,
+            )
+        except ssh_deploy.SshDeployError as exc:
+            raise BuildError(str(exc)) from exc
+
+    def uploadAndroidLatest(self, *, deploy_path: str | None) -> None:
+        if deploy_path is None:
+            raise BuildError("android deploy path is not configured")
+        version = self.readAppVersion()
+        apk = self.pathCfg.appApkRelPath / self.apkFileName(version)
+        version_code = androidVersionCode(version)
+        ssh = self.openCoSsh()
+        try:
+            from . import ssh_deploy
+            ssh.run(f"mkdir -p {deploy_path}")
+            ssh_deploy.uploadFile(
+                ssh=ssh,
+                local_path=apk,
+                remote_path=f"{deploy_path}/latest.apk",
+            )
+            ssh.run(f"echo {version_code} > {deploy_path}/latest.ver")
+        finally:
+            ssh.close()
+
+    def uploadWindowsZip(self, zip_path: Path, *, deploy_path: str | None = None) -> None:
+        if deploy_path is None:
+            return
+        ssh = self.openCoSsh()
+        try:
+            from . import ssh_deploy
+            remote_zip = f"{deploy_path}/{zip_path.name}"
+            ssh_deploy.runRemote(ssh=ssh, command=f"mkdir -p {deploy_path}")
+            ssh_deploy.uploadFile(ssh=ssh, local_path=zip_path, remote_path=remote_zip)
+        finally:
+            ssh.close()
+
+    def googlePlayCredentialPath(self, *, credential_file: str | Path) -> Path:
+        return self.resolveProjectPath(credential_file)
+
+    def googlePlayClientSecretsPath(self, *, client_secrets_file: str | Path) -> Path:
+        return self.resolveProjectPath(client_secrets_file)
+
+    def googlePlayService(
+        self,
+        *,
+        credential_file: str | Path,
+        client_secrets_file: str | Path,
+        scope: str,
+        auth_host: str,
+        auth_port: int,
+    ) -> Any:
+        from . import google_play
+        try:
+            return google_play.buildService(
+                client_secrets_path=self.googlePlayClientSecretsPath(client_secrets_file=client_secrets_file),
+                credential_path=self.googlePlayCredentialPath(credential_file=credential_file),
+                scope=scope,
+                host=auth_host,
+                port=auth_port,
+            )
+        except google_play.GooglePlayError as exc:
+            raise BuildError(str(exc)) from exc
+
+    def googlePlayPublish(
+        self,
+        *,
+        package_name: str,
+        track: str,
+        scope: str,
+        auth_host: str,
+        auth_port: int,
+        credential_file: str | Path,
+        client_secrets_file: str | Path,
+        aab_path: str | Path,
+    ) -> None:
+        if not package_name:
+            raise BuildError("google play package name is not configured")
+        from . import google_play
+        google_play.publishBundle(
+            service=self.googlePlayService(
+                credential_file=credential_file,
+                client_secrets_file=client_secrets_file,
+                scope=scope,
+                auth_host=auth_host,
+                auth_port=auth_port,
+            ),
+            package_name=package_name,
+            track=track,
+            aab_path=self.resolveProjectPath(aab_path),
+        )
+
+    def commandNames(self) -> list[str]:
+        return [
+            value for key, value in vars(self.Cmds).items()
+            if not key.startswith("_") and isinstance(value, str)
+        ]
 
     def commandMap(self) -> dict[str, Callable[[], object]]:
-        return {
-            self.Cmds.andBuild: self.andBuild,
-            self.Cmds.andInstall: self.andInstall,
-            self.Cmds.andDeploy: self.andDeploy,
-            self.Cmds.serUp: self.serUp,
-            self.Cmds.andTest: self.andTest,
-            self.Cmds.serTest: self.serTest,
-            self.Cmds.webTest: self.webTest,
-            self.Cmds.appCov: self.appCov,
-            self.Cmds.serCov: self.serCov,
-            self.Cmds.webCov: self.webCov,
-            self.Cmds.allCov: self.allCov,
-            self.Cmds.verUp: self.verUp,
-        }
+        commands: dict[str, Callable[[], object]] = {}
+        for command in self.availableCmdList():
+            method_name = self.commandMethodName(command)
+            method = getattr(self, method_name, None)
+            if callable(method):
+                commands[command] = method
+        return commands
 
     def checkedCommandMap(self) -> dict[str, Callable[[], object]]:
         commands_by_name = self.commandMap()
-        missing = [command for command in self.cmdList if command not in commands_by_name]
-        if missing:
-            raise BuildError(f"commandMap is missing cmdList command(s): {', '.join(missing)}")
         return commands_by_name
 
     def resolveCommands(self, command: str | None) -> list[str] | None:
@@ -550,12 +1322,12 @@ class GatDev:
 
     def parseArgs(self, argv: Sequence[str]) -> argparse.Namespace:
         parser = argparse.ArgumentParser(description="gdev project build helper")
-        parser.add_argument("command", choices=self.cmdList, nargs="?")
+        parser.add_argument("command", choices=self.requireSupportedCommands(), nargs="?")
         return parser.parse_args(argv)
 
     def main(self, argv: Sequence[str] | None = None) -> int:
-        args = self.parseArgs(sys.argv[1:] if argv is None else argv)
         try:
+            args = self.parseArgs(sys.argv[1:] if argv is None else argv)
             commands = self.resolveCommands(args.command)
             if commands is None:
                 return 0
@@ -573,9 +1345,12 @@ class GatDev:
 
 
 __all__ = [
+    "AndroidCfg",
     "AndroidDevice",
     "AppVersion",
     "BuildError",
+    "DesktopCfg",
     "GatDev",
+    "SshCfg",
     "ToolCmd",
 ]

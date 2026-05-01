@@ -1,9 +1,10 @@
 import os
 import io
+from typing import Any
 #from myutil import glog
 
 class CoS3:
-  def __init__(self, key=None, secret=None):
+  def __init__(self, key: str | None = None, secret: str | None = None) -> None:
     import boto3
     import botocore
     if key is None:
@@ -17,7 +18,7 @@ class CoS3:
       )
       self.res = session.resource("s3")
 
-  def bucketAllName(self):
+  def bucketAllName(self) -> list[str]:
     lst = []
     for bucket in self.res.buckets.all():
       lst.append(bucket.name)
@@ -25,34 +26,34 @@ class CoS3:
     return lst
 
   # name: 'ucount-it.stage'
-  def bucketGet(self, name):
+  def bucketGet(self, name: str) -> "CoBucket":
     return CoBucket(self, self.res.Bucket(name))
 
 
 class CoBucket:
-  def __init__(self, s3, bucket):
+  def __init__(self, s3: CoS3, bucket: Any) -> None:
     self.s3 = s3
     self.bucket = bucket
     self.name = bucket.name
 
   # for file in bucket.objectList('aging.ucount.it/export/565c04166fb69292224594d1/20170323'):
   #   glog(file.key)
-  def objectList(self, prefix=None):
+  def objectList(self, prefix: str | None = None) -> Any:
     return self.bucket.objects.filter(Prefix=prefix).all()
 
   # key: test.jpg -- targetPath
-  def upload(self, key, pp):
+  def upload(self, key: str, pp: str) -> None:
     #with open(pp, "rb") as fp:
     #	self.bucket.put_object(Key=key, Body=fp)
     self.bucket.upload_file(pp, key)
 
-  def temp(self):
+  def temp(self) -> None:
     result = self.s3.res.meta.client.list_objects(Bucket='test', Delimiter='/')
     for o in result.get('CommonPrefixes'):
       print(o.get('Prefix'))
 
   # 
-  def existFile(self, key):
+  def existFile(self, key: str) -> bool:
     try:
       self.s3.res.Object(self.name, key).load()
       return True
@@ -63,7 +64,7 @@ class CoBucket:
         raise
 
   # can be slow
-  def existFolder(self, key):
+  def existFolder(self, key: str) -> bool:
     result = self.s3.client.list_objects(Bucket=self.name, Prefix=key)
     if "Contents" in result:
       return True
@@ -71,7 +72,7 @@ class CoBucket:
     return False			
 
   # 이건 하위 폴더 이름 목록만 얻기
-  def folderList(self, pp):
+  def folderList(self, pp: str) -> list[str]:
     lst = []
     paginator = self.s3.client.get_paginator('list_objects')
     for result in paginator.paginate(Bucket=self.name, Delimiter='/', Prefix=pp):
@@ -84,7 +85,7 @@ class CoBucket:
 
     return lst
 
-  def fileList(self, pp):
+  def fileList(self, pp: str) -> list[str]:
     lst = []
     paginator = self.s3.client.get_paginator('list_objects')
     for result in paginator.paginate(Bucket=self.name, Delimiter='/', Prefix=pp):
@@ -100,7 +101,7 @@ class CoBucket:
     return lst
 
 
-  def downloadDir(self, prefix, localPath='/tmp'):
+  def downloadDir(self, prefix: str, localPath: str = '/tmp') -> None:
     if not prefix.endswith('/'):
       prefix += "/"
 
@@ -128,7 +129,7 @@ class CoBucket:
 
 
   #'ucount-it.stage', 'aging.ucount.it/config/report.csv', "c:\\work\\pbi\\"
-  def downloadFile(self, key, target):
+  def downloadFile(self, key: str, target: str | None) -> bytes | str:
     if target is None:
       #with io.BytesIO() as f:
       #	self.bucket.download_fileobj(key, f)
@@ -145,11 +146,11 @@ class CoBucket:
     self.bucket.download_file(key, target)
     return target
 
-  def deleteFile(self, bucketName, key):
+  def deleteFile(self, bucketName: str, key: str) -> None:
     obj = self.res.Object(bucketName, key)
     obj.delete()
 
-  def deleteFolder(self, bucketName, key):
+  def deleteFolder(self, bucketName: str, key: str) -> None:
     bucket = self.res.Bucket(bucketName)
     bucket.objects.filter(Prefix=key+'/').delete()
-    
+

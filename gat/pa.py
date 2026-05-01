@@ -8,6 +8,8 @@ import yaml
 import asyncio
 import datetime
 import subprocess
+from collections.abc import Awaitable, Sequence
+from typing import Any
 
 
 # dkCmd = "sudo docker"
@@ -18,16 +20,19 @@ if not scriptName.startswith("p"):
     ctrCmd = "docker"
 
 
-def run(cmd):
+PsApp = tuple[str | None, ...]
+
+
+def run(cmd: str) -> None:
     subprocess.check_call(cmd, shell=True)
 
 
-def runOutput(cmd):
+def runOutput(cmd: str) -> str:
     ret = subprocess.check_output(cmd, shell=True)
     return ret.decode("utf-8").strip()
 
 
-def runSafe(cmd):
+def runSafe(cmd: str) -> bool:
     try:
         run(cmd)
         return True
@@ -35,14 +40,14 @@ def runSafe(cmd):
         return False
 
 
-def ctrExec(cmd):
+def ctrExec(cmd: str) -> None:
     # ret = subprocess.check_output(f"{dkCmd} exec -it {cmd}", shell=True)
     # print(ret.decode("utf-8").strip())
     ss = runOutput(f"{ctrCmd} exec -it {cmd}")
     print(f" > {ss}")
 
 
-def printTable(arr, minWidth=3, minGap=2):
+def printTable(arr: list[list[Any]], minWidth: int = 3, minGap: int = 2) -> None:
     """
     arr = [[a,b,c], [v1,v2,v3]]
     """
@@ -64,7 +69,7 @@ def printTable(arr, minWidth=3, minGap=2):
         print("")
 
 
-def secs2str(sec):
+def secs2str(sec: int | float) -> str:
     """
     uptime용
     """
@@ -84,7 +89,7 @@ def secs2str(sec):
     return f"{td.seconds}s"
 
 
-def pstime2str(tt):
+def pstime2str(tt: str) -> str:
     """
     00:01:02 -> 01:02
     02:01:02 -> 2h 1m
@@ -98,7 +103,7 @@ def pstime2str(tt):
     return f"{int(tt[:2])}h {int(tt[3:5])}m"
 
 
-def test_pstime2str():
+def test_pstime2str() -> None:
     ss = pstime2str("00:01:02")
     print(ss)
     assert ss == "01:02"
@@ -111,7 +116,7 @@ def test_pstime2str():
     assert ss == "15d 1h"
 
 
-def size2str(kb):
+def size2str(kb: int | float) -> str:
     """
     75900 -> 75mb
     275899 -> 275mb
@@ -121,7 +126,7 @@ def size2str(kb):
     return f"{mb:.1f}mb"
 
 
-def test_size2str():
+def test_size2str() -> None:
     ss = size2str(75900)
     print(ss)
     assert ss == "74.1mb"
@@ -139,7 +144,7 @@ def test_size2str():
 # test_size2str()
 
 
-def doPrune():
+def doPrune() -> None:
     # with open("/etc/sa.yml", "r") as fp:
     pp = "/usr/local/share/sa.yml"
     with open(pp, "r") as fp:
@@ -189,7 +194,7 @@ def doPrune():
                 print("  -> but don't delete it which is not in deleteTarget list")
 
 
-def parsePs(ss):
+def parsePs(ss: str) -> tuple[str, PsApp | None]:
     lines = ss.splitlines()
     upcnt = lines[0].strip()
     lines = lines[2:]
@@ -245,7 +250,18 @@ def parsePs(ss):
     return upcnt, app
 
 
-def outAdd(out, isJson, name, image, uptime, cpu, rss, restart, time, cmd):
+def outAdd(
+    out: dict[str, Any] | list[list[Any]],
+    isJson: bool,
+    name: str,
+    image: str,
+    uptime: str,
+    cpu: str,
+    rss: str,
+    restart: int,
+    time: str,
+    cmd: str,
+) -> None:
     if isJson:
         out[name] = dict(
             image=image,
@@ -260,29 +276,29 @@ def outAdd(out, isJson, name, image, uptime, cpu, rss, restart, time, cmd):
         out.append([name, image, uptime, cpu, rss, restart, time, cmd])
 
 
-async def asyncRun(*args):
+async def asyncRun(*args: str) -> bytes | None:
     p = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE)
     stdout, stderr = await p.communicate()
     return stdout
 
 
-async def asyncShell(cmd):
+async def asyncShell(cmd: str) -> bytes | None:
     p = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE)
     stdout, _ = await p.communicate()
     return stdout
 
 
-async def asyncGatherN(n, *coros):
+async def asyncGatherN(n: int, *coros: Awaitable[Any]) -> list[Any]:
     sem = asyncio.Semaphore(n)
 
-    async def sem_coro(coro):
+    async def sem_coro(coro: Awaitable[Any]) -> Any:
         async with sem:
             return await coro
 
     return await asyncio.gather(*(sem_coro(c) for c in coros))
 
 
-async def doLs(isJson=False):
+async def doLs(isJson: bool = False) -> None:
     # https://stackoverflow.com/questions/61528514/docker-format-with-json-specific-placeholder-syntax-for-multiple-placeholders
     cmd = ctrCmd
     cmd += """ ps -a --format '{"id":"{{ .ID }}", "img": "{{ .Image }}", "name":"{{ .Names }}", "status":"{{ .Status }}"}' """
@@ -292,7 +308,7 @@ async def doLs(isJson=False):
     lst = ss.splitlines()
     cons = []
 
-    async def _run(ll):
+    async def _run(ll: str) -> None:
         con = json.loads(ll)
         name = con["name"]
         status = con["status"]
@@ -373,7 +389,7 @@ async def doLs(isJson=False):
         printTable(out)
 
 
-def test():
+def test() -> None:
     ss = """0
 ELAPSED     PID %CPU    VSZ   RSS %MEM     TIME    PPID CMD
        0     756  0.0   9524  2832  0.0 15-00:00:00       0 bash -c cat /var/run/upcnt;ps -awfxo etimes,pid,%%cpu,vsz,rss,%mem,time,ppid,
@@ -391,7 +407,7 @@ ELAPSED     PID %CPU    VSZ   RSS %MEM     TIME    PPID CMD
 
 # arr = ["0-f", "1--json"]
 # opts = argParse(); opts.get("-f", False)
-def argParse1(argv, cmdList):
+def argParse1(argv: list[str], cmdList: list[str]) -> dict[str, Any]:
     opts = {}
     # '1--json' -> '--json'
     cmds = list(map(lambda x: x[1:], cmdList))
@@ -415,7 +431,7 @@ def argParse1(argv, cmdList):
     return opts
 
 
-def test_argParse1():
+def test_argParse1() -> None:
     arr = ["0-f", "1--json"]
     argv = ["a", "--json", "h"]
     opts = argParse1(argv, arr)
@@ -451,7 +467,7 @@ missed other extra argument is None
 """
 
 
-def argParse(argv, params):
+def argParse(argv: list[str], params: Any) -> dict[str, Any]:
     opts = {}
 
     fields = []
@@ -463,7 +479,7 @@ def argParse(argv, params):
             continue
         fields.append(field)
 
-    def _findItemName(ss):
+    def _findItemName(ss: str) -> str | None:
         for name in fields:
             val = getattr(params, name)
             t = type(val)
@@ -476,7 +492,7 @@ def argParse(argv, params):
 
         return None
 
-    def _getArgCnt(name):
+    def _getArgCnt(name: str) -> Any:
         param = getattr(params, name)
         t = type(param)
         if t is str:
@@ -488,7 +504,7 @@ def argParse(argv, params):
                 if v == True:
                     return 1
 
-    def _allowMultple(name):
+    def _allowMultple(name: str) -> bool:
         param = getattr(params, name)
         if type(param) is tuple:
             for v in param:
@@ -558,7 +574,7 @@ def argParse(argv, params):
     return opts
 
 
-def test_argParse():
+def test_argParse() -> None:
     func = argParse
 
     class arg1:
@@ -638,7 +654,7 @@ if __name__ == "__main__":
     test_argParse()
 
 
-def ctrRemove(ctr, force=False):
+def ctrRemove(ctr: str, force: bool = False) -> None:
     if ctrCmd == "docker":
         run(f"docker rm -f {ctr}")
         return
@@ -667,7 +683,7 @@ def ctrRemove(ctr, force=False):
         print(f"remove the container directory manually.\nex> rm -rf ~/ctrs/{ctr}")
 
 
-def genArgsStr(argv):
+def genArgsStr(argv: Sequence[str]) -> str:
     ss = ""
     for arg in argv:
         ss += f'"{arg}" '
@@ -675,7 +691,7 @@ def genArgsStr(argv):
     return ss
 
 
-async def main():
+async def main() -> None:
     # test()
     # return
 

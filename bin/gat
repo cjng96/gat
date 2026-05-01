@@ -1,0 +1,3 @@
+#!/bin/bash
+P=~/.gat/repo
+PYTHONPATH=$P uv run --project $P -m gat.gat $@

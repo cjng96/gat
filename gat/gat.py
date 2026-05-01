@@ -49,6 +49,8 @@ from .coPath import cutpath
 from .sampleFiles import sampleApp, sampleSys
 from .gatHelper import strExpand
 from .coS3 import CoS3
+from .app_config import Config, GatApp
+from . import plugin as gatPlugin
 from .myutil import (
     cloneRepo,
     str2arg,
@@ -60,6 +62,7 @@ from .myutil import (
     # cprt,
 )  # NonBlockingStreamReader,
 from .coCollection import dictMerge, Dict2, dict2Merge
+from typing import Any
 
 
 g_cwd = ""
@@ -125,7 +128,7 @@ g_options = {
 
 # 패키지 등록 함수
 # 우분투 패키지 이름을 기준으로 매핑
-def pkgRegister(os, pkgUbuntu, pkg):
+def pkgRegister(os: Any, pkgUbuntu: Any, pkg: Any) -> Any:
     global g_packages
     # 1. g_packages에 ubuntu 명령어 자체가 없는 경우, 새로운 매핑 생성
     if pkgUbuntu not in g_packages:
@@ -146,7 +149,7 @@ def pkgRegister(os, pkgUbuntu, pkg):
 # 옵션 등록 함수
 # 우분투 옵션 이름을 기준으로 매핑
 # 나중에 다시 수정이 필요, because 명령어마다 옵션이 다르기 때문에
-def optRegister(os, optUbuntu, opt):
+def optRegister(os: Any, optUbuntu: Any, opt: Any) -> Any:
     global g_options
     if optUbuntu not in g_options:
         g_options[optUbuntu] = {os: opt}
@@ -164,7 +167,7 @@ def optRegister(os, optUbuntu, opt):
 # ######################################################################################3
 
 
-def checkUsedSudo(cmd):
+def checkUsedSudo(cmd: Any) -> Any:
     tokens = shlex.split(cmd)
     for token in tokens:
         if token == "sudo":
@@ -173,7 +176,7 @@ def checkUsedSudo(cmd):
     return False
 
 
-def test_checkUsedSudo():
+def test_checkUsedSudo() -> Any:
     assert checkUsedSudo("sudo ls /")
     assert checkUsedSudo("echo haha | sudo tee")
     assert not checkUsedSudo("ls /")
@@ -190,19 +193,19 @@ g_force = False
 g_connList = []
 
 
-def lld(ss):
+def lld(ss: Any) -> Any:
     if g_logLv >= 1:
         print(ss)
 
-def llv(ss):
+def llv(ss: Any) -> Any:
     if g_logLv >= 2:
         print(ss)
 
-def llw(ss):
+def llw(ss: Any) -> Any:
     cprint(ss, "magenta", attrs=["bold"])
 
 
-def lle(ss):
+def lle(ss: Any) -> Any:
     cprint(ss, "red", attrs=["bold"])
 
 
@@ -215,21 +218,21 @@ class ExcProgramExit(Exception):
 
 
 class MyUtil:
-    def __init__(self):
+    def __init__(self) -> Any:
         # self.deployRoot = ""	# only for deployment -- 이거 그냥. g_remote.server.deployRoot쓰면 된다.
         # self.deployOwner = None	# 그냥 server.id를 기본값으로 한다.
         self.isRestart = True  # First start or modified source files
         # self.config = None  # config object(g_config) -- 이건 전역 객체라 쓰면 안된다
 
-    def str2arg(self, ss):
+    def str2arg(self, ss: Any) -> Any:
         return str2arg(ss)
 
     # return: Dict2
-    def dictMerge(self, dic1, dic2):
+    def dictMerge(self, dic1: Any, dic2: Any) -> Any:
         return dict2Merge(dic1, dic2)
 
     # return: Dict2
-    def yamlLoad(self, *yamls):
+    def yamlLoad(self, *yamls: Any) -> Any:
         cfg = None
         for pp in yamls:
             with open(pp, "r") as fp:
@@ -241,7 +244,7 @@ class MyUtil:
 
         return cfg
 
-    def deployFileListProd(self, env, func):
+    def deployFileListProd(self, env: Any, func: Any) -> Any:
         include = env.config.deploy.include
         exclude = env.config.deploy.get("exclude", [])
         # basePath = env.config.deploy.get("basePath", ".")
@@ -251,31 +254,31 @@ class MyUtil:
             include, exclude, func, followLinks=followLinks, localSrcPath=srcPath
         )
 
-    def lld(self, ss):
+    def lld(self, ss: Any) -> Any:
         if g_logLv >= 1:
             print(ss)
 
-    def llv(self, ss):
+    def llv(self, ss: Any) -> Any:
         if g_logLv >= 2:
             print(ss)
 
-    def llw(self, ss):
+    def llw(self, ss: Any) -> Any:
         cprint(ss, "magenta", attrs=["bold"])
 
-    def lle(self, ss):
+    def lle(self, ss: Any) -> Any:
         cprint(ss, "red", attrs=["bold"])
 
 
 class Conn:
     def __init__(
         self,
-        server,
-        config,
-        ctrTunnel=None,
-        ctrName=None,
-        ctrId=None,
-        ctrType=None,
-    ):
+        server: Any,
+        config: Any,
+        ctrTunnel: Any=None,
+        ctrName: Any=None,
+        ctrId: Any=None,
+        ctrType: Any=None,
+    ) -> Any:
         """
         server: can be none
         config: {name, host, port, id, pw}
@@ -331,7 +334,7 @@ class Conn:
 
         g_connList.append(self)
 
-    def prepareSudoWithAskPass(self, cmd):
+    def prepareSudoWithAskPass(self, cmd: Any) -> Any:
         if not self.prepareSudo(cmd):
             return cmd
 
@@ -351,8 +354,8 @@ class Conn:
         return cmd
 
     # return: true(needed pw and prepared it), false(no needed pw)
-    def prepareSudo(self, cmd):
-        def checkValidPw(pw):
+    def prepareSudo(self, cmd: Any) -> Any:
+        def checkValidPw(pw: Any) -> Any:
             # cmd = f"echo '{pw}' | sudo -S echo -n"
             cmd = f"echo '{pw}' | sudo -S ls /"
             cmd = str2arg(cmd)
@@ -402,14 +405,14 @@ echo "$GTPW"\
 
         raise Exception("sudo password is incorrect")
 
-    def clearConn(self):
+    def clearConn(self) -> Any:
         self.tempPathClear()
 
         if self._uploadHelper:
             self.run("rm -f /tmp/gatHelper.py", printLog=False)
             self._uploadHelper = False
 
-    def tempPathGet(self):
+    def tempPathGet(self) -> Any:
         if self.tempPath is None:
             pp = f"/tmp/gat-{self.config.name}"
             ss = self.runOutput(f"test -d ${pp}; echo $?", printLog=False)
@@ -425,7 +428,7 @@ echo "$GTPW"\
 
         return self.tempPath
 
-    def tempPathClear(self):
+    def tempPathClear(self) -> Any:
         if self.tempPath is None:
             try:
                 pp = self.tempPathGet()
@@ -439,10 +442,10 @@ echo "$GTPW"\
         if self.ctrTunnel is not None:
             self.ctrTunnel.tempPathClear()
 
-    def log(self, msg):
+    def log(self, msg: Any) -> Any:
         print(f"[{self.logName}]: {msg}")
 
-    def initSsh(self, host, port, id, keyFile=None):
+    def initSsh(self, host: Any, port: Any, id: Any, keyFile: Any=None) -> Any:
         self.ssh = CoSsh()
         self.log(
             f"ssh - connecting to the server[{id}@{host}:{port}] with key:{keyFile}"
@@ -452,20 +455,20 @@ echo "$GTPW"\
                 print("key - " + fp.read())
         self.ssh.init(host, port, id, keyFile=keyFile)
 
-    def __del__(self):
+    def __del__(self) -> Any:
         if self.ssh is not None:
             self.ssh.close()
             self.ssh = None
 
-    def str2arg(self, ss):
+    def str2arg(self, ss: Any) -> Any:
         return str2arg(ss)
 
-    def parentConn(self):
+    def parentConn(self) -> Any:
         if self.ctrTunnel is None:
             raise Exception("This connection is not docker connection.")
         return self.ctrTunnel
 
-    def containerConn(self, name, ctrId=None, ctrType=None):
+    def containerConn(self, name: Any, ctrId: Any=None, ctrType: Any=None) -> Any:
         """
         ctrType: None, "docker", "podman"
         """
@@ -476,32 +479,32 @@ echo "$GTPW"\
         dk = Conn(self.server, self.config, self, name, ctrId, ctrType)
         return dk
 
-    def dockerConn(self, name, dkId=None):
+    def dockerConn(self, name: Any, dkId: Any=None) -> Any:
         # return self.containerConn(name, ctrId=dkId, ctrType="docker")
         return self.containerConn(name, ctrId=dkId)
 
-    def otherContainerConn(self, name, ctrId=None):
+    def otherContainerConn(self, name: Any, ctrId: Any=None) -> Any:
         # if self.dkTunnel is None:
         #     raise Exception("otherDockerConn can be called on docker connection only.")
 
         # return self.dkTunnel.containerConn(name, dkId)
         return self.containerConn(name, ctrId)
 
-    def otherDockerConn(self, name, dkId=None):
+    def otherDockerConn(self, name: Any, dkId: Any=None) -> Any:
         return self.otherContainerConn(name, dkId)
 
     def remoteConn(
         self,
-        host,
-        port,
-        id,
-        pw=None,
-        ctrName=None,
-        dkName=None,  # backward compatibility
-        ctrId=None,
-        keyFile=None,
-        ctrType=None,
-    ):
+        host: Any,
+        port: Any,
+        id: Any,
+        pw: Any=None,
+        ctrName: Any=None,
+        dkName: Any=None,  # backward compatibility
+        ctrId: Any=None,
+        keyFile: Any=None,
+        ctrType: Any=None,
+    ) -> Any:
         """
         지정해서 커넥션을 만들어낸다.
         docker지정까지 가능하다. 이거 설정을 컨피그로 할수 있게 하자
@@ -525,15 +528,15 @@ echo "$GTPW"\
 
         return dk
 
-    def onlyLocal(self):
+    def onlyLocal(self) -> Any:
         if self.ssh is not None:
             raise Exception("this method only can be used in local service.")
 
-    def onlyRemote(self):
+    def onlyRemote(self) -> Any:
         if self.ctrTunnel is None and self.ssh is None:
             raise Exception("this method only can be used in remote service.")
 
-    def setupApp(self, path, profile, serverOvr=None, varsOvr=None, subCmd=""):
+    def setupApp(self, path: Any, profile: Any, serverOvr: Any=None, varsOvr: Any=None, subCmd: Any="") -> Any:
         if path.endswith(".py"):
             path = path[:-3]
 
@@ -556,11 +559,12 @@ echo "$GTPW"\
         # mymod = importlib.import_module(fn)
 
         # import module은 sys.path바꿔도 이미 로드한 모듈이름은 캐시해버린다
+        prepareLegacyScriptImports()
         spec = importlib.util.spec_from_file_location(fn, path + ".py")
         mymod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mymod)
 
-        mygat = mymod.myGat(helper=helper)
+        mygat = newGatScriptInstance(mymod, helper)
 
         server = config.configServerGet(profile)
         if server is None:
@@ -579,7 +583,7 @@ echo "$GTPW"\
             server.vars.fill(varsOvr)
 
         # remote = Tasks(server)
-        # if "ctrName" in server.dic:
+        # if "ctrName" in server:
         #     remote = remote.containerConn(server.ctrName, dkId=server.get("dkId"))
 
         pp = os.path.abspath(os.curdir)
@@ -590,7 +594,7 @@ echo "$GTPW"\
             os.chdir(pp)
 
     # 이제 이거 쓰는곳이 없다
-    def deployApp(self, path, profile, serverOvr=None, varsOvr=None):
+    def deployApp(self, path: Any, profile: Any, serverOvr: Any=None, varsOvr: Any=None) -> Any:
         if path.endswith(".py"):
             path = path[:-3]
 
@@ -609,11 +613,12 @@ echo "$GTPW"\
         # mymod = importlib.import_module(fn)
 
         # import module은 sys.path바꿔도 이미 로드한 모듈이름은 캐시해버린다
+        prepareLegacyScriptImports()
         spec = importlib.util.spec_from_file_location(fn, path + ".py")
         mymod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mymod)
 
-        mygat = mymod.myGat(helper=helper)
+        mygat = newGatScriptInstance(mymod, helper)
 
         server = config.configServerGet(profile)
         if server is None:
@@ -632,7 +637,7 @@ echo "$GTPW"\
             server.vars.fill(varsOvr)
 
         # remote = Tasks(server)
-        # if "ctrName" in server.dic:
+        # if "ctrName" in server:
         #     remote = remote.containerConn(server.ctrName, dkId=server.get("dkId"))
 
         pp = os.path.abspath(os.curdir)
@@ -644,7 +649,7 @@ echo "$GTPW"\
 
     # 이거 좀 애매한데 uploadFile인데 사실상...
     # 이건 텍스트 전용
-    def copyFile(self, srcPath, targetPath, sudo=False, mode=755, makeFolder=False):
+    def copyFile(self, srcPath: Any, targetPath: Any, sudo: Any=False, mode: Any=755, makeFolder: Any=False) -> Any:
         srcPath = os.path.expanduser(srcPath)
         srcPath = os.path.abspath(srcPath)
         with open(srcPath, "r") as fp:
@@ -658,12 +663,12 @@ echo "$GTPW"\
             makeFolder=makeFolder,
         )
 
-    def loadFile(self, path, sudo=False):
+    def loadFile(self, path: Any, sudo: Any=False) -> Any:
         sudoCmd = "sudo" if sudo else ""
         ss = self.runOutput(f"{sudoCmd} cat {path}")
         return ss
 
-    def makeFile(self, content, path, sudo=False, mode=755, makeFolder=False):
+    def makeFile(self, content: Any, path: Any, sudo: Any=False, mode: Any=755, makeFolder: Any=False) -> Any:
         # self.onlyRemote()
         # ss = content.replace('"', '\\"').replace('%', '\%').replace('$', '\$')
         sudoCmd = "sudo" if sudo else ""
@@ -680,7 +685,7 @@ echo "$GTPW"\
         # self.run(f'echo "{content}" > {path}')
 
     # return os name of remote server
-    def getOS(self):
+    def getOS(self) -> Any:
         if self._os is None:
             try:
                 osInfo = self.runOutput("cat /etc/os-release").lower()
@@ -705,7 +710,7 @@ echo "$GTPW"\
 
     # runOutput 래퍼 함수
     # os 별 ~/.profile 명령이 다르기 때문에 대응하기 위해
-    def runOutputProf(self, cmd, expandVars=True, sudo=False):
+    def runOutputProf(self, cmd: Any, expandVars: Any=True, sudo: Any=False) -> Any:
         os = self.getOS()
 
         if os == "ubuntu":
@@ -720,7 +725,7 @@ echo "$GTPW"\
         cmd = f". ~/.{profile} && " + cmd
         return self.runOutput(cmd, expandVars=expandVars)
 
-    def runOutput(self, cmd, expandVars=True, printLog=True, nosudo=False):
+    def runOutput(self, cmd: Any, expandVars: Any=True, printLog: Any=True, nosudo: Any=False) -> Any:
         """
         cmd: string or array
         expandVars:
@@ -760,7 +765,7 @@ echo "$GTPW"\
 
         return out
 
-    def runOutputAll(self, cmd, expandVars=True, printLog=True, nosudo=False):
+    def runOutputAll(self, cmd: Any, expandVars: Any=True, printLog: Any=True, nosudo: Any=False) -> Any:
         """
         cmd: string or array
         expandVars:
@@ -805,7 +810,7 @@ echo "$GTPW"\
     #     else:
     #         return f"{self.ctrName}[{self.server.host}:{self.server.port}]"
 
-    def run(self, cmd, expandVars=True, printLog=True, skip=False, nosudo=False):
+    def run(self, cmd: Any, expandVars: Any=True, printLog: Any=True, skip: Any=False, nosudo: Any=False) -> Any:
         """
         nosudo: special opt for prepareSudo()
         """
@@ -887,7 +892,7 @@ echo "$GTPW"\
 
     # runOutput 래퍼 함수
     # os 별 ~/.profile 명령이 다르기 때문에 대응하기 위해
-    def runProf(self, cmd, expandVars=True):
+    def runProf(self, cmd: Any, expandVars: Any=True) -> Any:
         os = self.getOS()
 
         tmpCmd = ". ~/."
@@ -901,7 +906,7 @@ echo "$GTPW"\
         cmd = tmpCmd + cmd
         self.run(cmd, expandVars=expandVars)
 
-    def runSafe(self, cmd, printLog=True, nosudo=False):
+    def runSafe(self, cmd: Any, printLog: Any=True, nosudo: Any=False) -> Any:
         """
         return: success flag
         """
@@ -913,7 +918,7 @@ echo "$GTPW"\
                 print("run: failed %d\n -- %s\n" % (e.returncode, e.output))
             return False
 
-    def downloadFile(self, src, dest):
+    def downloadFile(self, src: Any, dest: Any) -> Any:
         src = os.path.expanduser(src)
         dest = os.path.expanduser(dest)
         if self.ctrTunnel is not None:
@@ -923,11 +928,11 @@ echo "$GTPW"\
         else:
             self.ssh.downloadFile(src, dest)
 
-    def downloadFileTo(self, src, dest):
+    def downloadFileTo(self, src: Any, dest: Any) -> Any:
         pp = os.path.join(dest, os.path.basename(src))
         self.downloadFile(src, pp)
 
-    def uploadFile(self, src, dest, sudo=False, mode=None):
+    def uploadFile(self, src: Any, dest: Any, sudo: Any=False, mode: Any=None) -> Any:
         """
         support both local and remote
         """
@@ -958,14 +963,14 @@ echo "$GTPW"\
                 cmd = f"sudo {cmd}"
             self.run(cmd)
 
-    def uploadFileTo(self, src, dest):
+    def uploadFileTo(self, src: Any, dest: Any) -> Any:
         # self.onlyRemote()
         # src = os.path.expanduser(src)
         # dest = os.path.expanduser(dest)
         pp = os.path.join(dest, os.path.basename(src))
         self.uploadFile(src, pp)
 
-    def uploadFolder(self, src, dest):
+    def uploadFolder(self, src: Any, dest: Any) -> Any:
         self.onlyRemote()
         if self.ctrTunnel is not None:
             self.ctrTunnel.ssh.run("rm -rf /tmp/gat_upload && mkdir /tmp/gat_upload")
@@ -991,11 +996,11 @@ echo "$GTPW"\
         else:
             self.ssh.uploadFolder(src, dest)
 
-    def uploadFolderTo(self, src, dest):
+    def uploadFolderTo(self, src: Any, dest: Any) -> Any:
         self.onlyRemote()
         self.ssh.uploadFolder(src, os.path.join(dest, os.path.basename(src)))
 
-    def ctrCmdGet(self):
+    def ctrCmdGet(self) -> Any:
         # print("ctrCmdGet - self.ctrType: %s - %s" % (self.ctrType, g_config.podman))
         prog = "podman"
         if self.ctrType == "docker" or not g_config.podman:
@@ -1006,7 +1011,7 @@ echo "$GTPW"\
         # print('  -> prog: "%s"' % prog)
         return prog
 
-    def _helperRun(self, args, sudo=False):
+    def _helperRun(self, args: Any, sudo: Any=False) -> Any:
         # pp2 = f"{self.tempPathGet()}/gatHelper.py"
         pp2 = "/tmp/gatHelper.py"
         src = os.path.join(g_scriptPath, "gatHelper.py")
@@ -1051,7 +1056,7 @@ echo "$GTPW"\
     self._helperRun(args, sudo=True)
   """
 
-    def strLoad(self, path):
+    def strLoad(self, path: Any) -> Any:
         self.log("task - strLoad from[%s]..." % path)
         self.onlyLocal()
 
@@ -1059,7 +1064,7 @@ echo "$GTPW"\
         with open(path, "rt") as fp:
             return fp.read()
 
-    def strEnsure(self, path, str, sudo=False):
+    def strEnsure(self, path: Any, str: Any, sudo: Any=False) -> Any:
         """
         str이 없으면 추가한다
         """
@@ -1069,7 +1074,7 @@ echo "$GTPW"\
         args = dict(cmd="strEnsure", dic=g_dic, path=path, str=str)
         self._helperRun(args, sudo)
 
-    def configBlock(self, path, marker, block, insertAfter=None, sudo=False):
+    def configBlock(self, path: Any, marker: Any, block: Any, insertAfter: Any=None, sudo: Any=False) -> Any:
         """
         block이 보존한다(필요시 수정도)
         marker: ### {mark} TEST
@@ -1094,15 +1099,15 @@ echo "$GTPW"\
 
     def configLine(
         self,
-        path,
-        regexp,
-        line,
-        items=None,
-        sudo=False,
-        append=False,
-        appendAfterRe=None,
-        ignore=False,
-    ):
+        path: Any,
+        regexp: Any,
+        line: Any,
+        items: Any=None,
+        sudo: Any=False,
+        append: Any=False,
+        appendAfterRe: Any=None,
+        ignore: Any=False,
+    ) -> Any:
         """
         regexp에 부합되는 라인이 있을 경우 변경한다
         """
@@ -1122,7 +1127,7 @@ echo "$GTPW"\
         )
         self._helperRun(args, sudo)
 
-    def s3List(self, env, bucket, prefix):
+    def s3List(self, env: Any, bucket: Any, prefix: Any) -> Any:
         self.log("task - s3 list[%s/%s]..." % (bucket, prefix))
         self.onlyLocal()
 
@@ -1134,7 +1139,7 @@ echo "$GTPW"\
         lst = bb.fileList(prefix)
         return lst
 
-    def s3DownloadFiles(self, env, bucket, prefix, nameList, targetFolder):
+    def s3DownloadFiles(self, env: Any, bucket: Any, prefix: Any, nameList: Any, targetFolder: Any) -> Any:
         self.log("task - s3 download files[%s/%s]..." % (bucket, prefix))
         self.onlyLocal()
 
@@ -1148,7 +1153,7 @@ echo "$GTPW"\
         for name in nameList:
             bb.downloadFile(prefix + name, targetFolder + name)
 
-    def s3DownloadFile(self, env, bucket, key, dest=None):
+    def s3DownloadFile(self, env: Any, bucket: Any, key: Any, dest: Any=None) -> Any:
         self.log("task - s3 download file[%s -> %s]..." % (key, dest))
         self.onlyLocal()
 
@@ -1159,7 +1164,7 @@ echo "$GTPW"\
     # ####################### 나중에 사용될 여지가 있다. ####################################
 
     # 패키지 install 함수 -> ubuntu, centos 지원
-    def pkgInstall(self, sudo=False, options=[], packages=[]):
+    def pkgInstall(self, sudo: Any=False, options: Any=[], packages: Any=[]) -> Any:
         # sudo 권한 여부 확인 후 sudo 추가
         cmdSudo = "sudo " if sudo else ""
         # OS에 따라 패키지 매니저 추가
@@ -1183,7 +1188,7 @@ echo "$GTPW"\
         self.run(cmd)
 
     # update 함수 -> ubuntu, centos 지원
-    def pkgUpdate(self, sudo=False):
+    def pkgUpdate(self, sudo: Any=False) -> Any:
         os = self.getOS()
         # sudo 권한 여부 확인 후 sudo 추가
         cmdSudo = "sudo " if sudo else ""
@@ -1198,7 +1203,7 @@ echo "$GTPW"\
         self.run(cmd)
 
     # 프로그램 실행 함수
-    def pkgStart(self, sudo=False, package=""):
+    def pkgStart(self, sudo: Any=False, package: Any="") -> Any:
         # sudo 권한 여부 확인 후 sudo 추가
         cmdSudo = "sudo " if sudo else ""
         # 프로그램 시작 명령어
@@ -1210,7 +1215,7 @@ echo "$GTPW"\
         self.run(cmd)
 
     # 프로그램 재실행 함수
-    def pkgRestart(self, sudo=False, package=""):
+    def pkgRestart(self, sudo: Any=False, package: Any="") -> Any:
         # sudo 권한 여부 확인 후 sudo 추가
         cmdSudo = "sudo " if sudo else ""
         # 프로그램 시작 명령어
@@ -1222,7 +1227,7 @@ echo "$GTPW"\
         self.run(cmd)
 
     # 프로그램 정지 함수
-    def pkgStop(self, sudo=False, package=""):
+    def pkgStop(self, sudo: Any=False, package: Any="") -> Any:
         # sudo 권한 여부 확인 후 sudo 추가
         cmdSudo = "sudo " if sudo else ""
         # 프로그램 정지 명령어
@@ -1233,7 +1238,7 @@ echo "$GTPW"\
         self.run(cmd)
 
     # 옵션 인자를 OS에 맞춰서 매핑
-    def _mapOptionToOs(self, os="", options=[]):
+    def _mapOptionToOs(self, os: Any="", options: Any=[]) -> Any:
         global g_options
         optionList = []
         for option in options:
@@ -1248,7 +1253,7 @@ echo "$GTPW"\
         return optionList
 
     # 패키지를 OS에 맞춰서 매핑
-    def _mapPackageToOs(self, os="", packages=[]):
+    def _mapPackageToOs(self, os: Any="", packages: Any=[]) -> Any:
         global g_packages
         packageList = []
         for package in packages:
@@ -1269,17 +1274,17 @@ echo "$GTPW"\
 class MyHandler(PatternMatchingEventHandler):
     def __init__(
         self,
-        patterns=None,
-        ignore_patterns=None,
-        ignore_directories=False,
-        case_sensitive=False,
-    ):
+        patterns: Any=None,
+        ignore_patterns: Any=None,
+        ignore_directories: Any=False,
+        case_sensitive: Any=False,
+    ) -> Any:
         super(MyHandler, self).__init__(
             patterns, ignore_patterns, ignore_directories, case_sensitive
         )
         print("watching pattern - ", patterns)
 
-    def process(self, event):
+    def process(self, event: Any) -> Any:
         """
         event.event_type - 'modified' | 'created' | 'moved' | 'deleted'
         event.is_directory - True | False
@@ -1294,25 +1299,25 @@ class MyHandler(PatternMatchingEventHandler):
         print("observer: file - %s is %s" % (event.src_path, event.event_type))
         g_util.isRestart = True
 
-    def on_modified(self, event):
+    def on_modified(self, event: Any) -> Any:
         self.process(event)
 
-    def on_created(self, event):
+    def on_created(self, event: Any) -> Any:
         self.process(event)
 
 
-def dicInit(server):
+def dicInit(server: Any) -> Any:
     global g_dic  # helper run할때 전달되는 기능
-    g_dic = deepcopy(g_config)
-    g_dic.dic["server"] = server
-    g_dic.dic["vars"] = deepcopy(server.vars)
+    g_dic = Dict2(g_config.toDict())
+    g_dic.dic["server"] = Dict2(server.toDict())
+    g_dic.dic["vars"] = Dict2(server.vars.toDict())
     g_dic.dic["data"] = deepcopy(g_data)
     # g_util.cfg = g_config
     # g_util.config = g_dic # 전역객체기 때문에 쓰면 안된다
     g_util.data = g_data
 
 
-def _excludeFilter(_exclude, pp):
+def _excludeFilter(_exclude: Any, pp: Any) -> Any:
     pp = os.path.normpath(pp)
     if pp in _exclude:
         return True
@@ -1330,7 +1335,7 @@ def _excludeFilter(_exclude, pp):
     return False
 
 
-def _pathExpand(pp2):
+def _pathExpand(pp2: Any) -> Any:
     # 원래 deploy에서 아래처럼 {{name}}으로 확장하는게 있었는데.. 일단 보류
     # dic = dict(name=config.name)
     pp2 = os.path.expanduser(pp2)
@@ -1339,16 +1344,16 @@ def _pathExpand(pp2):
 
 
 class Main:
-    def __init__(self):
+    def __init__(self) -> Any:
         # self.uid = socket.gethostname() + "-" + str(os.getpid())
         # self.workPath = f"/tmp/"
         pass
 
     # runTask와 doServerStep등은 Task말고 별도로 빼자 remote.runTask를 호출할일은 없으니까
-    def runTask(self, mygat):
+    def runTask(self, mygat: Any) -> Any:
         # self.onlyLocal()
 
-        if hasattr(mygat, "getRunCmd"):
+        if mygat.hasTask("getRunCmd"):
             cmd = mygat.getRunCmd(util=g_util, local=g_local, remote=g_remote)
             if type(cmd) != list:
                 raise Exception(
@@ -1370,7 +1375,7 @@ class Main:
 
         return cmd
 
-    def doServeStep(self, mygat):
+    def doServeStep(self, mygat: Any) -> Any:
         # if hasattr(g_mygat, "doServeStep"):
         # 	return g_mygat.doServeStep()
         print("\n\n\n")
@@ -1409,7 +1414,7 @@ class Main:
                         p.terminate()
                         break
 
-    def doTestStep(self, mygat):
+    def doTestStep(self, mygat: Any) -> Any:
         print("\n\n\n")
 
         cmd = g_config.test.cmd
@@ -1438,14 +1443,14 @@ class Main:
                     p.terminate()
                     break
 
-    def buildTask(self, mygat):
+    def buildTask(self, mygat: Any) -> Any:
         llw("buildTask: building the app")
-        if hasattr(mygat, "buildTask"):
+        if mygat.hasTask("buildTask"):
             return mygat.buildTask(util=g_util, local=g_local, remote=g_remote)
         else:
             lle("You should override buildTask method.")
 
-    def taskSetup(self, server, subCmd, mygat, config):
+    def taskSetup(self, server: Any, subCmd: Any, mygat: Any, config: Any) -> Any:
         llw("taskSetup: setting up the app...")
 
         # deprecated
@@ -1453,9 +1458,9 @@ class Main:
             raise Exception(f"Invalid sub command[{subCmd}] for setup task")
 
         env = Conn(server, config)
-        if "ctrName" in server.dic:
+        if "ctrName" in server:
             env = env.containerConn(server.ctrName, ctrId=server.get("ctrId"))
-        elif "dkName" in server.dic:
+        elif "dkName" in server:
             env = env.containerConn(server.dkName, ctrId=server.get("dkId"))
 
         # print(env.config)
@@ -1473,7 +1478,7 @@ class Main:
         dicInit(server)
         expandVar(config)
 
-        if not hasattr(mygat, "setupTask"):
+        if not mygat.hasTask("setupTask"):
             lle("setup: You should override setupTask function in your myGat class")
             return
 
@@ -1495,7 +1500,7 @@ class Main:
         # finally:
         # g_config = oldConfig
 
-    def taskTest(self):
+    def taskTest(self) -> Any:
         observer = None
         if len(g_config.test.patterns) > 0:
             observer = Observer()
@@ -1517,7 +1522,7 @@ class Main:
         if observer is not None:
             observer.join()
 
-    def taskServe(self):
+    def taskServe(self) -> Any:
         observer = None
         if len(g_config.serve.patterns) > 0:
             observer = Observer()
@@ -1541,8 +1546,8 @@ class Main:
 
     # localSrcPath 를 뒤에 둔 이유는 기본 값이 필요해서 + 이 함수를 사용하는 다른 곳에서 인자 위치로 인한 에러
     def targetFileListProd(
-        self, include, exclude, func, localSrcPath="", followLinks=True
-    ):
+        self, include: Any, exclude: Any, func: Any, localSrcPath: Any="", followLinks: Any=True
+    ) -> Any:
         lld(f"targetFileListProd: include: {include}, exclude: {exclude}, localSrcPath: {localSrcPath}, followLinks: {followLinks}")
         for pp in include:
             if isinstance(pp, str):
@@ -1601,7 +1606,7 @@ class Main:
             else:
                 src = pp["src"]
                 src = _pathExpand(src)
-                dest = pp["dest"]
+                dest = pp.get("dest", pp.get("target"))
 
                 lld(f"targetFileListProd: src: {src}, dest: {dest}")
 
@@ -1629,13 +1634,13 @@ class Main:
                         # lld(f"added file: {srcPath} -> {destPath}")
                         func(srcPath, destPath)
 
-    def taskDeploy(self, server, mygat, config):
+    def taskDeploy(self, server: Any, mygat: Any, config: Any) -> Any:
         llw("taskDeploy: deploy the app...")
 
         env = Conn(server, config)
-        if "ctrName" in server.dic:
+        if "ctrName" in server:
             env = env.containerConn(server.ctrName, ctrId=server.get("ctrId"))
-        elif "dkName" in server.dic:
+        elif "dkName" in server:
             env = env.containerConn(server.dkName, ctrId=server.get("dkId"))
 
         self.buildTask(mygat)
@@ -1661,7 +1666,7 @@ class Main:
         g_dic.dic["deployPath"] = deployPath
 
         env.server.deployPath = deployPath
-        if hasattr(mygat, "deployPreTask"):
+        if mygat.hasTask("deployPreTask"):
             mygat.deployPreTask(util=g_util, remote=env, local=g_local)
 
         # prepare target folder
@@ -1697,11 +1702,11 @@ class Main:
         exclude = config.get("deploy.exclude", [])
         sharedLinks = config.get("deploy.sharedLinks", [])
 
-        def zipProcess(env, include, exclude, localSrcPath):
+        def zipProcess(env: Any, include: Any, exclude: Any, localSrcPath: Any) -> Any:
             zipPath = os.path.join(tempfile.gettempdir(), "data.zip")
             with zipfile.ZipFile(zipPath, "w") as zipWork:
 
-                def _zipAdd(srcP, targetP):
+                def _zipAdd(srcP: Any, targetP: Any) -> Any:
                     # if _filterFunc(srcP, exclude):
                     #     print(f"deploy: skip - {srcP}")
                     #     return
@@ -1718,7 +1723,7 @@ class Main:
                 #     return strExpand(pp, dic)
 
                 # zipWork.write(config.name, config.name, compress_type=zipfile.ZIP_DEFLATED)
-                def _fileProc(src, dest):
+                def _fileProc(src: Any, dest: Any) -> Any:
                     if dest is None:
                         dest = src
                     _zipAdd(src, dest)
@@ -1820,7 +1825,7 @@ class Main:
         #  env.run("cd %s && %s chown %s: current" % (deployRoot, sudoCmd, server.owner))
 
         # post process
-        if hasattr(mygat, "deployPostTask"):
+        if mygat.hasTask("deployPostTask"):
             mygat.deployPostTask(util=g_util, remote=env, local=g_local)
 
         # file owner - 이걸 post후에 해야 ssh user가 파일 접근이 가능하다
@@ -1835,7 +1840,7 @@ class Main:
         env.clearConn()
 
 
-def initSamples(type, fn):
+def initSamples(type: Any, fn: Any) -> Any:
     with open(fn, "w") as fp:
         if type == "app":
             fp.write(sampleApp)
@@ -1848,96 +1853,73 @@ def initSamples(type, fn):
     )
 
 
-def expandVar(dic):
+def newGatScriptInstance(module: Any, helper: Any) -> Any:
+    cls = getattr(module, "myGat", None)
+    if cls is None:
+        raise AttributeError("gat script must define myGat class")
+    if not isinstance(cls, type) or not issubclass(cls, GatApp):
+        raise TypeError("myGat must inherit GatApp")
+    return cls(helper=helper)
+
+
+def prepareLegacyScriptImports() -> Any:
+    sys.modules.setdefault("myutil", gatPlugin)
+
+
+def expandVar(dic: Any) -> Any:
+    def _isExpandable(value: Any) -> Any:
+        return (
+            isinstance(value, (Dict2, dict, Config))
+            or (
+                hasattr(value, "__iter__")
+                and hasattr(value, "__getitem__")
+                and hasattr(value, "__setitem__")
+                and hasattr(value, "toDict")
+            )
+        )
+
     dicType = type(dic)
     if dicType == list:
         for idx, value in enumerate(dic):
-            tt = type(value)
-            if tt == Dict2 or tt == dict:
+            if _isExpandable(value):
                 expandVar(value)
-            elif tt == str:
+            elif isinstance(value, str):
                 value = envExpand(value)
                 value = strExpand(value, g_dic)
                 dic[idx] = value
-            elif tt == list:
+            elif isinstance(value, list):
                 expandVar(value)
     else:
-        for key in dic:
+        for key in list(dic):
             value = dic[key]
 
-            tt = type(value)
-            if tt == Dict2:
+            if _isExpandable(value):
                 expandVar(value)
-            elif tt == str:
+            elif isinstance(value, str):
                 value = envExpand(value)
                 value = strExpand(value, g_dic)
                 dic[key] = value
-            elif tt == list:
+            elif isinstance(value, list):
                 expandVar(value)
 
 
-class Config(Dict2):
-    def __init__(self):
-        super().__init__()
-        self.dic["srcPath"] = "."
-
-    def configStr(self, cfgType, ss):
-        """
-        type: yaml
-        """
-        if cfgType == "yaml":
-            try:
-                self.fill(yaml.safe_load(ss))
-
-                if "defaultVars" in self:
-                    for server in self.servers:
-                        server.vars = dict2Merge(self.defaultVars, server.vars)
-
-                if self.type == "app":
-                    if "followLinks" not in self.deploy:
-                        self.deploy["followLinks"] = False
-
-            except yaml.YAMLError as e:
-                raise e
-        else:
-            raise Exception(f"unknown config type[{cfgType}]")
-
-    def configFile(self, cfgType, pp):
-        """
-        type: yaml
-        """
-        with open(pp, "r") as fp:
-            self.configStr(cfgType, fp.read())
-
-    def configServerGet(self, name):
-        server = None
-        for it in self.servers:
-            if it["name"] == name:
-                server = it
-                print("deploy: selected server - ", it)
-                break
-
-        if server is None:
-            print(self)
-            raise Exception(f"Not found server[{name}]")
-
-        return server
-
-
 class Helper:
-    def __init__(self, config):
+    def __init__(self, config: Any) -> Any:
         self.config = config
 
-    def configStr(self, cfgType, ss):
+    def configStr(self, cfgType: Any, ss: Any) -> Any:
         self.config.configStr(cfgType, ss)
 
-    def configFile(self, cfgType, pp):
+    def configApp(self, cfg: Any) -> Any:
+        self.config.configApp(cfg)
+
+    def configFile(self, cfgType: Any, pp: Any) -> Any:
         self.config.configFile(cfgType, pp)
 
-    def configGet(self):
+    def configGet(self) -> Any:
         return self.config.configGet()
 
-    def loadData(self, pp):
+    def loadData(self, pp: Any) -> Any:
         if not os.path.exists(pp):
             raise Exception(f"there is no data file[{pp}]")
 
@@ -1964,7 +1946,7 @@ g_local = None
 g_remote = None  # server, vars직접 접근 가능
 
 
-def help(target):
+def help(target: Any) -> Any:
     print(f"gat V{__version__}")
     print(
         """\
@@ -1994,7 +1976,7 @@ gat GAT_FILE_NAME SERVER_NAME run - Setup and Run the system.
 
 
 class MyArgv:
-    def __init__(self, argv, fileExists=None):
+    def __init__(self, argv: Any, fileExists: Any=None) -> Any:
         self.gatName = "gat_app.py"
         self.serverName = ""
         self.opts = []  # -v, --git, --zip
@@ -2090,7 +2072,7 @@ class MyArgv:
         return
 
 
-def testMyArgv():
+def testMyArgv() -> Any:
     argv = ["help"]
     aa = MyArgv(argv)
     assert aa.cmd == "help"
@@ -2153,14 +2135,14 @@ def testMyArgv():
     print("test ok")
 
 
-def main():
+def main() -> Any:
     mainDo()
 
     for conn in reversed(g_connList):
         conn.clearConn()
 
 
-def mainDo():
+def mainDo() -> Any:
     # testMyArgv()
     # return
 
@@ -2204,8 +2186,9 @@ def mainDo():
     pyFileName = ma.gatName[:-3]
     # for it in dir(ma):
     #     print(it, getattr(ma, it))
+    prepareLegacyScriptImports()
     mymod = __import__(pyFileName, fromlist=[""])
-    g_mygat = mymod.myGat(helper=helper)
+    g_mygat = newGatScriptInstance(mymod, helper)
     # g_config 객체 생성 지점 -> 여기부터 설정 객체 사용 가능
 
     # print(f"pod1 - {g_config.podman}")
@@ -2264,7 +2247,7 @@ def mainDo():
             else:
                 raise Exception(f"unknown option[{opt}]")
 
-        def checkServerName(serverName):
+        def checkServerName(serverName: Any) -> Any:
             """
             return: none(error), str(new serverName)
             """

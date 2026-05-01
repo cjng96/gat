@@ -1,45 +1,41 @@
 sampleApp = '''
-config="""
-name: sample
-type: app	
-#cmd: [ python3, sample.py ]
+from gat.app_config import GatApp, GatAppCfg, GatDeployCfg, GatDeployIncludeCfg, GatServeCfg, GatServerCfg
 
-serve:
-    patterns: [ "*.go", "*.json", "*.graphql" ]
 
-deploy:
-    strategy: zip
-    maxRelease: 3
-    include:
-        #- "*"
-        - "{{name}}"
-        - config
-        - pm2.json
-        - src: ../build
-          target: build
-    exclude:
-        - config/my.json
-    sharedLinks:
-        - config/my.json
-    gitRepo: <your remote repo>
-
-servers:
-    - name: test
-      host: test.com
-      port: 22
-      id: test      # ssh worker user id
-      #dkName: con
-      #dkId: test
-      owner: engt   # opt, generated files owner
-      # you don't need sudo right if it's not specified.
-      # if you need the operation needed sudo right, should specify it.
-      deployRoot: ~/test  # deployment target path
-      gitBranch: <your remote repo branch>
-"""
-
-class myGat:
-    def __init__(self, helper, **_):
-        helper.configStr("yaml", config)	# helper.configFile("yaml", "gat.yaml")
+class myGat(GatApp):
+    gatConfig = GatAppCfg(
+        name="sample",
+        type="app",
+        # cmd=["python3", "sample.py"],
+        serve=GatServeCfg.watch("*.go", "*.json", "*.graphql"),
+        deploy=GatDeployCfg.zip(
+            include=[
+                # "*",
+                "{{name}}",
+                "config",
+                "pm2.json",
+                GatDeployIncludeCfg("../build", "build"),
+            ],
+            exclude=["config/my.json"],
+            sharedLinks=["config/my.json"],
+            gitRepo="<your remote repo>",
+        ),
+        servers=[
+            GatServerCfg(
+                name="test",
+                host="test.com",
+                port=22,
+                id="test",  # ssh worker user id
+                # dkName="con",
+                # dkId="test",
+                owner="engt",  # opt, generated files owner
+                # you don't need sudo right if it's not specified.
+                # if you need the operation needed sudo right, should specify it.
+                deployRoot="~/test",  # deployment target path
+                extra={"gitBranch": "<your remote repo branch>"},
+            ),
+        ],
+    )
 
     def buildTask(self, util, local, **_):
         #local.gqlGen()
@@ -47,7 +43,7 @@ class myGat:
 
     # it's default operation and you can override running cmd
     #def getRunCmd(self, util, local, **_):
-    #	return [util.config.config.name]
+    #    return [util.config.config.name]
 
     def deployPreTask(self, util, remote, local, **_):
         #print('deploy to {{server.name}}) # remote.server.name
@@ -61,30 +57,28 @@ class myGat:
 '''
 
 sampleSys = '''
-config="""
-name: sample
-type: sys
+from gat.app_config import GatApp, GatAppCfg, GatServerCfg, GatVarsCfg
 
-# s3:
-#   key: ${aws_key}
-#   secret: ${aws_secret}
 
-servers:
-    - name: test
-      host: test.com
-      port: 22
-      id: test  # ssh worker user id
-      #dkName: name
-      vars:
-        hello: test
-"""
-
-class myGat:
-    def __init__(self, helper, **_):
-        helper.configStr("yaml", config)	# helper.configFile("yaml", "gat.yaml")
+class myGat(GatApp):
+    gatConfig = GatAppCfg.sys(
+        name="sample",
+        # s3={"key": "${aws_key}", "secret": "${aws_secret}"},
+        servers=[
+            GatServerCfg(
+                name="test",
+                host="test.com",
+                port=22,
+                id="test",  # ssh worker user id
+                # dkName="name",
+                vars=GatVarsCfg(hello="test"),
+            ),
+        ],
+    )
 
     def setupTask(self, util, local, remote, **_):
         #remote.pm2Register():
         #remote.run("cd %%s/current && echo 'finish'" %% remote.vars.deployRoot)
+        pass
 
 '''

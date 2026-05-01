@@ -17,28 +17,43 @@ Cmds = GatDev.Cmds
 
 class gatDev(GatDev):
     pathCfg = GatDev.PathCfg(
-        root=Path(__file__).resolve().parent,
         appPubspec="app/pubspec.yaml",
         appCoverageInfo="app/coverage/lcov.info",
         appApkPath="app/build/app/outputs/flutter-apk/app-release.apk",
         appApkRelPath="release/android",
         apkPrefix="easycoll",
     )
-    serUpArgs = ("prod", "run")
-    cmdList = [
+    cmdDisplayOrder = [
         Cmds.andBuild,
         Cmds.verUp,
-        Cmds.serUp,
         Cmds.andInstall,
-        Cmds.andDeploy,
         Cmds.andTest,
-        Cmds.serTest,
-        Cmds.webTest,
-        Cmds.appCov,
-        Cmds.serCov,
-        Cmds.webCov,
-        Cmds.allCov,
     ]
+
+    def getToolCmd(self, cmd):
+        match cmd:
+            case "flutter":
+                return "fvm flutter"
+            case _:
+                return super().getToolCmd(cmd)
+
+    def cmdAndBuild(self):
+        return self.doAndBundleBuild(
+            app_dir=self.pathCfg.appDir,
+            root_dir=self.pathCfg.root,
+            target_platforms=("android-arm", "android-arm64", "android-x64"),
+            signing_properties=Path.home() / ".gradle/upload.properties",
+            bundletool_jar=Path.home() / "bin/bundletool.jar",
+        )
+
+    def cmdVerUp(self):
+        return self.doVerUp(root_dir=self.pathCfg.root, app_pubspec=self.pathCfg.appPubspec)
+
+    def cmdAndInstall(self):
+        return self.doAndInstall()
+
+    def cmdAndTest(self):
+        return self.doAndTest(app_dir=self.pathCfg.appDir)
 
 
 BUILD = gatDev()
@@ -61,10 +76,49 @@ The default command order is:
 11. `webCov`
 12. `allCov`
 
-Projects can override `cmdList` with `GatDev.Cmds` constants. If a project adds a new command name, it must
-also override `commandMap()` and return a callable for that command. `gdev`
-validates this before execution and fails with `BuildError` when a listed command
-has no implementation.
+Projects can override `cmdDisplayOrder` with `GatDev.Cmds` constants. A command
+is supported when the project subclass overrides its `cmdXxx()` method, even if
+it is not listed in `cmdDisplayOrder`; unlisted commands are appended after the
+ordered commands.
+
+The `cmdXxx()` method should only bind project configuration and call reusable
+`doXxx(...)` logic with named parameters. For example:
+
+```python
+def cmdWebCov(self):
+    self.doWebCov(web_dir=self.pathCfg.webDir, npm_args=("run", "test:coverage"))
+```
+
+For aliases such as `macffiRestore`, add an entry to `commandMethodAliases` when
+the automatic `cmdXxx` name is not the name you want.
+
+## Project Configuration
+
+Prefer grouped config objects for settings shared by multiple tasks:
+
+- `AndroidCfg`: Android defaults that are intentionally shared by multiple project tasks
+- `DesktopCfg`: desktop defaults that are intentionally shared by multiple project tasks
+- `SshCfg`: deploy host/user connection settings
+
+`PathCfg.root` is inferred from the project `gat_dev.py` file by default. Set it
+only when a build file intentionally uses a different project root.
+
+Tool command names should be customized by overriding `getToolCmd(cmd)`, not by
+storing tool names in class fields. The default implementation returns `cmd`
+unchanged, and environment variables such as `FLUTTER_BIN` still take precedence
+when present.
+
+Legacy flat class fields such as `sshDeployHost` are still accepted for older
+project files, but new project files should use grouped dataclasses only for
+settings shared across tasks.
+
+Task-only settings should stay in the project `cmdXxx()` method and be passed to
+`doXxx(...)` as named parameters. For example, `macDeploy` signing identities,
+package paths, and upload command should be passed from `cmdMacDeploy()` instead
+of being stored in `DesktopCfg`.
+Google Play package, track, OAuth redirect, credential file, and client secrets
+file values should likewise be passed from the deploy task into
+`googlePlayPublish(...)` instead of being stored on the build class.
 
 ## Launcher
 
@@ -90,6 +144,11 @@ Internally these commands are built through `ToolCmd` static methods such as
 `ToolCmd.flutter("test")` and `ToolCmd.adb("devices", "-l")`.
 
 The values are shell-split, so wrappers such as `uv run flutter` are supported.
+
+Projects that still have legacy `build.py` behavior can keep the command names
+in their `cmdDisplayOrder` and map them to `GatDev` helpers such as `doAndBundleBuild()`,
+`updateBuildInfo()`, `sqfliteFfiCommentOut()`, `doWinBuild()`, `doMacBuild()`,
+`doIosBuild()`, and `googlePlayPublish()` from project-owned `cmdXxx()` methods.
 
 ## Version Rule
 
