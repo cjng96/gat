@@ -12,9 +12,6 @@ from pathlib import Path
 from gdev import GatDev
 
 
-Cmds = GatDev.Cmds
-
-
 class gatDev(GatDev):
     pathCfg = GatDev.PathCfg(
         appPubspec="app/pubspec.yaml",
@@ -23,12 +20,6 @@ class gatDev(GatDev):
         appApkRelPath="release/android",
         apkPrefix="easycoll",
     )
-    cmdDisplayOrder = [
-        Cmds.andBuild,
-        Cmds.verUp,
-        Cmds.andInstall,
-        Cmds.andTest,
-    ]
 
     def getToolCmd(self, cmd):
         match cmd:
@@ -61,25 +52,11 @@ BUILD = gatDev()
 
 ## Command Order
 
-The default command order is:
-
-1. `andBuild`
-2. `verUp`
-3. `serUp`
-4. `andInstall`
-5. `andDeploy`
-6. `andTest`
-7. `serTest`
-8. `webTest`
-9. `appCov`
-10. `serCov`
-11. `webCov`
-12. `allCov`
-
-Projects can override `cmdDisplayOrder` with `GatDev.Cmds` constants. A command
-is supported when the project subclass overrides its `cmdXxx()` method, even if
-it is not listed in `cmdDisplayOrder`; unlisted commands are appended after the
-ordered commands.
+The command order is the `cmdXxx()` method definition order in the project
+subclass. A command is supported only when the project subclass directly
+overrides its `cmdXxx()` method. Inherited base commands provide reusable
+default behavior, but they are not exposed until the project class declares the
+command.
 
 The `cmdXxx()` method should only bind project configuration and call reusable
 `doXxx(...)` logic with named parameters. For example:
@@ -89,8 +66,7 @@ def cmdWebCov(self):
     self.doWebCov(web_dir=self.pathCfg.webDir, npm_args=("run", "test:coverage"))
 ```
 
-For aliases such as `macffiRestore`, add an entry to `commandMethodAliases` when
-the automatic `cmdXxx` name is not the name you want.
+For example, `cmdMacFfiRestore()` is exposed as `macFfiRestore`.
 
 ## Project Configuration
 
@@ -145,8 +121,8 @@ Internally these commands are built through `ToolCmd` static methods such as
 
 The values are shell-split, so wrappers such as `uv run flutter` are supported.
 
-Projects that still have legacy `build.py` behavior can keep the command names
-in their `cmdDisplayOrder` and map them to `GatDev` helpers such as `doAndBundleBuild()`,
+Projects that still have legacy `build.py` behavior can declare matching
+`cmdXxx()` methods and map them to `GatDev` helpers such as `doAndBundleBuild()`,
 `updateBuildInfo()`, `sqfliteFfiCommentOut()`, `doWinBuild()`, `doMacBuild()`,
 `doIosBuild()`, and `googlePlayPublish()` from project-owned `cmdXxx()` methods.
 

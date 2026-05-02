@@ -12,6 +12,7 @@ from gdev import (
     BuildError,
     DesktopCfg,
     GatDev,
+    GatDevBase,
     SshCfg,
     ToolCmd,
     appendSelectedCommandNumber,
@@ -57,13 +58,6 @@ class InferredRootBuild(GatDev):
 
 
 class DispatchBuild(DemoBuild):
-    cmdDisplayOrder = [
-        GatDev.Cmds.andBuild,
-        GatDev.Cmds.verUp,
-        GatDev.Cmds.serUp,
-        GatDev.Cmds.webCov,
-    ]
-
     def cmdAndBuild(self) -> None:
         pass
 
@@ -77,14 +71,28 @@ class DispatchBuild(DemoBuild):
         self.doWebCov(web_dir=self.pathCfg.webDir, npm_args=("run", "test:coverage"))
 
 
-class OrderedOnlyBuild(DispatchBuild):
-    cmdDisplayOrder = [GatDev.Cmds.andBuild, GatDev.Cmds.webCov]
+class OrderedOnlyBuild(DemoBuild):
+    def cmdAndBuild(self) -> None:
+        pass
+
+    def cmdWebCov(self) -> None:
+        pass
 
     def cmdMacBuild(self) -> None:
         pass
 
     def cmdCustomTask(self) -> None:
         pass
+
+
+class SingleCommandBuild(DemoBuild):
+    def cmdAndBuild(self) -> None:
+        pass
+
+
+class SuperCommandBuild(DemoBuild):
+    def cmdAndTest(self) -> None:
+        super().cmdAndTest()
 
 
 class BundleBuild(DemoBuild):
@@ -98,8 +106,6 @@ class BundleBuild(DemoBuild):
 
 
 class MacDeployBuild(DemoBuild):
-    cmdDisplayOrder = [GatDev.Cmds.macDeploy]
-
     def cmdMacDeploy(self) -> None:
         self.doMacDeploy(
             mac_app_path="app/build/macos/Build/Products/Release/Demo.app",
@@ -202,10 +208,32 @@ class GatDevTest(unittest.TestCase):
                 "BuildError",
                 "DesktopCfg",
                 "GatDev",
+                "GatDevBase",
                 "SshCfg",
                 "ToolCmd",
             ],
         )
+
+    def test_gatdev_inherits_command_declarations_from_base(self):
+        self.assertTrue(issubclass(GatDev, GatDevBase))
+        self.assertFalse(hasattr(GatDev, "Cmds"))
+        self.assertFalse(hasattr(GatDevBase, "Cmds"))
+        self.assertIs(GatDev.cmdAndBuild, GatDevBase.cmdAndBuild)
+
+    def test_gatdev_inherits_shared_config_from_base(self):
+        self.assertIs(GatDev.PathCfg, GatDevBase.PathCfg)
+
+        for field_name in (
+            "pathCfg",
+            "androidCfg",
+            "desktopCfg",
+            "sshCfg",
+            "coverageMinLines",
+            "writeBuildInfoBeforeBuild",
+        ):
+            with self.subTest(field_name=field_name):
+                self.assertIn(field_name, GatDevBase.__dict__)
+                self.assertNotIn(field_name, GatDev.__dict__)
 
     def test_grouped_config_dataclasses_and_tool_hook_are_resolved(self):
         class ConfigBuild(DemoBuild):
@@ -293,7 +321,6 @@ class GatDevTest(unittest.TestCase):
 
         build = DemoBuild()
         self.assertFalse(hasattr(gdev, "GooglePlayCfg"))
-        self.assertFalse(hasattr(GatDev.Cmds, "googlePlayTrackList"))
         self.assertFalse(hasattr(GatDev, "cmdGooglePlayTrackList"))
         self.assertNotIn("test", build.commandNames())
 
@@ -326,7 +353,7 @@ class GatDevTest(unittest.TestCase):
         self.assertEqual(build.adbCmd("devices"), ["adb", "devices"])
 
     def test_tool_cmd_builds_env_overridable_commands(self):
-        with patch.dict("gdev.os.environ", {"FLUTTER_BIN": "/opt/flutter/bin/flutter --suppress-analytics"}):
+        with patch.dict("gdev.gatDev.os.environ", {"FLUTTER_BIN": "/opt/flutter/bin/flutter --suppress-analytics"}):
             self.assertEqual(
                 ToolCmd.flutter("test"),
                 ["/opt/flutter/bin/flutter", "--suppress-analytics", "test"],
@@ -339,27 +366,39 @@ class GatDevTest(unittest.TestCase):
         self.assertFalse(hasattr(gdev, "adbCmd"))
 
     def test_task_support_requires_cmd_override(self):
-        self.assertFalse(DemoBuild().hasTask(GatDev.Cmds.webCov))
-        self.assertTrue(DispatchBuild().hasTask(GatDev.Cmds.webCov))
-        self.assertNotIn(GatDev.Cmds.webCov, DemoBuild().commandMap())
-        self.assertIn(GatDev.Cmds.webCov, DispatchBuild().commandMap())
+        self.assertFalse(DemoBuild().hasTask("webCov"))
+        self.assertTrue(DispatchBuild().hasTask("webCov"))
+        self.assertNotIn("webCov", DemoBuild().commandMap())
+        self.assertIn("webCov", DispatchBuild().commandMap())
 
-    def test_cmd_list_is_display_order_only(self):
+    def test_cmd_list_uses_project_method_definition_order(self):
         build = OrderedOnlyBuild()
 
         self.assertEqual(
             build.availableCmdList(),
             [
-                GatDev.Cmds.andBuild,
-                GatDev.Cmds.webCov,
-                GatDev.Cmds.verUp,
-                GatDev.Cmds.serUp,
-                GatDev.Cmds.macBuild,
+                "andBuild",
+                "webCov",
+                "macBuild",
                 "customTask",
             ],
         )
-        self.assertIn(GatDev.Cmds.macBuild, build.commandMap())
+        self.assertIn("macBuild", build.commandMap())
         self.assertIn("customTask", build.commandMap())
+
+    def test_inherited_project_commands_are_not_exposed_by_child_class(self):
+        build = SingleCommandBuild()
+
+        self.assertEqual(build.availableCmdList(), ["andBuild"])
+
+    def test_overridden_command_can_delegate_to_default_parent_implementation(self):
+        build = SuperCommandBuild()
+
+        self.assertTrue(build.hasTask("andTest"))
+        with patch.object(build, "doAndTest") as do_mock:
+            build.commandMap()["andTest"]()
+
+        do_mock.assert_called_once_with(app_dir=build.pathCfg.appDir)
 
     def test_all_builtin_commands_have_cmd_placeholders(self):
         build = DemoBuild()
@@ -372,7 +411,7 @@ class GatDevTest(unittest.TestCase):
         build = DispatchBuild()
 
         with patch.object(build, "doWebCov") as do_mock:
-            build.commandMap()[GatDev.Cmds.webCov]()
+            build.commandMap()["webCov"]()
 
         do_mock.assert_called_once_with(web_dir=build.pathCfg.webDir, npm_args=("run", "test:coverage"))
 
@@ -380,7 +419,7 @@ class GatDevTest(unittest.TestCase):
         build = MacDeployBuild()
 
         with patch.object(build, "doMacDeploy") as do_mock:
-            build.commandMap()[GatDev.Cmds.macDeploy]()
+            build.commandMap()["macDeploy"]()
 
         do_mock.assert_called_once_with(
             mac_app_path="app/build/macos/Build/Products/Release/Demo.app",
@@ -446,12 +485,12 @@ class GatDevTest(unittest.TestCase):
         run_mock.assert_called_once_with(["npm", "run", "coverage"], cwd=build.pathCfg.webDir)
 
     def test_future_annotations_import_is_not_used(self):
-        source = Path(gdev.__file__).read_text(encoding="utf-8")
+        source = Path(gdev.gatDev.__file__).read_text(encoding="utf-8")
 
         self.assertNotIn("from __future__ import annotations", source)
 
     def test_optional_google_play_and_ssh_helpers_are_split_from_core(self):
-        source = Path(gdev.__file__).read_text(encoding="utf-8")
+        source = Path(gdev.gatDev.__file__).read_text(encoding="utf-8")
 
         self.assertNotIn("from http.server import", source)
         self.assertNotIn("import webbrowser", source)
@@ -529,7 +568,7 @@ class GatDevTest(unittest.TestCase):
 
             (root / "client/lib").mkdir(parents=True)
             (root / "client/pubspec.yaml").write_text("name: demo\nversion: 1.2.3+10203\n", encoding="utf-8")
-            with patch("gdev.datetime.datetime") as datetime_mock:
+            with patch("gdev.gatDev.datetime.datetime") as datetime_mock:
                 datetime_mock.now.return_value.strftime.return_value = "26-05-01T12"
                 TmpBuild().updateBuildInfo()
             self.assertEqual(
@@ -584,9 +623,9 @@ class GatDevTest(unittest.TestCase):
     def test_main_without_command_requires_tty(self):
         build = DemoBuild()
         with (
-            patch("gdev.sys.stdin", FakeTty(False)),
-            patch("gdev.sys.stdout", FakeTty(False)),
-            patch("gdev.sys.stderr", FakeTty(False)),
+            patch("gdev.gatDev.sys.stdin", FakeTty(False)),
+            patch("gdev.gatDev.sys.stdout", FakeTty(False)),
+            patch("gdev.gatDev.sys.stderr", FakeTty(False)),
             patch.object(build, "selectCommandSequenceTui") as select_mock,
         ):
             self.assertEqual(build.main([]), 1)
