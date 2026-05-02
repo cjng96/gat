@@ -17,6 +17,7 @@ from gdev import (
     ToolCmd,
     appendSelectedCommandNumber,
     bumpFlutterVersion,
+    commandInputAfterSpace,
     parseAdbDevices,
     parseFlutterVersion,
     parseLcovLineCoverage,
@@ -168,6 +169,29 @@ class GatDevTest(unittest.TestCase):
     def test_appendSelectedCommandNumber_keeps_ordered_input(self):
         self.assertEqual(appendSelectedCommandNumber("", 2), "3")
         self.assertEqual(appendSelectedCommandNumber("3", 0), "3 1")
+
+    def test_commandInputAfterSpace_only_adds_selected_command_when_input_is_empty(self):
+        self.assertEqual(commandInputAfterSpace("", 2), "3 ")
+        self.assertEqual(commandInputAfterSpace("3", 0), "3 ")
+        self.assertEqual(commandInputAfterSpace("3 ", 0), "3  ")
+
+    def test_commandInputAfterSpace_adds_selected_command_after_selection_move(self):
+        self.assertEqual(commandInputAfterSpace("3", 0, selection_moved_after_input=True), "3 1 ")
+        self.assertEqual(commandInputAfterSpace("3 ", 1, selection_moved_after_input=True), "3 2 ")
+
+    def test_space_selected_command_then_manual_number_parses_in_entered_order(self):
+        build = DispatchBuild()
+        input_text = commandInputAfterSpace("", 2) + "1"
+
+        self.assertEqual(input_text, "3 1")
+        self.assertEqual(build.parseCommandSequence(input_text), ["serUp", "andBuild"])
+
+    def test_manual_number_then_selection_move_space_parses_in_entered_order(self):
+        build = DispatchBuild()
+        input_text = commandInputAfterSpace("3", 0, selection_moved_after_input=True) + "4"
+
+        self.assertEqual(input_text, "3 1 4")
+        self.assertEqual(build.parseCommandSequence(input_text), ["serUp", "andBuild", "webCov"])
 
     def test_path_config_resolves_configured_directories(self):
         build = DemoBuild()

@@ -12,7 +12,8 @@
 
 ## 정의 문서 목록
 - guide.md: this document
-- spec.md: 동작 구조와 스펙이 상세히 나열
+- gat-spec.md: gat 본체 동작 구조와 스펙
+- gdev-spec.md: gdev 개발/빌드 보조 도구 스펙
 - test.md: 유닛테스트와 docker를 이용한 실제 구동 테스트 목록
 
 - manual.md: gat용 설정 파일 작성 매뉴얼 
@@ -44,4 +45,3 @@
 - 커밋 메시지 작성시 타이틀은 "<관련된대분류>: <관련된기능 혹은 페이지이름 - <수정내역>"으로 작성
   - 관련된 대분류는 app, ser, sbedit, sbdoc
   - 커밋 메시지 예시> app: mainWindow - display summary news
-

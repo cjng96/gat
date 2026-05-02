@@ -68,6 +68,21 @@ def cmdWebCov(self):
 
 For example, `cmdMacFfiRestore()` is exposed as `macFfiRestore`.
 
+## Interactive Command Selection
+
+When `gdev` runs in a TTY without a command argument, it opens a numbered command
+selector.
+
+- `Up`/`Down` or `k`/`j` moves the selected command.
+- Number keys enter command numbers manually.
+- `Space` on an empty input adds the currently selected command number followed
+  by a space.
+- `Space` immediately after manual number input adds only a separator space.
+- If manual numbers are already entered and the selection is moved with
+  `Up`/`Down` or `k`/`j`, `Space` adds the newly selected command number followed
+  by a space.
+- `Enter` runs the entered command sequence, preserving the entered order.
+
 ## Project Configuration
 
 Prefer grouped config objects for settings shared by multiple tasks:

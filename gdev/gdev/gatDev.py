@@ -229,6 +229,17 @@ def appendSelectedCommandNumber(input_text: str, selected_index: int) -> str:
     return number if not prefix else f"{prefix} {number}"
 
 
+def commandInputAfterSpace(
+    input_text: str,
+    selected_index: int,
+    *,
+    selection_moved_after_input: bool = False,
+) -> str:
+    if input_text.strip() and not selection_moved_after_input:
+        return f"{input_text} "
+    return f"{appendSelectedCommandNumber(input_text, selected_index)} "
+
+
 class GatDev(GatDevBase):
     def __init__(self) -> None:
         self.pathCfg = self.pathCfg.resolve(self.inferRoot())
@@ -402,6 +413,7 @@ class GatDev(GatDevBase):
             input_text = ""
             message = ""
             selected = 0
+            selection_moved_after_input = False
 
             while True:
                 stdscr.erase()
@@ -438,18 +450,27 @@ class GatDev(GatDevBase):
                         continue
                 if key in (curses.KEY_UP, ord("k")):
                     selected = (selected - 1) % len(commands)
+                    selection_moved_after_input = bool(input_text.strip())
                     continue
                 if key in (curses.KEY_DOWN, ord("j")):
                     selected = (selected + 1) % len(commands)
+                    selection_moved_after_input = bool(input_text.strip())
                     continue
                 if key in (curses.KEY_BACKSPACE, 8, 127):
                     input_text = input_text[:-1]
+                    selection_moved_after_input = False
                     continue
                 if key == ord(" "):
-                    input_text = appendSelectedCommandNumber(input_text, selected)
+                    input_text = commandInputAfterSpace(
+                        input_text,
+                        selected,
+                        selection_moved_after_input=selection_moved_after_input,
+                    )
+                    selection_moved_after_input = False
                     continue
                 if key == ord(",") or ord("0") <= key <= ord("9"):
                     input_text += chr(key)
+                    selection_moved_after_input = False
 
         return curses.wrapper(menu)
 
