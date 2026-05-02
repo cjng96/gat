@@ -542,6 +542,40 @@ servers:
         self.assertIsNone(varsDict["net"])
         self.assertIsNone(varsDict["dbMount"])
 
+    def test_server_cfg_defaults_port_to_22(self):
+        cfg = GatAppCfg.sys(
+            name="demo",
+            servers=[
+                GatServerCfg(name="dev", host="localhost", id="me"),
+                GatServerCfg("prod", "example.com", "deploy"),
+                GatServerCfg("legacy", "legacy.example.com", 2200, "legacy-user"),
+            ],
+        )
+
+        servers = cfg.toDict()["servers"]
+
+        self.assertEqual(servers[0]["port"], 22)
+        self.assertEqual(servers[0]["id"], "me")
+        self.assertEqual(servers[1]["port"], 22)
+        self.assertEqual(servers[1]["id"], "deploy")
+        self.assertEqual(servers[2]["port"], 2200)
+        self.assertEqual(servers[2]["id"], "legacy-user")
+
+    def test_yaml_server_cfg_defaults_port_to_22(self):
+        cfg = GatAppCfg.fromYaml(
+            """
+name: demo
+type: sys
+servers:
+  - name: dev
+    host: localhost
+    id: me
+"""
+        )
+
+        self.assertEqual(cfg.servers[0].port, 22)
+        self.assertEqual(cfg.toDict()["servers"][0]["port"], 22)
+
     def test_config_dic_view_keeps_legacy_mutation_access(self):
         config = Config()
 

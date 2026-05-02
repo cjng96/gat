@@ -675,18 +675,48 @@ class GatDeployCfg(GatCfgMixin):
         return _runtimeValue(value)
 
 
-@dataclass
+@dataclass(init=False)
 class GatServerCfg(GatCfgMixin):
     name: str
     host: str
-    port: int
     id: str
+    port: int = 22
     deployRoot: str | None = None
     vars: GatVarsCfg = field(default_factory=GatVarsCfg)
     dkName: str | None = None
     dkId: str | None = None
     owner: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+
+    def __init__(
+        self,
+        name: str,
+        host: str,
+        port: int | str = 22,
+        id: str | None = None,
+        deployRoot: str | None = None,
+        vars: Any = None,
+        dkName: str | None = None,
+        dkId: str | None = None,
+        owner: str | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        if id is None:
+            if isinstance(port, str):
+                id = port
+                port = 22
+            else:
+                raise TypeError("GatServerCfg requires id")
+        self.name = name
+        self.host = host
+        self.port = port
+        self.id = id
+        self.deployRoot = deployRoot
+        self.vars = GatVarsCfg.fromDict({} if vars is None else vars)
+        self.dkName = dkName
+        self.dkId = dkId
+        self.owner = owner
+        self.extra = extra or {}
 
     @classmethod
     def fromDict(cls: type[Self], data: Any) -> Self:
@@ -696,7 +726,7 @@ class GatServerCfg(GatCfgMixin):
         return cls(
             name=data["name"],
             host=data["host"],
-            port=data["port"],
+            port=data.get("port", 22),
             id=data["id"],
             deployRoot=data.get("deployRoot"),
             vars=GatVarsCfg.fromDict(data.get("vars", {})),
