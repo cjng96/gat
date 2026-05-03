@@ -4032,6 +4032,7 @@ def setupWebApp(
     localBind: bool=False,
     # proxyProtocol: bool=False,
     proxyTrustedIp: str|None=None, # 172.16.0.0/16 or 127.0.0.1
+    accessIpRanges: list[str] | None=None,
     customConfig: str="",
 ) -> None:
     """
@@ -4054,6 +4055,12 @@ def setupWebApp(
     if proxyTrustedIp is not None:
         realIp = f"""real_ip_header proxy_protocol;
   set_real_ip_from {proxyTrustedIp};"""
+
+    accessBlock = ""
+    if accessIpRanges:
+        accessLines = [f"    allow {ip};" for ip in accessIpRanges if ip.strip()]
+        if accessLines:
+            accessBlock = "\n".join([*accessLines, "    deny all;"])
 
     extra = (
         ""
@@ -4087,6 +4094,7 @@ proxy_max_temp_file_size 0;
     wsContent = ""
     if wsPath is not None:
         wsContent = f"""location {wsPath} {{
+    {accessBlock}
     {proxyContent}
     proxy_set_header Upgrade $http_upgrade; # for ws2
     proxy_set_header Connection upgrade;
@@ -4098,6 +4106,7 @@ proxy_max_temp_file_size 0;
         rootContent = f"""root {root};
   index index.html;
   location / {{
+    {accessBlock}
     # First attempt to serve request as file, then
     # as directory, then fall back to displaying a 404.
     #try_files $uri $uri/ =404;
@@ -4137,6 +4146,7 @@ server {{
   {resolver}
 
   location {publicApi} {{
+    {accessBlock}
     try_files $uri $uri @proxy;
   }}
   {privateContent}
