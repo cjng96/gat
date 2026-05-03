@@ -4086,6 +4086,7 @@ proxy_max_temp_file_size 0;
     proxy_set_header X-Scheme $scheme;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $host:$server_port;
     proxy_set_header X-Accel-Redirect $uri;
     proxy_set_header Host $http_host;
     {extra}
