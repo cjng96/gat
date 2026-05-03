@@ -16,7 +16,7 @@ from typing import Any
 # from .coS3 import CoS3
 
 
-def loadFile(pp: Any) -> Any:
+def loadFile(pp: str) -> str:
     with open(pp, "r") as fp:
         return fp.read()
 
@@ -117,7 +117,14 @@ def installHomebrewSafe(env: Any) -> Any:
     )
 
 
-def installSshfsMount(env: Any, name: Any, src: Any, target: Any, port: Any=22, id: Any=None) -> Any:
+def installSshfsMount(
+    env: Any,
+    name: str,
+    src: str,
+    target: str,
+    port: int=22,
+    id: str | None=None,
+) -> None:
     """
     installSshfsMount(remote, 'test', 'account@server.com:', '/tmp/mnt', port=7022)
     """
@@ -358,16 +365,16 @@ server {{
 
 def nginxNextcloud(
     env: Any,
-    domain: Any,
-    prot: Any="https",
-    port: Any=80,
-    name: Any="next",
-    proxy: Any="next:9000",
-    nginxCfgPath: Any="/data/nginx",
-    localBind: Any=False,
-    selfSign: Any=False,  # true: 사설 인증서 사용
-    selfSignPort: Any=443,
-) -> Any:
+    domain: str,
+    prot: str="https",
+    port: int=80,
+    name: str="next",
+    proxy: str="next:9000",
+    nginxCfgPath: str="/data/nginx",
+    localBind: bool=False,
+    selfSign: bool=False,  # true: 사설 인증서 사용
+    selfSignPort: int=443,
+) -> None:
     # https://www.reddit.com/r/selfhosted/comments/rvqv3l/nextcloud_behind_nginx_proxy_manager_nextcloud
     # https://github.com/nextcloud/docker/blob/master/.examples/docker-compose/insecure/mariadb/fpm/web/nginx.conf
 
@@ -399,6 +406,7 @@ server {{
 """
 
     resolver = nginxResolver(env)
+    upstream = "$nextcloud_upstream"
 
     env.makeFile(
         fr"""server {{
@@ -406,6 +414,7 @@ server {{
 		server_name		{domain};
 		root			/data/{name};
     {resolver}
+    set {upstream} {proxy};
 
     {extra1}
 
@@ -438,7 +447,7 @@ server {{
 
         fastcgi_param modHeadersAvailable true;         # Avoid sending the security headers twice
         fastcgi_param front_controller_active true;     # Enable pretty urls
-        fastcgi_pass {proxy};
+        fastcgi_pass {upstream};
 
         fastcgi_intercept_errors on;
         fastcgi_request_buffering off;
@@ -491,24 +500,24 @@ server {{
         )
 
 
-def getCtrCmd(env: Any) -> Any:
+def getCtrCmd(env: Any) -> str:
     return "podman" if env.config.podman else "docker"
 
 
 def containerNextcloudFpm(
     env: Any,
-    dataPath: Any,
-    name: Any="next",
-    overwriteProt: Any="https",
-    overwriteDomain: Any=None,  # None이면 overwrite안한다
-    dbHost: Any="sql",  # localhost:3306
-    dbId: Any="next",
-    dbPw: Any="1234",
-    dbName: Any="next",
-    publishPort: Any=0,
-    restart: Any="unless-stopped",
-    net: Any=None,
-) -> Any:
+    dataPath: str,
+    name: str="next",
+    overwriteProt: str="https",
+    overwriteDomain: str | None=None,  # None이면 overwrite안한다
+    dbHost: str="sql",  # localhost:3306
+    dbId: str="next",
+    dbPw: str="1234",
+    dbName: str="next",
+    publishPort: int=0,
+    restart: str="unless-stopped",
+    net: str | None=None,
+) -> None:
     """
     최초생성시
     1. next로 db 생성
@@ -674,15 +683,15 @@ dockerNextcloudFpm = containerNextcloudFpm
 
 def dockerNextcloud(
     env: Any,
-    domain: Any,
-    srcPath: Any,
-    name: Any="next",
-    prot: Any="https",
-    dbHost: Any="sql",
-    dbName: Any="next",
-    dbId: Any="next",
-    dbPw: Any="1234",
-) -> Any:
+    domain: str,
+    srcPath: str,
+    name: str="next",
+    prot: str="https",
+    dbHost: str="sql",
+    dbName: str="next",
+    dbId: str="next",
+    dbPw: str="1234",
+) -> None:
     # https://hub.docker.com/_/nextcloud#running-this-image-with-docker-compose
     if containerExists(env, name):
         # TODO: next가 만들다 실패했을도 있으니 더 검사해야 한다
@@ -799,7 +808,12 @@ WantedBy=default.target
     )
 
 
-def installRedis(env: Any, memSize: Any="1G", memPolicy: Any="allkeys-lru", port: Any=None) -> Any:
+def installRedis(
+    env: Any,
+    memSize: str="1G",
+    memPolicy: str="allkeys-lru",
+    port: int | None=None,
+) -> None:
     """
     memSize: 1G, 512M
     memPolicy
@@ -829,7 +843,7 @@ def installRedis(env: Any, memSize: Any="1G", memPolicy: Any="allkeys-lru", port
     env.run("sudo service redis-server start")
 
 
-def installRabbitMq(env: Any, account: Any="admin", pw: Any="") -> Any:
+def installRabbitMq(env: Any, account: str="admin", pw: str="") -> None:
     """
     localhost:15672
     """
@@ -845,7 +859,7 @@ def installRabbitMq(env: Any, account: Any="admin", pw: Any="") -> Any:
     env.run("sudo service rabbitmq-server restart")
 
 
-def installDart(env: Any, ver: Any="latest") -> Any:
+def installDart(env: Any, ver: str="latest") -> None:
     """
     version: lastest, 3.0.7...
     dart sdk: 400MB
@@ -894,7 +908,16 @@ def installDart(env: Any, ver: Any="latest") -> Any:
         raise Exception(f"unknown arch[{arch}]")
 
 
-def setupRclone(env: Any, name: Any, type: Any, host: Any, port: Any, user: Any, id: Any=None, keyFile: Any=None) -> Any:
+def setupRclone(
+    env: Any,
+    name: str,
+    type: str,
+    host: str,
+    port: int,
+    user: str,
+    id: str | None=None,
+    keyFile: str | None=None,
+) -> None:
     """
     sftp용임
 
@@ -947,7 +970,7 @@ sha1sum_command = sha1sum
     )
 
 
-def setupRunitService(env: Any, name: Any, cmd: Any) -> Any:
+def setupRunitService(env: Any, name: str, cmd: str) -> None:
     env.run(f"mkdir -p /var/log/{name}")
     env.run(f"sudo mkdir -p /etc/service/{name}/log")
     env.makeFile(
@@ -992,7 +1015,13 @@ Match Group sftponly
     )
 
 
-def makeSftpUser(env: Any, id: Any, rootPath: Any="/home", dataFolderName: Any="data", authPubs: Any=None) -> Any:
+def makeSftpUser(
+    env: Any,
+    id: str,
+    rootPath: str="/home",
+    dataFolderName: str="data",
+    authPubs: Any=None,
+) -> None:
     home = f"{rootPath}/{id}"
     makeUser(
         env,
@@ -1012,7 +1041,7 @@ sudo chown {id}: {home}/{dataFolderName}"
     )
 
 
-def mountFolder(env: Any, src: Any, dest: Any) -> Any:
+def mountFolder(env: Any, src: str, dest: str) -> None:
     env.run("sudo mkdir -p {0}".format(dest))
     if not env.runSafe(f"mountpoint -q {dest}".format()):
         env.run(f"sudo mount -o bind {src} {dest}")
@@ -1022,7 +1051,7 @@ def mountFolder(env: Any, src: Any, dest: Any) -> Any:
 
 
 # centos 호환 여부 : O
-def installRssh(env: Any, home: Any, useChroot: Any=True) -> Any:
+def installRssh(env: Any, home: str, useChroot: bool=True) -> None:
     """
     rssh이용해서 rsyn를 쓸수 있게.
     단점은 루트가 보여서 조금 지저분하다
@@ -1271,7 +1300,27 @@ def sshKeyGen(env: Any, id: Any, authPubs: Any=None) -> Any:
     # 자기파일이라 sudo가 필요없어야하는데, 이미 존재했을 경우 위에서 chown을 해주는데도 안되는 경우가 있음
     if not env.runSafe(f"sudo test -e {home}/.ssh/id_rsa"):
         env.run("sudo apt update")  # openssh-client설치에서 404오류 나는 경우가
-        env.run("sudo apt install --no-install-recommends -y openssh-client")
+        #env.run("sudo apt install --no-install-recommends -y openssh-client")
+        '''
+        Configuring openssh-server
+        --------------------------
+
+        A new version (/tmp/tmp.4VzYEu2WCr) of configuration file /etc/ssh/sshd_config
+        is available, but the version installed currently has been locally modified.
+
+        1. install the package maintainer's version
+        2. keep the local version currently installed
+        3. show the differences between the versions
+        4. show a side-by-side difference between the versions
+        5. show a 3-way difference between available versions
+        6. do a 3-way merge between available versions
+        7. start a new shell to examine the situation
+        What do you want to do about modified configuration file sshd_config?
+        '''
+        env.run("""sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            -o Dpkg::Options::="--force-confdef" \
+            -o Dpkg::Options::="--force-confold" \
+            openssh-client""")
         env.run(
             f'sudo -u {id} ssh-keygen -b 2048 -q -t ed25519 -N "" -f {home}/.ssh/id_rsa'
         )
@@ -1811,7 +1860,7 @@ Environment="AWS_SECRET_ACCESS_KEY={secretKey}"''',
     conn.run("sudo systemctl restart docker")
 
 
-def systemdInstall(env: Any, ctrName: Any) -> Any:
+def systemdInstall(env: Any, ctrName: str) -> None:
     pp = "~/.config/systemd/user"
     env.run(f"mkdir -p {pp}")
     env.run(f"podman generate systemd --new --name {ctrName} > {pp}/{ctrName}.service")
@@ -1819,7 +1868,7 @@ def systemdInstall(env: Any, ctrName: Any) -> Any:
     env.run(f"systemctl --user enable --now {ctrName}.service")
 
 
-def systemdRemove(env: Any, ctrName: Any, force: Any=False) -> Any:
+def systemdRemove(env: Any, ctrName: str, force: bool=False) -> None:
     # 이건 새 버젼
     pp = "~/.config/containers/systemd/"
     env.runSafe(f"systemctl stop {ctrName}")
@@ -1848,24 +1897,24 @@ def systemdRemove(env: Any, ctrName: Any, force: Any=False) -> Any:
 # systemctl --user daemon-reload
 def containerUserRun(
     env: Any,
-    name: Any,
-    image: Any,
+    name: str,
+    image: str,
     ports: Any=None,
-    run: Any=True,  # true: systemctrl start까지
-    mountBase: Any=True,
-    net: Any=None,
-    hostname: Any=None,
-    entrypoint: Any=None,
-    exec: Any=None,
-    envs: Any={},
-    volumes: Any=[],
-    awsLogsGroup: Any=None,
-    awsLogsStream: Any=None,
-    awsLogsRegion: Any=None,
-    capAddList: Any=[],
-    runAsCmd: Any=False,  # true면 containerRunCmd로 실행한다
-    rootfull: Any=False,
-) -> Any:
+    run: bool=True,  # true: systemctrl start까지
+    mountBase: bool=True,
+    net: str | None=None,
+    hostname: str | None=None,
+    entrypoint: str | None=None,
+    exec: str | None=None,
+    envs: dict[str, Any]={},
+    volumes: list[str]=[],
+    awsLogsGroup: str | None=None,
+    awsLogsStream: str | None=None,
+    awsLogsRegion: str | None=None,
+    capAddList: list[str]=[],
+    runAsCmd: bool=False,  # true면 containerRunCmd로 실행한다
+    rootfull: bool=False,
+) -> str:
     """
     net='pasta,-T,5001,-T,3306'
       22.04에서는 net
@@ -2048,24 +2097,24 @@ def containerUserRun(
 # use containerUserRun instead(with runAsCmd=True for docker)
 def containerRunCmd(
     env: Any,  # 원래 env None이면 실행은 안하고 커멘드만 반환했었다
-    name: Any,
-    image: Any,
-    doRun: Any=True,  # false: just return running cmd only
+    name: str,
+    image: str,
+    doRun: bool=True,  # false: just return running cmd only
     port: Any=None,  # backward compatibility
     ports: Any=None,
-    mountBase: Any=True,
-    net: Any=None,
-    envs: Any={},
-    volumes: Any=[],
-    entrypoint: Any=None,
-    extra: Any="",
-    useHost: Any=True,  # podman always uses host
-    hostname: Any=None,
-    capAddList: Any=[],
-    awsLogsGroup: Any=None,
-    awsLogsStream: Any=None,
-    awsLogsRegion: Any=None,
-) -> Any:
+    mountBase: bool=True,
+    net: str | None=None,
+    envs: dict[str, Any]={},
+    volumes: list[str]=[],
+    entrypoint: str | None=None,
+    extra: str="",
+    useHost: bool=True,  # podman always uses host
+    hostname: str | None=None,
+    capAddList: list[str]=[],
+    awsLogsGroup: str | None=None,
+    awsLogsStream: str | None=None,
+    awsLogsRegion: str | None=None,
+) -> str:
     """
     port: "3306:3306", "9018-9019:9018-9019", ["9018-9019:9018-9019"]
     extra: "-v /home/cjng96/ctrSql:/sql"
@@ -2187,7 +2236,7 @@ def containerRunCmd(
 dockerRunCmd = containerRunCmd
 
 
-def containerExists(env: Any, name: Any, rootfull: Any=False) -> Any:
+def containerExists(env: Any, name: str, rootfull: bool=False) -> bool:
     if rootfull:
         prog = "sudo podman"
     else:
@@ -2197,12 +2246,18 @@ def containerExists(env: Any, name: Any, rootfull: Any=False) -> Any:
     return ret.strip() != ""
 
 
-def dockerContainerExists(env: Any, name: Any) -> Any:
+def dockerContainerExists(env: Any, name: str) -> bool:
     ret = env.runOutputProf(f'docker ps -aqf name="^{name}$"')
     return ret.strip() != ""
 
 
-def makeDockerContainer(env: Any, name: Any, image: Any=None, port: Any=None, mountBase: Any=True) -> Any:
+def makeDockerContainer(
+    env: Any,
+    name: str,
+    image: str | None=None,
+    port: int | str | None=None,
+    mountBase: bool=True,
+) -> None:
     """
     image: None(create image directly), string(using that image)
     """
@@ -2249,7 +2304,12 @@ CMD ["/start"]
     env.runProf(f"{prog} cp /tmp/dockerCmd {name}:/cmd")
 
 
-def writeRunScript(env: Any, cmd: Any, appName: Any="app", targetPath: Any="/app/current") -> Any:
+def writeRunScript(
+    env: Any,
+    cmd: str,
+    appName: str="app",
+    targetPath: str | None="/app/current",
+) -> None:
     """
     targetPath: None - /etc/service/app
     내부적으로 phusion/baseimage의 runit기반이다.
@@ -2294,7 +2354,7 @@ echo "{help}"
     )
 
 
-def promptSet(env: Any, name: Any) -> Any:
+def promptSet(env: Any, name: str) -> None:
     env.configBlock(
         path="~/.bashrc",
         marker="# {mark} PS1",
@@ -2310,7 +2370,7 @@ def promptSetHostname(env: Any) -> Any:
     )
 
 
-def supervisorBasic(env: Any, serverName: Any) -> Any:
+def supervisorBasic(env: Any, serverName: str) -> None:
     if env.runSafe("test -f /etc/profile.d/sv.sh"):
         return
 
@@ -2372,7 +2432,7 @@ def registerSshPubs(env: Any, local: Any, pubs: Any, account: Any) -> Any:
         )
 
 
-def supervisorSshServer(env: Any, port: Any, denyUsers: Any=None) -> Any:
+def supervisorSshServer(env: Any, port: int, denyUsers: str | None=None) -> None:
     env.run("sudo apt install --no-install-recommends -y openssh-server")
     env.configLine(
         path="/etc/ssh/sshd_config",
@@ -2467,7 +2527,7 @@ def logrotateForSupervisor(env: Any) -> Any:
     env.run("sudo supervisorctl reread && sudo supervisorctl update")
 
 
-def setupTz(env: Any) -> Any:
+def setupTz(env: Any) -> None:
     # mongodb설치할때 time zone물어본다 그거 회피용
     # https://stackoverflow.com/questions/44331836/apt-get-install-tzdata-noninteractive
     env.run(
@@ -2478,7 +2538,7 @@ def setupTz(env: Any) -> Any:
     )
 
 
-def pgDbGen(env: Any, name: Any) -> Any:
+def pgDbGen(env: Any, name: str) -> None:
     exist = env.runOutput(
         f"""setuser postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='{name}';" """
     )
@@ -2489,7 +2549,7 @@ def pgDbGen(env: Any, name: Any) -> Any:
     env.run(f'setuser postgres psql -d {name} -c "CREATE EXTENSION pg_trgm;"')
 
 
-def pgUserDel(env: Any, id: Any, db: Any) -> Any:
+def pgUserDel(env: Any, id: str, db: str) -> None:
     hr = env.runOutput(
         f"""setuser postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='{id}'";"""
     )
@@ -2503,7 +2563,7 @@ def pgUserDel(env: Any, id: Any, db: Any) -> Any:
     env.run(f'setuser postgres psql -c "DROP USER {id};"')
 
 
-def pgUserGen(env: Any, id: Any, pw: Any, db: Any) -> Any:
+def pgUserGen(env: Any, id: str, pw: str, db: str) -> None:
     exist = env.runOutput(
         f"""setuser postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='{id}';" """
     )
@@ -2535,7 +2595,7 @@ def pgUserGen(env: Any, id: Any, pw: Any, db: Any) -> Any:
 
 
 # TODO: mysql, goBuild, gqlGen, dbXorm, pm2Register등은 기본 task에서 빼야할듯
-def mysqlUserDel(env: Any, id: Any, host: Any) -> Any:
+def mysqlUserDel(env: Any, id: str, host: str) -> None:
     hr = env.runOutput(
         f"""sudo mysql -e "SELECT 'exist' FROM mysql.user where user='{id}' AND host='{host}'";"""
     )
@@ -2544,11 +2604,25 @@ def mysqlUserDel(env: Any, id: Any, host: Any) -> Any:
 
     env.run('''sudo mysql -e "DROP USER '%s'@'%s';"''' % (id, host))
 
-def mysqlUserChangePw(env: Any, id: Any, host: Any, pw: Any, sudo: Any=True) -> Any:
+def mysqlUserChangePw(
+    env: Any,
+    id: str,
+    host: str,
+    pw: str,
+    sudo: bool=True,
+) -> None:
     cmd = "sudo " if sudo else ""
     env.run(f'''{cmd}mysql -e "ALTER USER '{id}'@'{host}' IDENTIFIED BY '{pw}';"''')
 
-def mysqlUserGen(env: Any, id: Any, pw: Any, host: Any, priv: Any, unixSocket: Any=False, regen: Any=False) -> Any:
+def mysqlUserGen(
+    env: Any,
+    id: str,
+    pw: str,
+    host: str,
+    priv: str,
+    unixSocket: bool=False,
+    regen: bool=False,
+) -> None:
     """
     priv: "*.*:ALL,GRANT", "*.*:RELOAD,PROCESS,LOCK TABLES,REPLICATION CLIENT"
     앞에께 ON 대상, 뒤에껀 권한인데 - ALL PRIVILEGES를 주면 전체 권한이 된다
@@ -2587,7 +2661,7 @@ def mysqlUserGen(env: Any, id: Any, pw: Any, host: Any, priv: Any, unixSocket: A
         )
 
 
-def goBuild(env: Any, targetOs: Any="", targetArch: Any="") -> Any:
+def goBuild(env: Any, targetOs: str="", targetArch: str="") -> None:
     """
     os: windows, darwin, linux
     arch: amd64, arm64
@@ -2786,7 +2860,7 @@ def installGitea(env: Any) -> Any:
         env.run("mv gitea /usr/local/bin/gitea")
 
 
-def initGitea(env: Any, dataDir: Any="/var/lib/gitea") -> Any:
+def initGitea(env: Any, dataDir: str="/var/lib/gitea") -> None:
     env.run(f"mkdir -p {dataDir}/{{custom,data,log}}")
     env.run(f"chown -R git:git {dataDir}/")
     env.run(f"chmod -R 750 {dataDir}/")
@@ -2833,7 +2907,12 @@ binlog_format=ROW
     env.run(". ~/.zprofile && mysql -e 'FLUSH PRIVILEGES;'")
 
 
-def installMariaDb(env: Any, dataDir: Any="/var/lib/mysql", port: Any=3306, repo: Any=None) -> Any:
+def installMariaDb(
+    env: Any,
+    dataDir: str="/var/lib/mysql",
+    port: int=3306,
+    repo: str | None=None,
+) -> None:
     """
     repo = "deb [arch=amd64,arm64,ppc64el,s390x] https://mirror.yongbok.net/mariadb/repo/10.5/ubuntu focal main"
     """
@@ -2905,7 +2984,12 @@ def installMariaDb(env: Any, dataDir: Any="/var/lib/mysql", port: Any=3306, repo
     # it runs when apt install. baseimage에서는 실행이 안된다
 
 
-def mariadbInit(env: Any, galera: Any, galeraIps: Any, galeraSstPw: Any) -> Any:
+def mariadbInit(
+    env: Any,
+    galera: bool,
+    galeraIps: str | None,
+    galeraSstPw: str,
+) -> None:
     """
     ips: 192.168.1.100,192.168.1.101
     binlog: true, false
@@ -2955,7 +3039,7 @@ innodb_flush_log_at_trx_commit=0
     # https://whitekeyboard.tistory.com/620?category=881248
 
 
-def upcntRunStr() -> Any:
+def upcntRunStr() -> str:
     # return "test -f /var/opt/upcnt || echo 0 > /var/opt/upcnt; awk -F, '{$1=$1+1}1' /var/opt/upcnt > /tmp/upt && mv /tmp/upt /var/opt/upcnt"
     # centos에서 docker exec -i dxm bash -c "echo '1'"하면 안된다
     # 'awk -F, "{$1=$1+1}1" /var/run/upcnt > /tmp/upt && mv /tmp/upt /var/run/upcnt'
@@ -2975,7 +3059,11 @@ def baseimgInitScript(env: Any) -> Any:
     )
 
 
-def mariaDbForSupervisor(env: Any, dataDir: Any="/var/lib/mysql", port: Any=3306) -> Any:
+def mariaDbForSupervisor(
+    env: Any,
+    dataDir: str="/var/lib/mysql",
+    port: int=3306,
+) -> None:
     # hr = env.runOutput('pidof mysqld; echo').strip()
     # if len(hr) > 0:
     if env.runSafe("command -v mysqld"):
@@ -3014,7 +3102,7 @@ def mysqlCreateUsersFromS3(env: Any, local: Any, bucket: Any, key: Any) -> Any:
         )
 
 
-def mysqlWaitReady(env: Any) -> Any:
+def mysqlWaitReady(env: Any) -> None:
     print("wait mysql to be ready...")
     for i in range(30):
         # hr = env.runSafe(f"mysql -e 'select 1' > /dev/null 2>&1")
@@ -3030,7 +3118,7 @@ def mysqlWaitReady(env: Any) -> Any:
     raise Exception("mysql not ready. check the container logs.")
 
 
-def psqlWaitReady(env: Any) -> Any:
+def psqlWaitReady(env: Any) -> None:
     print("wait postgresql to be ready...")
     for i in range(30):
         # hr = env.runSafe(f"mysql -e 'select 1' > /dev/null 2>&1")
@@ -3048,7 +3136,7 @@ def psqlWaitReady(env: Any) -> Any:
 
 # mariabackup과 비교해서 복구시 1:15 vs 15초 정도로 5배 정도 느리다
 # 빽업은 37 vs 11 3.5배정도 느리다
-def mysqlSqlDump(env: Any, cron: Any) -> Any:
+def mysqlSqlDump(env: Any, cron: bool) -> None:
     env.makeFile(
         """\
 #!/bin/bash
@@ -3084,7 +3172,7 @@ fi
         env.run("ln -sf /usr/local/bin/db-dump /etc/cron.daily/db-dump")
 
 
-def mysqlBinDump(env: Any, cron: Any, desync: Any) -> Any:
+def mysqlBinDump(env: Any, cron: bool, desync: bool) -> None:
     # 이제 이거만 쓴다
     # 증분빽업은 이렇게
     # 10, 1
@@ -3330,17 +3418,17 @@ if __name__ == "__main__":
         )
 
 
-def dockerForceNetwork(env: Any, name: Any) -> Any:
+def dockerForceNetwork(env: Any, name: str) -> None:
     env.run(f"docker network inspect {name} || docker network create {name}")
     # -f {{.Name}}
 
 
-def containerForceNetwork(env: Any, name: Any) -> Any:
+def containerForceNetwork(env: Any, name: str) -> None:
     ctrCmd = "podman" if env.config.podman else "docker"
     env.run(f"{ctrCmd} network inspect {name} || {ctrCmd} network create {name}")
 
 
-def getArch(env: Any) -> Any:
+def getArch(env: Any) -> str:
     os = env.getOS()
     arch = None
 
@@ -3354,7 +3442,7 @@ def getArch(env: Any) -> Any:
     return arch
 
 
-def installDocker(env: Any, arch: Any=None) -> Any:
+def installDocker(env: Any, arch: str | None=None) -> None:
     """
     arch: amd64 | arm64
     """
@@ -3437,7 +3525,7 @@ sudo apt update
 
 
 
-def installPodmanSafe(env: Any, arch: Any=None) -> Any:
+def installPodmanSafe(env: Any, arch: str | None=None) -> None:
     """
     arch: amd64 | arm64
     """
@@ -3465,7 +3553,7 @@ def installPodmanSafe(env: Any, arch: Any=None) -> Any:
     time.sleep(3)  # boot up
 
 
-def installRestic(env: Any, version: Any, arch: Any=None) -> Any:
+def installRestic(env: Any, version: str, arch: str | None=None) -> None:
     """
     version: 0.16.4(0.12.1)
     arch: amd64 | arm64
@@ -3565,7 +3653,7 @@ test -x /usr/bin/certbot -a \! -d /run/systemd/system && perl -e 'sleep int(rand
     )
 
 
-def certbotCopy(pubWeb: Any, web: Any, domain: Any, cfgName: Any) -> Any:
+def certbotCopy(pubWeb: Any, web: Any, domain: str, cfgName: str) -> None:
     # 일단 d21 proxy, direct 둘다 지원한다
     # cron으로 주기적으로 가져와야한다
     # ssh root@192.168.1.204
@@ -3619,14 +3707,14 @@ export BUP_DIR={bupPath}
 
 def certbotSetup(
     env: Any,
-    domainStr: Any,
-    email: Any,
-    name: Any,
-    httpRedirect: Any=True,
-    nginxCfgPath: Any="/data/nginx",
-    localBind: Any=False,
-    proxyProtocol: Any=False,
-) -> Any:
+    domainStr: str,
+    email: str,
+    name: str,
+    httpRedirect: bool=True,
+    nginxCfgPath: str="/data/nginx",
+    localBind: bool=False,
+    proxyProtocol: bool=False,
+) -> None:
     """
     domainStr: "a1.com a2.com"처럼 문자열 나열을 지원한다.
     """
@@ -3671,21 +3759,21 @@ def certbotSetup(
 
 def nginxWebSite(
     env: Any,
-    name: Any,
-    domain: Any,
-    certAdminEmail: Any,
-    root: Any,
-    defaultServer: Any=False,
-    cacheOn: Any=False,
-    localBind: Any=False,
-    certSetup: Any=True,
-    proxyProtocol: Any=False,
-) -> Any:
+    name: str,
+    domain: str,
+    certAdminEmail: str,
+    root: str,
+    defaultServer: bool=False,
+    cacheOn: bool=False,
+    localBind: bool=False,
+    certSetup: bool=True,
+    proxyTrustedIp: str|None=None, # 172.16.0.0/16 or 127.0.0.1
+) -> None:
     ss = "default_server" if defaultServer else ""
     realIp = ""
-    if proxyProtocol:
-        realIp = """real_ip_header proxy_protocol;
-  set_real_ip_from 127.0.0.1;"""
+    if proxyTrustedIp is not None:
+        realIp = f"""real_ip_header proxy_protocol;
+  set_real_ip_from {proxyTrustedIp};"""
 
     cache = ""
     if cacheOn:
@@ -3751,7 +3839,7 @@ server {{
             email=certAdminEmail,
             name=name,
             localBind=localBind,
-            proxyProtocol=proxyProtocol,
+            proxyProtocol=proxyTrustedIp is not None,
         )
 
 
@@ -3906,7 +3994,7 @@ server {{
         env.run("sudo nginx -s reload")
 
 
-def nginxResolver(env: Any) -> Any:
+def nginxResolver(env: Any) -> str:
     # gwIp = env.runOutput("ip route | grep default | awk '{print $3}'").strip()
     # if env.config.podman:
     #     resolver = f"resolver {gwIp} valid=30s ipv6=off;"
@@ -3928,23 +4016,24 @@ def nginxResolver(env: Any) -> Any:
 # proxyUrl: http://192.168.1.105
 def setupWebApp(
     env: Any,
-    name: Any,
-    domain: Any,
-    proxyUrl: Any,
-    publicApi: Any,
-    root: Any=None,
-    privateApi: Any=None,
-    privateFilter: Any=None,
-    wsPath: Any=None,
-    maxBodySize: Any="1m",
-    buffering: Any=True,
-    certSetup: Any=True,
-    certAdminEmail: Any=None,
-    httpRedirect: Any=True,
-    localBind: Any=False,
-    proxyProtocol: Any=False,
-    customConfig: Any="",
-) -> Any:
+    name: str,
+    domain: str,
+    proxyUrl: str,
+    publicApi: str,
+    root: str | None=None,
+    privateApi: str | None=None,
+    privateFilter: str | None=None,
+    wsPath: str | None=None,
+    maxBodySize: str="1m",
+    buffering: bool=True,
+    certSetup: bool=True,
+    certAdminEmail: str | None=None,
+    httpRedirect: bool=True,
+    localBind: bool=False,
+    # proxyProtocol: bool=False,
+    proxyTrustedIp: str|None=None, # 172.16.0.0/16 or 127.0.0.1
+    customConfig: str="",
+) -> None:
     """
     root를 None하면 setupProxyForNginxWithPrivate랑 동일
     apiPath -> publicApi
@@ -3962,9 +4051,10 @@ def setupWebApp(
 
     resolver = nginxResolver(env)
     realIp = ""
-    if proxyProtocol:
-        realIp = """real_ip_header proxy_protocol;
-  set_real_ip_from 127.0.0.1;"""
+    if proxyTrustedIp is not None:
+        realIp = f"""real_ip_header proxy_protocol;
+  set_real_ip_from {proxyTrustedIp};"""
+
     extra = (
         ""
         if buffering
@@ -4073,7 +4163,7 @@ server {{
             email=certAdminEmail,
             httpRedirect=httpRedirect,
             localBind=localBind,
-            proxyProtocol=proxyProtocol,
+            proxyProtocol=proxyTrustedIp is not None,
         )
     else:
         env.run("sudo nginx -s reload")
@@ -4125,7 +4215,7 @@ fi
         raise e
 
 
-def installGolang(env: Any, version: Any, arch: Any) -> Any:
+def installGolang(env: Any, version: str, arch: str) -> None:
     """
     version=1.13.5
     arch=linux-arm64|linux-armv6l|windows-amd64|darwin-amd64(mac)
@@ -4142,7 +4232,7 @@ def installGolang(env: Any, version: Any, arch: Any) -> Any:
     )
 
 
-def installGocryptfs(env: Any, withOpenssl: Any=False) -> Any:
+def installGocryptfs(env: Any, withOpenssl: bool=False) -> None:
     if env.runSafe(". ~/.profile && command -v gocryptfs"):
         return
 
@@ -4167,7 +4257,15 @@ def installGocryptfs(env: Any, withOpenssl: Any=False) -> Any:
     )
 
 
-def installTransmission(env: Any, port: Any, userName: Any, pw: Any, downDir: Any, incompleteDir: Any, watchDir: Any) -> Any:
+def installTransmission(
+    env: Any,
+    port: int | str,
+    userName: str,
+    pw: str,
+    downDir: str,
+    incompleteDir: str,
+    watchDir: str,
+) -> None:
     if port == "":
         raise Exception("transmission - specify port")
     if userName == "":
@@ -4236,7 +4334,7 @@ def installTransmission(env: Any, port: Any, userName: Any, pw: Any, downDir: An
     # sudo systemctl daemon-reload; sudo /etc/init.d/transmission-daemon restart
 
 
-def pm2Register(env: Any, nvmPath: Any="~/.nvm", useNvm: Any=True) -> Any:
+def pm2Register(env: Any, nvmPath: str="~/.nvm", useNvm: bool=True) -> None:
     print("task: pm2 register...")
     env.onlyRemote()
 
@@ -4253,7 +4351,11 @@ def pm2Install(env: Any) -> Any:
     )
 
 
-def nvmInstall(env: Any, account: Any=None, nodeVer: Any=None) -> Any:
+def nvmInstall(
+    env: Any,
+    account: str | None=None,
+    nodeVer: str | None=None,
+) -> None:
     """
     node는 추가시 34m정도
     """
@@ -4287,7 +4389,7 @@ export NVM_DIR=/opt/nvm
         env.run(f". /etc/profile && . /opt/nvm/nvm.sh && nvm install {nodeVer}")
 
 
-def fnmInstall(env: Any, nodeVer: Any=None) -> Any:
+def fnmInstall(env: Any, nodeVer: str | None=None) -> None:
     if env.runSafe("command -v fnm"):
         return
 
@@ -4330,7 +4432,7 @@ def installYarnGulp(env: Any) -> Any:
     )
 
 
-def installNvmPnpmGulp(env: Any, gulpBuild: Any=True) -> Any:
+def installNvmPnpmGulp(env: Any, gulpBuild: bool=True) -> None:
     """
     pnpm 이제 쓰지말자, node_modules link폴더 인식 안되고,
     자꾸 global설치 위치 잘못됬다고 오류난다.ㅜㅜ
@@ -4354,7 +4456,12 @@ def installNvmPnpmGulp(env: Any, gulpBuild: Any=True) -> Any:
         )
 
 
-def installNvmGulp(env: Any, installGulp: Any=True, gulpBuild: Any=True, path: Any=None) -> Any:
+def installNvmGulp(
+    env: Any,
+    installGulp: bool=True,
+    gulpBuild: bool=True,
+    path: str | None=None,
+) -> None:
     if path is None:
         path = env.util.cfg.deployPath
 
@@ -4368,7 +4475,12 @@ def installNvmGulp(env: Any, installGulp: Any=True, gulpBuild: Any=True, path: A
         env.run(f". ~/.profile && cd {path} && /opt/nvm/nvm-exec gulp build")
 
 
-def installFail2ban(env: Any, action: Any="iptables-multiport", blockType: Any=None, ignoreIps: Any="") -> Any:
+def installFail2ban(
+    env: Any,
+    action: str="iptables-multiport",
+    blockType: str | None=None,
+    ignoreIps: str | list[str]="",
+) -> None:
     """
     ignoreIps: '1.1.1.1 2.2.2.2' or [ '1.1.1.1', '2.2.2.2' ]
     """
@@ -4416,7 +4528,7 @@ port     = 22
     env.run("sudo systemctl restart fail2ban")
 
 
-def rcloneSetupForN2(env: Any, accountName: Any, pubs: Any) -> Any:
+def rcloneSetupForN2(env: Any, accountName: str, pubs: list[str]) -> None:
     # backup.strEnsure("/jail/%s/.ssh/authorized_keys" % 'b_engdb', pub, sudo=True)
     backup = env.remoteConn(host="backup.mmx.kr", port=7022, id="cjng96")
     makeSftpUser(backup, accountName, "/jail", "data", pubs)
@@ -4433,7 +4545,16 @@ def rcloneSetupForN2(env: Any, accountName: Any, pubs: Any) -> Any:
     )
 
 
-def sshTunneling(env: Any, runUser: Any, name: Any, host: Any, user: Any, local: Any, remote: Any, port: Any=22) -> Any:
+def sshTunneling(
+    env: Any,
+    runUser: str,
+    name: str,
+    host: str,
+    user: str,
+    local: str,
+    remote: str,
+    port: int=22,
+) -> None:
     """
     sudo systemctl status secure-tunnel@dkreg
     local포트를 remote로 연결하는거 - docker registry에서 사용한다.
@@ -4498,7 +4619,7 @@ alias sz="sudo du -hd1 | sort -h"
 
 
 # use scriptCtr
-def scriptDocker(env: Any, saYml: Any="./resource/sa.yml") -> Any:
+def scriptDocker(env: Any, saYml: str="./resource/sa.yml") -> None:
     env.makeFile(
         path="/usr/local/bin/de", content="""docker exec -it "$@" bash -l """, sudo=True
     )
@@ -4580,7 +4701,7 @@ time zstd -d $fn -c | docker import --change 'CMD ["/start"]' - $image
     # )
 
 
-def scriptCtr(env: Any, saYml: Any="./resource/sa.yml") -> Any:
+def scriptCtr(env: Any, saYml: str="./resource/sa.yml") -> None:
     pp = os.path.dirname(os.path.abspath(__file__))
     # env.copyFile(
     env.uploadFile(

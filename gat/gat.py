@@ -380,7 +380,7 @@ echo "$GTPW"\
 
         for i in range(3):
             ss = self.runOutput(
-                "sudo -k -n true 2>&1 > /dev/null && echo success || echo fail",
+                "sudo -k -n true >/dev/null 2>&1 && echo success || echo fail",
                 printLog=False,
                 nosudo=True,
             )
@@ -741,9 +741,6 @@ echo "$GTPW"\
 
         log = g_logLv > 0 and printLog
 
-        if not nosudo and checkUsedSudo(cmd):
-            cmd = self.prepareSudoWithAskPass(cmd)
-
         out = ""
         if self.ctrTunnel is not None:
             dkRunUser = "-u %s" % self.ctrId if self.ctrId is not None else ""
@@ -752,10 +749,18 @@ echo "$GTPW"\
             # sudo docker이고 sudo pw가 필요할 경우 또 열어야한다
             cmd = f'{ctrCmd} exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
             # alias defined in .bashrc is working but -l should be used for something in /etc/profile.d and .profile
-            out = self.ctrTunnel.ssh.runOutput(cmd, log=log)
+            out = self.ctrTunnel.runOutput(
+                cmd,
+                printLog=False,
+                nosudo=nosudo,
+            )
         elif self.ssh is not None:
+            if not nosudo and checkUsedSudo(cmd):
+                cmd = self.prepareSudoWithAskPass(cmd)
             out = self.ssh.runOutput(cmd, log=log)
         else:
+            if not nosudo and checkUsedSudo(cmd):
+                cmd = self.prepareSudoWithAskPass(cmd)
             out = subprocess.check_output(
                 cmd, shell=True, executable="/bin/bash"
             ).decode()
@@ -781,18 +786,23 @@ echo "$GTPW"\
 
         log = g_logLv > 0 and printLog
 
-        if not nosudo and checkUsedSudo(cmd):
-            cmd = self.prepareSudoWithAskPass(cmd)
-
         if self.ctrTunnel is not None:
             dkRunUser = "-u %s" % self.ctrId if self.ctrId is not None else ""
             cmd = str2arg(cmd)
             ctrCmd = self.ctrCmdGet()
             cmd = f'{ctrCmd} exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
-            out = self.ctrTunnel.ssh.runOutputAll(cmd)
+            out = self.ctrTunnel.runOutputAll(
+                cmd,
+                printLog=False,
+                nosudo=nosudo,
+            )
         elif self.ssh is not None:
-            out = self.ssh.runOutputAll(cmd)
+            if not nosudo and checkUsedSudo(cmd):
+                cmd = self.prepareSudoWithAskPass(cmd)
+            out = self.ssh.runOutputAll(cmd, log=log)
         else:
+            if not nosudo and checkUsedSudo(cmd):
+                cmd = self.prepareSudoWithAskPass(cmd)
             out = subprocess.check_output(
                 cmd, shell=True, stderr=subprocess.STDOUT, executable="/bin/bash"
             )
@@ -810,7 +820,15 @@ echo "$GTPW"\
     #     else:
     #         return f"{self.ctrName}[{self.server.host}:{self.server.port}]"
 
-    def run(self, cmd: Any, expandVars: Any=True, printLog: Any=True, skip: Any=False, nosudo: Any=False) -> Any:
+    def run(
+        self,
+        cmd: Any,
+        expandVars: Any=True,
+        printLog: Any=True,
+        skip: Any=False,
+        nosudo: Any=False,
+        logOutput: Any=None,
+    ) -> Any:
         """
         nosudo: special opt for prepareSudo()
         """
@@ -823,6 +841,10 @@ echo "$GTPW"\
 
         # if expandVars:
         #     cmd = strExpand(cmd, g_dic)
+
+        if logOutput is None:
+            logOutput = printLog
+        log = g_logLv > 0 and logOutput
 
         if self.ctrTunnel is not None:
             # it하면 오류 난다
@@ -838,13 +860,17 @@ echo "$GTPW"\
 
             cmd = f'{ctrCmd} exec -i {dkRunUser} {self.ctrName} bash -c "{cmd}"'
 
-            # sudo가 사용되었으면 sudo를 자동 설정한다 - 이거 수정 필요함
-            # 명시적으로 할것인가...
-            if not nosudo and checkUsedSudo(cmd):
-                cmd = self.prepareSudoWithAskPass(cmd)
-
+            # # sudo가 사용되었으면 sudo를 자동 설정한다 - 이거 수정 필요함
+            # # 명시적으로 할것인가...
+            # if not nosudo and checkUsedSudo(cmd):
+            #     cmd = self.prepareSudoWithAskPass(cmd)
             # print("run cmd(dk) - %s" % cmd)
-            return self.ctrTunnel.ssh.run(cmd)
+            return self.ctrTunnel.run(
+                cmd,
+                printLog=False,
+                nosudo=nosudo,
+                logOutput=logOutput,
+            )
         elif self.ssh is not None:
             # sudo가 사용되었으면 sudo를 자동 설정한다 - 이거 수정 필요함
             # 명시적으로 할것인가...
@@ -858,7 +884,7 @@ echo "$GTPW"\
                 pt = cmd.find(tt)
                 logCmd = cmd[pt + len(tt) :]
 
-            return self.ssh.run(cmd, logCmd=logCmd)
+            return self.ssh.run(cmd, logCmd=logCmd, log=log)
 
         else:
             """
