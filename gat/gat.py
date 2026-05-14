@@ -483,6 +483,7 @@ echo "$GTPW"\
         # return self.containerConn(name, ctrId=dkId, ctrType="docker")
         return self.containerConn(name, ctrId=dkId)
 
+    # use containerConn
     def otherContainerConn(self, name: Any, ctrId: Any=None) -> Any:
         # if self.dkTunnel is None:
         #     raise Exception("otherDockerConn can be called on docker connection only.")
@@ -490,6 +491,7 @@ echo "$GTPW"\
         # return self.dkTunnel.containerConn(name, dkId)
         return self.containerConn(name, ctrId)
 
+    # use containerConn
     def otherDockerConn(self, name: Any, dkId: Any=None) -> Any:
         return self.otherContainerConn(name, dkId)
 

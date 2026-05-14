@@ -371,9 +371,12 @@ def nginxNextcloud(
     name: str="next",
     proxy: str="next:9000",
     nginxCfgPath: str="/data/nginx",
-    localBind: bool=False,
-    selfSign: bool=False,  # true: 사설 인증서 사용
+    localBind: bool=False, # true: 127.0.0.1로 certbot 바인딩 - 특수목적
+    selfSign: bool=False,  # true: 사설 인증서 사용 - 특수목적
     selfSignPort: int=443,
+    realIpTrustedIps: list[str] | None=None,
+    accessIpRanges: list[str] | None=None,
+    accessPeerIps: list[str] | None=None,
 ) -> None:
     # https://www.reddit.com/r/selfhosted/comments/rvqv3l/nextcloud_behind_nginx_proxy_manager_nextcloud
     # https://github.com/nextcloud/docker/blob/master/.examples/docker-compose/insecure/mariadb/fpm/web/nginx.conf
@@ -407,6 +410,42 @@ server {{
 
     resolver = nginxResolver(env)
     upstream = "$nextcloud_upstream"
+    realIp = ""
+    if realIpTrustedIps:
+        realIp = "\n".join(f"    set_real_ip_from {ip};" for ip in realIpTrustedIps)
+        realIp = f"""    real_ip_header X-Forwarded-For;
+    real_ip_recursive on;
+{realIp}
+"""
+    forwardedForParam = ""
+    if not realIpTrustedIps:
+        forwardedForParam = "        fastcgi_param HTTP_X_FORWARDED_FOR $proxy_add_x_forwarded_for;"
+
+    accessBlock = ""
+    if accessIpRanges:
+        accessLines = [f"    allow {ip};" for ip in accessIpRanges if ip.strip()]
+        if accessLines:
+            accessBlock = "\n".join([*accessLines, "    deny all;"])
+
+    accessPeerBlock = ""
+    if accessPeerIps:
+        peerIps = [ip.strip() for ip in accessPeerIps if ip.strip()]
+        if peerIps:
+            peerChecks = "\n".join(
+                f"""    if ($access_peer = {ip}) {{
+        set $access_peer_allowed 1;
+    }}"""
+                for ip in peerIps
+            )
+            accessPeerBlock = f"""    set $access_peer $remote_addr;
+    set $access_peer_allowed 0;
+    if ($realip_remote_addr != "") {{
+        set $access_peer $realip_remote_addr;
+    }}
+{peerChecks}
+    if ($access_peer_allowed != 1) {{
+        return 403;
+    }}"""
 
     env.makeFile(
         fr"""server {{
@@ -414,7 +453,14 @@ server {{
 		server_name		{domain};
 		root			/data/{name};
     {resolver}
+{realIp}
+{accessBlock}
+{accessPeerBlock}
     set {upstream} {proxy};
+    set $forwarded_proto $scheme;
+    if ($http_x_forwarded_proto != "") {{
+        set $forwarded_proto $http_x_forwarded_proto;
+    }}
 
     {extra1}
 
@@ -452,10 +498,10 @@ server {{
         fastcgi_intercept_errors on;
         fastcgi_request_buffering off;
 
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $scheme;
+{forwardedForParam}
+        fastcgi_param HTTP_X_REAL_IP $remote_addr;
+        fastcgi_param HTTP_X_FORWARDED_PROTO $forwarded_proto;
+        fastcgi_param HTTP_X_FORWARDED_HOST $host;
 
         # 추가한거
         # fastcgi_buffering off;
@@ -510,6 +556,7 @@ def containerNextcloudFpm(
     name: str="next",
     overwriteProt: str="https",
     overwriteDomain: str | None=None,  # None이면 overwrite안한다
+    dbType: str="mysql", # mysql | postgres
     dbHost: str="sql",  # localhost:3306
     dbId: str="next",
     dbPw: str="1234",
@@ -551,13 +598,41 @@ def containerNextcloudFpm(
         # TODO: next가 만들다 실패했을도 있으니 더 검사해야 한다
         return
 
+    dbType = dbType.lower()
+    if dbType == "postgresql":
+        dbType = "postgres"
+    if dbType == "mysql":
+        dbEnv = {
+            "MYSQL_DATABASE": dbName,
+            "MYSQL_HOST": dbHost,
+            "MYSQL_USER": dbId,
+            "MYSQL_PASSWORD": dbPw,
+        }
+    elif dbType == "postgres":
+        dbEnv = {
+            "POSTGRES_DB": dbName,
+            "POSTGRES_HOST": dbHost,
+            "POSTGRES_USER": dbId,
+            "POSTGRES_PASSWORD": dbPw,
+        }
+    else:
+        raise Exception(f"unsupported Nextcloud dbType: {dbType}")
+
+    dbEnvRun = "".join(f"  -e {key}={value} \\\n" for key, value in dbEnv.items())
+
+
+    home = env.runOutput("echo ~").strip()
+    html = f"{home}/ctrs/web/{name}"
+    if not env.config.podman:
+        html = f"/data/web/{name}"
+
     # bind mount도 안먹힌다
     # env.run(f'sudo mount --bind {srcPath} /data/web/{name}')
     if env.config.podman:
-        home = env.runOutput("echo ~").strip()
-        env.run(f"sudo mkdir -p {home}/ctrs/web/{name}")
+        # env.run(f"sudo mkdir -p {home}/ctrs/web/{name}")
+        env.run(f"mkdir -p {html}")
     else:
-        env.run(f"sudo mkdir -p /data/web/{name}")
+        env.run(f"sudo mkdir -p {html}")
 
     ctrCmd = "podman" if env.config.podman else "docker"
 
@@ -582,19 +657,12 @@ def containerNextcloudFpm(
     if net is not None:
         netOpt = f"--network {net} "
 
-    html = f"{home}/ctrs/web/{name}"
-    if not env.config.podman:
-        html = f"/data/web/{name}"
-
     env.run(
         f"""\
 {ctrCmd} run -d --name {name} \
   --restart {restart} \
   {publishPortCmd} \
-  -e MYSQL_DATABASE={dbName} \
-  -e MYSQL_HOST={dbHost} \
-  -e MYSQL_USER={dbId} \
-  -e MYSQL_PASSWORD={dbPw} \
+{dbEnvRun}\
   {overwrite} \
   {netOpt} \
   -v {html}:/var/www/html \
@@ -613,12 +681,7 @@ def containerNextcloudFpm(
         f"{dataPath}:/var/www/html/data",
     ]
 
-    envs = {
-        "MYSQL_DATABASE": dbName,
-        "MYSQL_HOST": dbHost,
-        "MYSQL_USER": dbId,
-        "MYSQL_PASSWORD": dbPw,
-    }
+    envs = dbEnv
     if overwriteDomain is not None:
         envs["OVERWRITEPROTOCOL"] = overwriteProt
         envs["OVERWRITEHOST"] = overwriteDomain
@@ -645,10 +708,7 @@ def containerNextcloudFpm(
 {ctrCmd} run -d --name {name}Cron \
   --restart {restart} \
   --entrypoint /cron.sh \
-  -e MYSQL_DATABASE={dbName} \
-  -e MYSQL_HOST={dbHost} \
-  -e MYSQL_USER={dbId} \
-  -e MYSQL_PASSWORD={dbPw} \
+{dbEnvRun}\
   {netOpt} \
   -v /data/web/{name}:/var/www/html \
   -v {dataPath}:/var/www/html/data \
@@ -2594,6 +2654,42 @@ def pgUserGen(env: Any, id: str, pw: str, db: str) -> None:
     )
 
 
+def pgUserEnsure(env: Any, id: str, pw: str, db: str) -> None:
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", id):
+        raise Exception(f"invalid postgres user id: {id}")
+    if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", db):
+        raise Exception(f"invalid postgres database name: {db}")
+
+    idLiteral = "'" + id.replace("'", "''") + "'"
+    pwLiteral = "'" + pw.replace("'", "''") + "'"
+
+    env.run(
+        f"""\
+setuser postgres psql -v ON_ERROR_STOP=1 <<'SQL'
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = {idLiteral}) THEN
+        CREATE ROLE {id} LOGIN PASSWORD {pwLiteral};
+    ELSE
+        ALTER ROLE {id} WITH LOGIN PASSWORD {pwLiteral};
+    END IF;
+END
+$$;
+SQL"""
+    )
+    env.run(
+        f"""\
+setuser postgres psql -v ON_ERROR_STOP=1 -d {db} <<'SQL'
+ALTER DATABASE {db} OWNER TO {id};
+GRANT CONNECT ON DATABASE {db} TO {id};
+GRANT ALL PRIVILEGES ON DATABASE {db} TO {id};
+GRANT ALL PRIVILEGES ON SCHEMA public TO {id};
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {id};
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {id};
+SQL"""
+    )
+
+
 # TODO: mysql, goBuild, gqlGen, dbXorm, pm2Register등은 기본 task에서 빼야할듯
 def mysqlUserDel(env: Any, id: str, host: str) -> None:
     hr = env.runOutput(
@@ -3712,7 +3808,7 @@ def certbotSetup(
     name: str,
     httpRedirect: bool=True,
     nginxCfgPath: str="/data/nginx",
-    localBind: bool=False,
+    localBind: bool=False, # true면 127.0.0.1로 바인딩 - 특수 목적이다.
     proxyProtocol: bool=False,
 ) -> None:
     """
@@ -4034,6 +4130,7 @@ def setupWebApp(
     proxyTrustedIp: str|None=None, # 172.16.0.0/16 or 127.0.0.1
     accessIpRanges: list[str] | None=None,
     customConfig: str="",
+    appendForwardedFor: bool=True,
 ) -> None:
     """
     root를 None하면 setupProxyForNginxWithPrivate랑 동일
@@ -4075,6 +4172,8 @@ proxy_max_temp_file_size 0;
 """
     )
 
+    forwardedFor = "$proxy_add_x_forwarded_for" if appendForwardedFor else "$remote_addr"
+
     proxyContent = f"""
     set $upstream {proxyUrl};
     proxy_pass $upstream;
@@ -4084,7 +4183,7 @@ proxy_max_temp_file_size 0;
     #proxy_set_header Connection "";
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Scheme $scheme;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-For {forwardedFor};
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Forwarded-Host $host:$server_port;
     proxy_set_header X-Accel-Redirect $uri;
