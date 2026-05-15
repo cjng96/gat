@@ -6,6 +6,7 @@ import yaml
 import hashlib
 import datetime
 import subprocess
+import shlex
 
 from .coTerm import ct, cprt
 from typing import Any
@@ -377,6 +378,7 @@ def nginxNextcloud(
     realIpTrustedIps: list[str] | None=None,
     accessIpRanges: list[str] | None=None,
     accessPeerIps: list[str] | None=None,
+    forwardedFastcgiHeaders: bool=True,
 ) -> None:
     # https://www.reddit.com/r/selfhosted/comments/rvqv3l/nextcloud_behind_nginx_proxy_manager_nextcloud
     # https://github.com/nextcloud/docker/blob/master/.examples/docker-compose/insecure/mariadb/fpm/web/nginx.conf
@@ -420,6 +422,11 @@ server {{
     forwardedForParam = ""
     if not realIpTrustedIps:
         forwardedForParam = "        fastcgi_param HTTP_X_FORWARDED_FOR $proxy_add_x_forwarded_for;"
+    forwardedFastcgiHeaderParams = "        fastcgi_param HTTP_X_REAL_IP $remote_addr;"
+    if forwardedFastcgiHeaders:
+        forwardedFastcgiHeaderParams += f"""
+        fastcgi_param HTTP_X_FORWARDED_PROTO $forwarded_proto;
+        fastcgi_param HTTP_X_FORWARDED_HOST $host;"""
 
     accessBlock = ""
     if accessIpRanges:
@@ -499,15 +506,22 @@ server {{
         fastcgi_request_buffering off;
 
 {forwardedForParam}
-        fastcgi_param HTTP_X_REAL_IP $remote_addr;
-        fastcgi_param HTTP_X_FORWARDED_PROTO $forwarded_proto;
-        fastcgi_param HTTP_X_FORWARDED_HOST $host;
+{forwardedFastcgiHeaderParams}
 
         # 추가한거
         # fastcgi_buffering off;
     }}
 
-    location ~ \.(?:css|js|svg|gif)$ {{
+    location ~ \.(?:js|mjs)$ {{
+        types {{
+            text/javascript js mjs;
+        }}
+        try_files $uri /index.php$request_uri;
+        expires 6M;         # Cache-Control policy borrowed from `.htaccess`
+        access_log off;     # Optional: Don't log access to assets
+    }}
+
+    location ~ \.(?:css|svg|gif)$ {{
         try_files $uri /index.php$request_uri;
         expires 6M;         # Cache-Control policy borrowed from `.htaccess`
         access_log off;     # Optional: Don't log access to assets
@@ -3620,6 +3634,313 @@ sudo apt update
     env.run("sudo apt install -y zrepl")
 
 
+def _zreplYamlScalar(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return "null"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return json.dumps(str(value))
+
+
+def _zreplIndent(text: str, spaces: int) -> str:
+    prefix = " " * spaces
+    return "\n".join(prefix + line for line in text.strip().splitlines())
+
+
+def _zreplFilesystemBlock(filesystems: Any) -> str:
+    if isinstance(filesystems, str):
+        filesystems = {filesystems: True}
+    return "\n".join(
+        f"      {json.dumps(str(name))}: {_zreplYamlScalar(value)}"
+        for name, value in filesystems.items()
+    )
+
+
+def zreplConfig(jobs: Any, logLevel: str = "warn") -> str:
+    if isinstance(jobs, str):
+        jobs = [jobs]
+
+    jobText = "\n".join(job.rstrip() for job in jobs if job)
+    return f"""\
+global:
+  logging:
+    - type: syslog
+      format: human
+      level: {logLevel}
+
+jobs:
+{jobText}
+"""
+
+
+def zreplSnapJob(
+    name: str,
+    filesystems: Any,
+    prefix: str,
+    interval: str = "10m",
+    grid: str | None = None,
+) -> str:
+    if grid is None:
+        grid = """\
+1x10m(keep=24) |
+1x1h(keep=48) |
+1x1d(keep=14) |
+1x7d(keep=4) |
+1x30d(keep=6)
+"""
+
+    return f"""\
+  - name: {name}
+    type: snap
+    filesystems:
+{_zreplFilesystemBlock(filesystems)}
+    snapshotting:
+      type: periodic
+      interval: {interval}
+      prefix: {prefix}
+    pruning:
+      keep:
+        - type: grid
+          regex: "^{prefix}"
+          grid: |
+{_zreplIndent(grid, 12)}
+"""
+
+
+def zreplPushJob(
+    name: str,
+    filesystems: Any,
+    host: str,
+    port: int,
+    user: str,
+    identityFile: str,
+    knownHosts: str,
+    prefix: str = "bksnap-",
+    interval: str = "10m",
+    senderGrid: str | None = None,
+    receiverGrid: str | None = None,
+    sendEncrypted: bool = False,
+) -> str:
+    if not host or not port or not user or not identityFile or not knownHosts:
+        raise ValueError("zrepl push requires host, port, user, key, and knownHosts")
+
+    if senderGrid is None:
+        senderGrid = """\
+1x10m(keep=24) |
+1x1h(keep=48) |
+1x1d(keep=14) |
+1x7d(keep=4) |
+1x30d(keep=6)
+"""
+
+    if receiverGrid is None:
+        receiverGrid = senderGrid
+
+    return f"""\
+  - name: {name}
+    type: push
+    filesystems:
+{_zreplFilesystemBlock(filesystems)}
+    connect:
+      type: ssh+stdinserver
+      host: {host}
+      port: {port}
+      user: {user}
+      identity_file: {identityFile}
+      options:
+        - "UserKnownHostsFile={knownHosts}"
+        - "StrictHostKeyChecking=yes"
+    send:
+      encrypted: {_zreplYamlScalar(sendEncrypted)}
+    snapshotting:
+      type: periodic
+      interval: {interval}
+      prefix: {prefix}
+    pruning:
+      keep_sender:
+        - type: not_replicated
+        - type: grid
+          regex: "^{prefix}"
+          grid: |
+{_zreplIndent(senderGrid, 12)}
+      keep_receiver:
+        - type: grid
+          regex: "^{prefix}"
+          grid: |
+{_zreplIndent(receiverGrid, 12)}
+"""
+
+
+def zreplSinkJob(
+    name: str,
+    rootfs: str,
+    clientIdentity: str,
+    recvProperties: dict[str, Any] | None = None,
+) -> str:
+    if recvProperties is None:
+        recvProperties = {
+            "mountpoint": "none",
+            "canmount": "off",
+        }
+
+    props = "\n".join(
+        f"          {key}: {_zreplYamlScalar(value)}"
+        for key, value in recvProperties.items()
+    )
+
+    return f"""\
+  - name: {name}
+    type: sink
+    root_fs: "{rootfs}"
+    serve:
+      type: stdinserver
+      client_identities:
+        - "{clientIdentity}"
+    recv:
+      properties:
+        override:
+{props}
+"""
+
+
+def zreplApplyConfig(
+    env: Any,
+    content: str,
+    path: str = "/etc/zrepl/zrepl.yml",
+) -> None:
+    env.makeFile(path=path, content=content, sudo=True, mode=644)
+    env.run("sudo zrepl configcheck")
+    env.run("sudo systemctl enable --now zrepl")
+    env.run("sudo systemctl restart zrepl")
+
+
+def authPubRetrieve(
+    env: Any,
+    authPub: str | None = None,
+    sourceHost: str | None = None,
+    sourcePort: int = 22,
+    sourceId: str | None = None,
+    sourcePath: str | None = None,
+) -> str | None:
+    if authPub and authPub.strip():
+        return authPub.strip()
+
+    if not sourceHost or not sourceId or not sourcePath:
+        raise ValueError("auth pub source is incomplete")
+
+    sourcePort = sourcePort or 22
+    src = env.remoteConn(sourceHost, sourcePort, sourceId)
+    pubPath = shlex.quote(sourcePath)
+    pub = src.runOutput(f"sudo cat {pubPath}").strip()
+    if not pub:
+        raise ValueError(f"auth pub source is empty: {sourceId}@{sourceHost}:{sourcePath}")
+    return pub
+
+
+def zreplSetupSink(
+    env: Any,
+    rootfs: str,
+    clientIdentity: str,
+    user: str = "zrepl",
+    authPub: str | None = None,
+    jobName: str | None = None,
+) -> None:
+    if not rootfs or not clientIdentity:
+        raise ValueError("zrepl sink requires rootfs and clientIdentity")
+
+    rootfsArg = shlex.quote(rootfs)
+    userArg = shlex.quote(user)
+    home = f"/var/lib/{user}-ssh"
+    homeArg = shlex.quote(home)
+
+    env.run("sudo apt install -y zfsutils-linux openssh-server")
+    installZreplSafe(env)
+
+    env.run(
+        f"sudo zfs list -H {rootfsArg} >/dev/null 2>&1 || "
+        f"sudo zfs create -p -o mountpoint=none -o canmount=off {rootfsArg}"
+    )
+    env.run(f"sudo zfs set mountpoint=none canmount=off {rootfsArg}")
+
+    if not env.runSafe(f"id -u {userArg} >/dev/null 2>&1"):
+        env.run(
+            f"sudo adduser --disabled-password --gecos '' "
+            f"--home {homeArg} --shell /bin/sh {userArg}"
+        )
+    else:
+        env.run(f"sudo mkdir -p {homeArg}")
+        env.run(f"sudo usermod -d {homeArg} -s /bin/sh {userArg}")
+        env.run(f"sudo chown {userArg}: {homeArg}")
+
+    zreplBin = env.runOutput("command -v zrepl").strip()
+    env.makeFile(
+        path=f"/etc/sudoers.d/zrepl-stdinserver-{clientIdentity}",
+        content=f"{user} ALL=(root) NOPASSWD: {zreplBin} stdinserver {clientIdentity}\n",
+        sudo=True,
+        mode=440,
+    )
+
+    if authPub is not None and authPub.strip() != "":
+        authLine = (
+            f'command="sudo {zreplBin} stdinserver {clientIdentity}",restrict '
+            f"{authPub.strip()}\n"
+        )
+        env.run(f"sudo mkdir -p {homeArg}/.ssh")
+        env.makeFile(
+            path=f"{home}/.ssh/authorized_keys",
+            content=authLine,
+            sudo=True,
+            mode=600,
+        )
+        env.run(f"sudo chown -R {userArg}: {homeArg}/.ssh")
+        env.run(f"sudo chmod 700 {homeArg}/.ssh")
+
+    zreplApplyConfig(
+        env,
+        zreplConfig(
+            [
+                zreplSinkJob(
+                    jobName or f"sink-{clientIdentity}",
+                    rootfs,
+                    clientIdentity,
+                )
+            ]
+        ),
+    )
+
+
+def zreplSetupPushSsh(
+    env: Any,
+    key: str,
+    host: str,
+    port: int,
+    identity: str,
+    knownHosts: str,
+) -> str:
+    if not key or not host or not port or not identity or not knownHosts:
+        raise ValueError("zrepl push ssh requires key, host, port, identity, and knownHosts")
+
+    keyArg = shlex.quote(key)
+    knownHostsArg = shlex.quote(knownHosts)
+    sshDirArg = shlex.quote(os.path.dirname(key))
+    hostArg = shlex.quote(host)
+
+    env.run("sudo apt install -y openssh-client zfsutils-linux")
+    env.run(f"sudo mkdir -p {sshDirArg}")
+    env.run(f"sudo chmod 700 {sshDirArg}")
+    env.run(
+        f"sudo test -f {keyArg} || "
+        f"sudo ssh-keygen -t ed25519 -N '' -C zrepl-{identity} "
+        f"-f {keyArg}"
+    )
+    env.run(f"ssh-keyscan -p {port} {hostArg} | sudo tee {knownHostsArg} >/dev/null")
+    env.run(f"sudo chmod 600 {keyArg} {knownHostsArg}")
+    env.run(f"sudo chmod 644 {keyArg}.pub")
+    return env.runOutput(f"sudo cat {keyArg}.pub").strip()
+
+
 
 def installPodmanSafe(env: Any, arch: str | None=None) -> None:
     """
@@ -4131,6 +4452,7 @@ def setupWebApp(
     accessIpRanges: list[str] | None=None,
     customConfig: str="",
     appendForwardedFor: bool=True,
+    forwardedHost: bool=True,
 ) -> None:
     """
     root를 None하면 setupProxyForNginxWithPrivate랑 동일
@@ -4173,6 +4495,11 @@ proxy_max_temp_file_size 0;
     )
 
     forwardedFor = "$proxy_add_x_forwarded_for" if appendForwardedFor else "$remote_addr"
+    forwardedHostHeader = (
+        "proxy_set_header X-Forwarded-Host $host:$server_port;"
+        if forwardedHost
+        else 'proxy_set_header X-Forwarded-Host "";'
+    )
 
     proxyContent = f"""
     set $upstream {proxyUrl};
@@ -4185,7 +4512,7 @@ proxy_max_temp_file_size 0;
     proxy_set_header X-Scheme $scheme;
     proxy_set_header X-Forwarded-For {forwardedFor};
     proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-Host $host:$server_port;
+    {forwardedHostHeader}
     proxy_set_header X-Accel-Redirect $uri;
     proxy_set_header Host $http_host;
     {extra}
