@@ -152,11 +152,19 @@ class GatDevBase:
 
     def cmdAndTest(self) -> None:
         self.doAndTest(app_dir=self.pathCfg.appDir)
-        self.doAndIntegrationTest(
-            app_dir=self.pathCfg.appDir,
-            root_dir=self.pathCfg.root,
-            drive_target=self.androidCfg.driveTarget,
-        )
+        if self.hasAndroidIntegrationTest():
+            self.doAndIntegrationTest(
+                app_dir=self.pathCfg.appDir,
+                root_dir=self.pathCfg.root,
+                drive_target=self.androidCfg.driveTarget,
+            )
+        else:
+            print("\nAndroid integration test skipped: no test_driver or integration_test directory")
+
+    def hasAndroidIntegrationTest(self) -> bool:
+        return (self.pathCfg.appDir / "test_driver").is_dir() or (
+            self.pathCfg.appDir / "integration_test"
+        ).is_dir()
 
     def cmdWinTest(self) -> None:
         self.doWinTest(app_dir=self.pathCfg.appDir, drive_target=self.desktopCfg.winDriveTarget)

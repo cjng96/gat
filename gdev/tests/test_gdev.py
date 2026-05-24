@@ -98,6 +98,11 @@ class SuperCommandBuild(DemoBuild):
         super().cmdAndTest()
 
 
+class SuperCommandBuildWithIntegration(DemoBuild):
+    def cmdAndTest(self) -> None:
+        super().cmdAndTest()
+
+
 class BundleBuild(DemoBuild):
     androidCfg = AndroidCfg(
         bundletoolJar="/opt/bundletool.jar",
@@ -420,6 +425,15 @@ class GatDevTest(unittest.TestCase):
         self.assertEqual(build.flutterCmd("test"), ["fvm", "flutter", "test"])
         self.assertEqual(build.adbCmd("devices"), ["adb", "devices"])
 
+    def test_emulator_command_uses_android_sdk_root_when_not_on_path(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            emulator = Path(tmp_dir) / "emulator" / "emulator"
+            emulator.parent.mkdir()
+            emulator.write_text("#!/bin/sh\n", encoding="utf-8")
+
+            with patch.dict("gdev.gatDev.os.environ", {"ANDROID_SDK_ROOT": tmp_dir}, clear=True):
+                self.assertEqual(DemoBuild().emulatorCmd("-list-avds"), [str(emulator), "-list-avds"])
+
     def test_tool_cmd_builds_env_overridable_commands(self):
         with patch.dict("gdev.gatDev.os.environ", {"FLUTTER_BIN": "/opt/flutter/bin/flutter --suppress-analytics"}):
             self.assertEqual(
@@ -475,6 +489,36 @@ class GatDevTest(unittest.TestCase):
             patch.object(build, "doAndIntegrationTest", side_effect=mark("integration")) as integration_mock,
         ):
             build.commandMap()["andTest"]()
+
+        self.assertEqual(calls, ["unit"])
+        unit_mock.assert_called_once_with(app_dir=build.pathCfg.appDir)
+        integration_mock.assert_not_called()
+
+    def test_default_and_test_runs_integration_when_project_has_integration_directory(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            (root / "client/test_driver").mkdir(parents=True)
+
+            class TmpBuild(SuperCommandBuildWithIntegration):
+                pathCfg = GatDev.PathCfg(root=root, appDir="client")
+
+                def cmdAndTest(self) -> None:
+                    super().cmdAndTest()
+
+            build = TmpBuild()
+            calls: list[str] = []
+
+            def mark(name: str):
+                def run_command(*_args, **_kwargs):
+                    calls.append(name)
+
+                return run_command
+
+            with (
+                patch.object(build, "doAndTest", side_effect=mark("unit")) as unit_mock,
+                patch.object(build, "doAndIntegrationTest", side_effect=mark("integration")) as integration_mock,
+            ):
+                build.commandMap()["andTest"]()
 
         self.assertEqual(calls, ["unit", "integration"])
         unit_mock.assert_called_once_with(app_dir=build.pathCfg.appDir)

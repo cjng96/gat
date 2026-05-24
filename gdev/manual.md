@@ -73,6 +73,10 @@ def cmdWebCov(self):
 
 For example, `cmdMacFfiRestore()` is exposed as `macFfiRestore`.
 
+The default `cmdAndTest()` runs unit/widget tests first. It only runs the Android
+integration-test step when the app has a `test_driver/` or `integration_test/`
+directory.
+
 ## Interactive Command Selection
 
 When `gdev` runs in a TTY without a command argument, it opens a numbered command
@@ -104,6 +108,9 @@ Tool command names should be customized by overriding `getToolCmd(cmd)`, not by
 storing tool names in class fields. The default implementation returns `cmd`
 unchanged, and environment variables such as `FLUTTER_BIN` still take precedence
 when present.
+For Android integration tests, `getToolCmd("emulator")` also checks
+`ANDROID_SDK_ROOT`, `ANDROID_HOME`, and `~/Library/Android/sdk` for
+`emulator/emulator` before falling back to `emulator`.
 
 Legacy flat class fields such as `sshDeployHost` are still accepted for older
 project files, but new project files should use grouped dataclasses only for
@@ -139,6 +146,8 @@ Tool commands can be overridden with environment variables:
 - `NPM_BIN`
 - `ADB_BIN`
 - `GAT_BIN`
+- `EMULATOR_BIN`
+- `JAVA_BIN`
 
 Internally these commands are built through `ToolCmd` static methods such as
 `ToolCmd.flutter("test")` and `ToolCmd.adb("devices", "-l")`.

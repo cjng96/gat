@@ -337,6 +337,17 @@ class GatDev(GatDevBase):
         return path if path.is_absolute() else self.pathCfg.root / path
 
     def getToolCmd(self, cmd: str) -> str:
+        if cmd == "emulator":
+            for sdk_root in (
+                os.environ.get("ANDROID_SDK_ROOT"),
+                os.environ.get("ANDROID_HOME"),
+                str(Path.home() / "Library/Android/sdk"),
+            ):
+                if not sdk_root:
+                    continue
+                candidate = Path(sdk_root) / "emulator" / "emulator"
+                if candidate.exists():
+                    return str(candidate)
         return cmd
 
     def requiredTaskSetting(self, name: str) -> Any:
@@ -696,7 +707,15 @@ class GatDev(GatDevBase):
         self.run(self.flutterCmd("analyze"), cwd=app_dir)
         self.run(self.flutterCmd("test"), cwd=app_dir)
 
-    def doAndIntegrationTest(self, *, app_dir: Path, root_dir: Path, drive_target: str) -> None:
+    def doAndIntegrationTest(
+        self,
+        *,
+        app_dir: Path,
+        root_dir: Path,
+        driver_target: str = "test_driver/integration_test.dart",
+        integration_target: str | None = None,
+        drive_target: str | None = None,
+    ) -> None:
         print("\nRunning android integration test...")
         avd = self.firstAndroidAvd()
         print(f"avd: {avd}")
@@ -704,14 +723,52 @@ class GatDev(GatDevBase):
         import time
         time.sleep(6)
         emulator = self.findRunningAndroidEmulator()
-        self.run(self.flutterCmd("drive", "-d", emulator, f"--target={drive_target}"), cwd=app_dir)
+        target = integration_target or drive_target
+        if target is None:
+            raise BuildError("integration target is required")
+        self.run(
+            self.flutterCmd(
+                "drive",
+                "-d",
+                emulator,
+                f"--driver={driver_target}",
+                f"--target={target}",
+            ),
+            cwd=app_dir,
+        )
         self.run(self.adbCmd("-s", emulator, "emu", "kill"), cwd=root_dir)
 
-    def doWinTest(self, *, app_dir: Path, drive_target: str) -> None:
-        self.run(self.flutterCmd("drive", "-d", "windows", f"--target={drive_target}"), cwd=app_dir)
+    def doWinTest(
+        self,
+        *,
+        app_dir: Path,
+        driver_target: str = "test_driver/integration_test.dart",
+        integration_target: str | None = None,
+        drive_target: str | None = None,
+    ) -> None:
+        target = integration_target or drive_target
+        if target is None:
+            raise BuildError("integration target is required")
+        self.run(
+            self.flutterCmd("drive", "-d", "windows", f"--driver={driver_target}", f"--target={target}"),
+            cwd=app_dir,
+        )
 
-    def doMacTest(self, *, app_dir: Path, drive_target: str) -> None:
-        self.run(self.flutterCmd("drive", "-d", "macos", f"--target={drive_target}"), cwd=app_dir)
+    def doMacTest(
+        self,
+        *,
+        app_dir: Path,
+        driver_target: str = "test_driver/integration_test.dart",
+        integration_target: str | None = None,
+        drive_target: str | None = None,
+    ) -> None:
+        target = integration_target or drive_target
+        if target is None:
+            raise BuildError("integration target is required")
+        self.run(
+            self.flutterCmd("drive", "-d", "macos", f"--driver={driver_target}", f"--target={target}"),
+            cwd=app_dir,
+        )
 
 
     def doSerTest(self, *, ser_dir: Path) -> None:
