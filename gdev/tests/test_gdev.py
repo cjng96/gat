@@ -10,6 +10,7 @@ from gdev import (
     AndroidDevice,
     AppVersion,
     BuildError,
+    CoverageCfg,
     DesktopCfg,
     GatDev,
     GatDevBase,
@@ -18,6 +19,7 @@ from gdev import (
     appendSelectedCommandNumber,
     bumpFlutterVersion,
     commandInputAfterSpace,
+    filterLcovRecords,
     parseAdbDevices,
     parseFlutterVersion,
     parseLcovLineCoverage,
@@ -139,6 +141,32 @@ class GatDevTest(unittest.TestCase):
         with self.assertRaises(BuildError):
             parseLcovLineCoverage("")
 
+    def test_lcov_filter_keeps_included_records_and_excludes_prefixes(self):
+        filtered = filterLcovRecords(
+            "\n".join(
+                [
+                    "SF:lib/core/a.dart",
+                    "LF:10",
+                    "LH:8",
+                    "end_of_record",
+                    "SF:lib/core/frb/generated.dart",
+                    "LF:10",
+                    "LH:0",
+                    "end_of_record",
+                    "SF:lib/ui.dart",
+                    "LF:10",
+                    "LH:0",
+                    "end_of_record",
+                ]
+            ),
+            include_prefix="lib/core/",
+            exclude_prefixes=("lib/core/frb/",),
+        )
+
+        self.assertIn("SF:lib/core/a.dart", filtered)
+        self.assertNotIn("SF:lib/core/frb/generated.dart", filtered)
+        self.assertNotIn("SF:lib/ui.dart", filtered)
+
     def test_parseAdbDevices_keeps_installable_devices(self):
         devices = parseAdbDevices(
             "\n".join(
@@ -230,7 +258,9 @@ class GatDevTest(unittest.TestCase):
                 "AndroidDevice",
                 "AppVersion",
                 "BuildError",
+                "CoverageCfg",
                 "DesktopCfg",
+                "filterLcovRecords",
                 "GatDev",
                 "GatDevBase",
                 "SshCfg",
@@ -252,7 +282,7 @@ class GatDevTest(unittest.TestCase):
             "androidCfg",
             "desktopCfg",
             "sshCfg",
-            "coverageMinLines",
+            "coverageCfg",
             "writeBuildInfoBeforeBuild",
         ):
             with self.subTest(field_name=field_name):
@@ -266,6 +296,7 @@ class GatDevTest(unittest.TestCase):
                 bundleTargetPlatforms=("android-arm64",),
                 signingProperties="client/key.properties",
                 bundletoolJar="/opt/bundletool.jar",
+                googlePlayPackageName="demo.pkg",
             )
             desktopCfg = DesktopCfg(
                 winDriveTarget="test_driver/custom_win.dart",
@@ -273,6 +304,12 @@ class GatDevTest(unittest.TestCase):
                 winExeName="Demo.exe",
             )
             sshCfg = SshCfg(host="example.com", user="deploy")
+            coverageCfg = CoverageCfg(
+                minLines=90.0,
+                appIncludePrefix="lib/core/",
+                appExcludePrefixes=("lib/core/frb/",),
+                serverIgnoreRegex=r"(/db\.rs)$",
+            )
 
             def getToolCmd(self, cmd: str) -> str:
                 match cmd:
@@ -289,11 +326,16 @@ class GatDevTest(unittest.TestCase):
         self.assertEqual(build.javaCmd("-version"), ["/opt/java", "-version"])
         self.assertEqual(build.androidCfg.driveTarget, "test_driver/custom.dart")
         self.assertEqual(build.androidCfg.bundleTargetPlatforms, ("android-arm64",))
+        self.assertEqual(build.androidCfg.googlePlayPackageName, "demo.pkg")
         self.assertEqual(build.desktopCfg.winDriveTarget, "test_driver/custom_win.dart")
         self.assertEqual(build.desktopCfg.macDriveTarget, "test_driver/custom_mac.dart")
         self.assertEqual(build.desktopCfg.winExeName, "Demo.exe")
         self.assertEqual(build.sshCfg.host, "example.com")
         self.assertEqual(build.sshCfg.user, "deploy")
+        self.assertEqual(build.coverageCfg.minLines, 90.0)
+        self.assertEqual(build.coverageCfg.appIncludePrefix, "lib/core/")
+        self.assertEqual(build.coverageCfg.appExcludePrefixes, ("lib/core/frb/",))
+        self.assertEqual(build.coverageCfg.serverIgnoreRegex, r"(/db\.rs)$")
 
     def test_desktop_config_excludes_task_only_mac_deploy_fields(self):
         config = DesktopCfg()
@@ -332,7 +374,6 @@ class GatDevTest(unittest.TestCase):
     def test_google_play_settings_are_task_only(self):
         for field_name in (
             "googlePlayCfg",
-            "googlePlayPackageName",
             "googlePlayTrack",
             "googlePlayScope",
             "googlePlayAuthHost",
@@ -344,6 +385,7 @@ class GatDevTest(unittest.TestCase):
                 self.assertFalse(hasattr(GatDev, field_name))
 
         build = DemoBuild()
+        self.assertTrue(hasattr(AndroidCfg(), "googlePlayPackageName"))
         self.assertFalse(hasattr(gdev, "GooglePlayCfg"))
         self.assertFalse(hasattr(GatDev, "cmdGooglePlayTrackList"))
         self.assertNotIn("test", build.commandNames())
@@ -353,12 +395,14 @@ class GatDevTest(unittest.TestCase):
             androidDriveTarget = "test_driver/legacy.dart"
             sshDeployHost = "legacy.example.com"
             sshDeployUser = "legacy"
+            coverageMinLines = 91.0
 
         build = LegacyBuild()
 
         self.assertEqual(build.androidCfg.driveTarget, "test_driver/legacy.dart")
         self.assertEqual(build.sshCfg.host, "legacy.example.com")
         self.assertEqual(build.sshCfg.user, "legacy")
+        self.assertEqual(build.coverageCfg.minLines, 91.0)
 
     def test_tool_commands_use_overridable_hook(self):
         class ToolBuild(DemoBuild):
@@ -417,12 +461,28 @@ class GatDevTest(unittest.TestCase):
 
     def test_overridden_command_can_delegate_to_default_parent_implementation(self):
         build = SuperCommandBuild()
+        calls: list[str] = []
+
+        def mark(name: str):
+            def run_command(*_args, **_kwargs):
+                calls.append(name)
+
+            return run_command
 
         self.assertTrue(build.hasTask("andTest"))
-        with patch.object(build, "doAndTest") as do_mock:
+        with (
+            patch.object(build, "doAndTest", side_effect=mark("unit")) as unit_mock,
+            patch.object(build, "doAndIntegrationTest", side_effect=mark("integration")) as integration_mock,
+        ):
             build.commandMap()["andTest"]()
 
-        do_mock.assert_called_once_with(app_dir=build.pathCfg.appDir)
+        self.assertEqual(calls, ["unit", "integration"])
+        unit_mock.assert_called_once_with(app_dir=build.pathCfg.appDir)
+        integration_mock.assert_called_once_with(
+            app_dir=build.pathCfg.appDir,
+            root_dir=build.pathCfg.root,
+            drive_target=build.androidCfg.driveTarget,
+        )
 
     def test_all_builtin_commands_have_cmd_placeholders(self):
         build = DemoBuild()
@@ -439,6 +499,65 @@ class GatDevTest(unittest.TestCase):
 
         do_mock.assert_called_once_with(web_dir=build.pathCfg.webDir, npm_args=("run", "test:coverage"))
 
+    def test_default_and_deploy_uses_android_config_package_name(self):
+        class DeployBuild(DemoBuild):
+            androidCfg = AndroidCfg(
+                signingProperties="client/key.properties",
+                bundletoolJar="/opt/bundletool.jar",
+                googlePlayPackageName="demo.pkg",
+            )
+
+        build = DeployBuild()
+        calls: list[str] = []
+
+        def mark(name: str):
+            def run_command(*_args, **_kwargs):
+                calls.append(name)
+
+            return run_command
+
+        with (
+            patch.object(build, "cmdAndTest", side_effect=mark("andTest")) as and_test_mock,
+            patch.object(build, "cmdSerTest", side_effect=mark("serTest")) as ser_test_mock,
+            patch.object(build, "cmdWebTest", side_effect=mark("webTest")) as web_test_mock,
+            patch.object(build, "cmdVerUp", side_effect=mark("verUp")) as ver_up_mock,
+            patch.object(build, "doAndBundleBuild", side_effect=mark("bundle")) as bundle_mock,
+            patch.object(build, "doAndDeploy", side_effect=mark("publish")) as deploy_mock,
+            patch.dict(
+                "os.environ",
+                {
+                    "GOOGLE_PLAY_TRACK": "production",
+                    "GOOGLE_PLAY_CREDENTIAL_FILE": "/tmp/demo/androidpublisher.dat",
+                    "GOOGLE_PLAY_CLIENT_SECRETS_FILE": "/tmp/demo/client_secrets.json",
+                },
+                clear=False,
+            ),
+        ):
+            build.cmdAndDeploy()
+
+        self.assertEqual(calls, ["andTest", "serTest", "webTest", "verUp", "bundle", "publish"])
+        and_test_mock.assert_called_once_with()
+        ser_test_mock.assert_called_once_with()
+        web_test_mock.assert_called_once_with()
+        ver_up_mock.assert_called_once_with()
+        bundle_mock.assert_called_once_with(
+            app_dir=build.pathCfg.appDir,
+            root_dir=build.pathCfg.root,
+            target_platforms=build.androidCfg.bundleTargetPlatforms,
+            signing_properties=build.androidCfg.signingProperties,
+            bundletool_jar=build.androidCfg.bundletoolJar,
+        )
+        deploy_mock.assert_called_once_with(
+            package_name="demo.pkg",
+            track="production",
+            scope="https://www.googleapis.com/auth/androidpublisher",
+            auth_host="localhost",
+            auth_port=8080,
+            credential_file="/tmp/demo/androidpublisher.dat",
+            client_secrets_file="/tmp/demo/client_secrets.json",
+            aab_path=build.pathCfg.appBundlePath,
+        )
+
     def test_mac_deploy_wrapper_passes_task_only_named_args_to_do_method(self):
         build = MacDeployBuild()
 
@@ -454,7 +573,7 @@ class GatDevTest(unittest.TestCase):
             mac_upload_command=("upload", "app/Demo.pkg"),
         )
 
-    def test_google_play_publish_uses_named_task_settings(self):
+    def test_do_and_deploy_uses_named_google_play_task_settings(self):
         build = DemoBuild()
         service = object()
 
@@ -462,7 +581,7 @@ class GatDevTest(unittest.TestCase):
             patch.object(build, "googlePlayService", return_value=service) as service_mock,
             patch("gdev.google_play.publishBundle") as publish_mock,
         ):
-            build.googlePlayPublish(
+            build.doAndDeploy(
                 package_name="demo.pkg",
                 track="internal",
                 scope="https://scope.example",
@@ -487,9 +606,9 @@ class GatDevTest(unittest.TestCase):
             aab_path=Path("/tmp/demo/client/build/app.aab"),
         )
 
-    def test_google_play_publish_requires_package_name(self):
+    def test_do_and_deploy_requires_google_play_package_name(self):
         with self.assertRaisesRegex(BuildError, "package name"):
-            DemoBuild().googlePlayPublish(
+            DemoBuild().doAndDeploy(
                 package_name="",
                 track="internal",
                 scope="https://scope.example",
@@ -499,6 +618,31 @@ class GatDevTest(unittest.TestCase):
                 client_secrets_file="client/client_secrets.json",
                 aab_path="client/build/app.aab",
             )
+
+    def test_ser_cov_passes_ignore_regex_to_cargo_llvm_cov(self):
+        class CovBuild(DemoBuild):
+            coverageCfg = CoverageCfg(minLines=90.0, serverIgnoreRegex=r"(/db\.rs)$")
+
+            def cmdSerCov(self) -> None:
+                super().cmdSerCov()
+
+        build = CovBuild()
+
+        with patch.object(build, "run") as run_mock:
+            build.cmdSerCov()
+
+        run_mock.assert_called_once_with(
+            [
+                "cargo",
+                "llvm-cov",
+                "--ignore-filename-regex",
+                r"(/db\.rs)$",
+                "--fail-under-lines",
+                "90",
+                "--summary-only",
+            ],
+            cwd=build.pathCfg.serDir,
+        )
 
     def test_do_web_cov_runs_configured_npm_coverage_command(self):
         build = DispatchBuild()

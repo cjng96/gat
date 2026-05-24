@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Callable, Sequence
 
 from .errors import BuildError
-from .gatDevBase import AndroidCfg, DesktopCfg, GatDevBase, SshCfg
+from .gatDevBase import AndroidCfg, CoverageCfg, DesktopCfg, GatDevBase, SshCfg
 
 
 @dataclass(frozen=True)
@@ -201,6 +201,26 @@ def parseLcovLineCoverage(lcov_text: str) -> tuple[int, int, float]:
     return covered, total, covered / total * 100
 
 
+def filterLcovRecords(
+    lcov_text: str,
+    *,
+    include_prefix: str | None = None,
+    exclude_prefixes: Sequence[str] = (),
+) -> str:
+    records: list[str] = []
+    for record in lcov_text.split("end_of_record"):
+        lines = [line for line in record.splitlines() if line]
+        source_line = next((line for line in lines if line.startswith("SF:")), "")
+        source_file = source_line[3:]
+        if include_prefix is not None and not source_file.startswith(include_prefix):
+            continue
+        if any(source_file.startswith(prefix) for prefix in exclude_prefixes):
+            continue
+        if lines:
+            records.append("\n".join(lines) + "\nend_of_record")
+    return "\n".join(records)
+
+
 def readPropertiesFile(path: Path) -> dict[str, str]:
     properties: dict[str, str] = {}
     for raw_line in path.read_text(encoding="utf-8").splitlines():
@@ -246,6 +266,7 @@ class GatDev(GatDevBase):
         self.androidCfg = self.resolveAndroidCfg()
         self.desktopCfg = self.resolveDesktopCfg()
         self.sshCfg = self.resolveSshCfg()
+        self.coverageCfg = self.resolveCoverageCfg()
 
     def inferRoot(self) -> Path:
         module = sys.modules.get(type(self).__module__)
@@ -265,6 +286,7 @@ class GatDev(GatDevBase):
             ),
             signingProperties=self.androidSigningProperties if self.androidSigningProperties is not None else cfg.signingProperties,
             bundletoolJar=self.bundletoolJar if self.bundletoolJar is not None else cfg.bundletoolJar,
+            googlePlayPackageName=cfg.googlePlayPackageName,
         )
 
     def resolveDesktopCfg(self) -> DesktopCfg:
@@ -288,6 +310,16 @@ class GatDev(GatDevBase):
             host=self.sshDeployHost if self.sshDeployHost is not None else cfg.host,
             port=self.sshDeployPort if self.sshDeployPort != 22 else cfg.port,
             user=self.sshDeployUser if self.sshDeployUser is not None else cfg.user,
+        )
+
+    def resolveCoverageCfg(self) -> CoverageCfg:
+        cls = type(self)
+        cfg = cls.coverageCfg
+        return CoverageCfg(
+            minLines=getattr(cls, "coverageMinLines", cfg.minLines),
+            appIncludePrefix=getattr(cls, "appCoverageIncludePrefix", cfg.appIncludePrefix),
+            appExcludePrefixes=getattr(cls, "appCoverageExcludePrefixes", cfg.appExcludePrefixes),
+            serverIgnoreRegex=getattr(cls, "serverCoverageIgnoreRegex", cfg.serverIgnoreRegex),
         )
 
     def run(self, cmd: Sequence[str], *, cwd: Path | None = None) -> None:
@@ -595,9 +627,9 @@ class GatDev(GatDevBase):
     def requireLineCoverage(self, name: str, covered: int, total: int) -> float:
         percent = covered / total * 100 if total else 0.0
         print(f"\n{name} line coverage: {percent:.2f}% ({covered}/{total})")
-        if percent < self.coverageMinLines:
+        if percent < self.coverageCfg.minLines:
             raise BuildError(
-                f"{name} line coverage {percent:.2f}% is below {self.coverageMinLines:.0f}%"
+                f"{name} line coverage {percent:.2f}% is below {self.coverageCfg.minLines:.0f}%"
             )
         return percent
 
@@ -659,6 +691,11 @@ class GatDev(GatDevBase):
                 return line.split()[0]
         raise BuildError("running Android emulator was not found")
 
+    def doAndTest(self, *, app_dir: Path) -> None:
+        self.run(self.flutterCmd("pub", "get"), cwd=app_dir)
+        self.run(self.flutterCmd("analyze"), cwd=app_dir)
+        self.run(self.flutterCmd("test"), cwd=app_dir)
+
     def doAndIntegrationTest(self, *, app_dir: Path, root_dir: Path, drive_target: str) -> None:
         print("\nRunning android integration test...")
         avd = self.firstAndroidAvd()
@@ -676,10 +713,6 @@ class GatDev(GatDevBase):
     def doMacTest(self, *, app_dir: Path, drive_target: str) -> None:
         self.run(self.flutterCmd("drive", "-d", "macos", f"--target={drive_target}"), cwd=app_dir)
 
-    def doAndTest(self, *, app_dir: Path) -> None:
-        self.run(self.flutterCmd("pub", "get"), cwd=app_dir)
-        self.run(self.flutterCmd("analyze"), cwd=app_dir)
-        self.run(self.flutterCmd("test"), cwd=app_dir)
 
     def doSerTest(self, *, ser_dir: Path) -> None:
         self.run(self.cargoCmd("test"), cwd=ser_dir)
@@ -687,19 +720,35 @@ class GatDev(GatDevBase):
     def doWebTest(self, *, web_dir: Path) -> None:
         self.run(self.npmCmd("test"), cwd=web_dir)
 
-    def doAppCov(self, *, app_dir: Path, coverage_info: Path, coverage_name: str) -> None:
+    def doAppCov(
+        self,
+        *,
+        app_dir: Path,
+        coverage_info: Path,
+        coverage_name: str,
+        include_prefix: str | None = None,
+        exclude_prefixes: Sequence[str] = (),
+    ) -> None:
         self.run(self.flutterCmd("pub", "get"), cwd=app_dir)
         self.run(self.flutterCmd("test", "--coverage", "--concurrency=1"), cwd=app_dir)
         if not coverage_info.exists():
             raise BuildError(f"app coverage file was not found: {coverage_info}")
-        covered, total, _ = parseLcovLineCoverage(coverage_info.read_text(encoding="utf-8"))
+        lcov_text = coverage_info.read_text(encoding="utf-8")
+        if include_prefix is not None or exclude_prefixes:
+            lcov_text = filterLcovRecords(
+                lcov_text,
+                include_prefix=include_prefix,
+                exclude_prefixes=exclude_prefixes,
+            )
+        covered, total, _ = parseLcovLineCoverage(lcov_text)
         self.requireLineCoverage(coverage_name, covered, total)
 
-    def doSerCov(self, *, ser_dir: Path, coverage_min_lines: float) -> None:
-        self.run(
-            self.cargoCmd("llvm-cov", "--fail-under-lines", str(int(coverage_min_lines)), "--summary-only"),
-            cwd=ser_dir,
-        )
+    def doSerCov(self, *, ser_dir: Path, coverage_min_lines: float, ignore_regex: str | None = None) -> None:
+        args = ["llvm-cov"]
+        if ignore_regex:
+            args.extend(["--ignore-filename-regex", ignore_regex])
+        args.extend(["--fail-under-lines", str(int(coverage_min_lines)), "--summary-only"])
+        self.run(self.cargoCmd(*args), cwd=ser_dir)
 
     def doWebCov(self, *, web_dir: Path, npm_args: Sequence[str]) -> None:
         self.run(self.npmCmd(*npm_args), cwd=web_dir)
@@ -782,7 +831,7 @@ class GatDev(GatDevBase):
         self.doAndInstall(apk_path=apk)
         return apk
 
-    def doAndDeploy(self, *, commands: Sequence[str]) -> None:
+    def doCommandSequence(self, *, commands: Sequence[str]) -> None:
         commands_by_name = self.checkedCommandMap()
         for command in commands:
             if command not in commands_by_name:
@@ -1063,7 +1112,7 @@ class GatDev(GatDevBase):
         except google_play.GooglePlayError as exc:
             raise BuildError(str(exc)) from exc
 
-    def googlePlayPublish(
+    def doAndDeploy(
         self,
         *,
         package_name: str,
@@ -1151,7 +1200,9 @@ __all__ = [
     "AndroidDevice",
     "AppVersion",
     "BuildError",
+    "CoverageCfg",
     "DesktopCfg",
+    "filterLcovRecords",
     "GatDev",
     "GatDevBase",
     "SshCfg",

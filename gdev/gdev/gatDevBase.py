@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import ClassVar
@@ -9,6 +10,7 @@ class AndroidCfg:
     bundleTargetPlatforms: tuple[str, ...] = ("android-arm", "android-arm64", "android-x64")
     signingProperties: str | Path | None = None
     bundletoolJar: str | Path | None = None
+    googlePlayPackageName: str | None = None
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,19 @@ class SshCfg:
     user: str | None = None
 
 
+@dataclass(frozen=True)
+class CoverageCfg:
+    minLines: float = 80.0
+    appIncludePrefix: str | None = None
+    appExcludePrefixes: tuple[str, ...] = ()
+    serverIgnoreRegex: str | None = None
+
+
+'''
+cmdAndDeploy같은 함수를 오버라이딩하면 기능이 동작한다.
+기본적으로는 super.cmdAndDeploy()를 호출하면 기본형으로 동작한다.
+혹시 커스터마이징이 필요하면, 해당 함수의 여기본문을 가져다가 수정해서 쓴다.
+'''
 class GatDevBase:
     @dataclass(frozen=True)
     class PathCfg:
@@ -75,7 +90,7 @@ class GatDevBase:
     androidCfg: ClassVar[AndroidCfg] = AndroidCfg()
     desktopCfg: ClassVar[DesktopCfg] = DesktopCfg()
     sshCfg: ClassVar[SshCfg] = SshCfg()
-    coverageMinLines: ClassVar[float] = 80.0
+    coverageCfg: ClassVar[CoverageCfg] = CoverageCfg()
     androidDriveTarget: ClassVar[str] = "test_driver/and.dart"
     winDriveTarget: ClassVar[str] = "test_driver/win.dart"
     macDriveTarget: ClassVar[str] = "test_driver/mac.dart"
@@ -112,16 +127,36 @@ class GatDevBase:
         self.doAndInstall()
 
     def cmdAndDeploy(self) -> None:
-        self.doAndDeploy(
-            commands=getattr(
-                self,
-                "andDeployCommands",
-                ("andTest", "serTest", "webTest", "verUp", "andBuild"),
-            ),
+        self.cmdAndTest()
+        self.cmdSerTest()
+        self.cmdWebTest()
+        self.cmdVerUp()
+        self.doAndBundleBuild(
+            app_dir=self.pathCfg.appDir,
+            root_dir=self.pathCfg.root,
+            target_platforms=self.androidCfg.bundleTargetPlatforms,
+            signing_properties=self.androidCfg.signingProperties,
+            bundletool_jar=self.androidCfg.bundletoolJar,
         )
+        self.doAndDeploy(
+            package_name=os.environ.get("GOOGLE_PLAY_PACKAGE_NAME", self.androidCfg.googlePlayPackageName or ""),
+            track=os.environ.get("GOOGLE_PLAY_TRACK", "internal"),
+            scope=os.environ.get("GOOGLE_PLAY_SCOPE", "https://www.googleapis.com/auth/androidpublisher"),
+            auth_host=os.environ.get("GOOGLE_PLAY_AUTH_HOST", "localhost"),
+            auth_port=int(os.environ.get("GOOGLE_PLAY_AUTH_PORT", "8080")),
+            credential_file=os.environ.get("GOOGLE_PLAY_CREDENTIAL_FILE", "app/androidpublisher.dat"),
+            client_secrets_file=os.environ.get("GOOGLE_PLAY_CLIENT_SECRETS_FILE", "app/client_secrets.json"),
+            aab_path=self.pathCfg.appBundlePath,
+        )
+        # self.doCommandSequence(commands=("andTest", "serTest", "webTest", "verUp", "andBuild"))
 
     def cmdAndTest(self) -> None:
         self.doAndTest(app_dir=self.pathCfg.appDir)
+        self.doAndIntegrationTest(
+            app_dir=self.pathCfg.appDir,
+            root_dir=self.pathCfg.root,
+            drive_target=self.androidCfg.driveTarget,
+        )
 
     def cmdWinTest(self) -> None:
         self.doWinTest(app_dir=self.pathCfg.appDir, drive_target=self.desktopCfg.winDriveTarget)
@@ -197,10 +232,16 @@ class GatDevBase:
             app_dir=self.pathCfg.appDir,
             coverage_info=self.pathCfg.appCoverageInfo,
             coverage_name="app",
+            include_prefix=self.coverageCfg.appIncludePrefix,
+            exclude_prefixes=self.coverageCfg.appExcludePrefixes,
         )
 
     def cmdSerCov(self) -> None:
-        self.doSerCov(ser_dir=self.pathCfg.serDir, coverage_min_lines=self.coverageMinLines)
+        self.doSerCov(
+            ser_dir=self.pathCfg.serDir,
+            coverage_min_lines=self.coverageCfg.minLines,
+            ignore_regex=self.coverageCfg.serverIgnoreRegex,
+        )
 
     def cmdWebCov(self) -> None:
         self.doWebCov(web_dir=self.pathCfg.webDir, npm_args=getattr(self, "webCovArgs", ("run", "test:coverage")))

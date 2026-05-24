@@ -9,7 +9,7 @@ The package owns generic mechanics; each project owns only paths, command order,
 
 ```python
 from pathlib import Path
-from gdev import GatDev
+from gdev import CoverageCfg, GatDev
 
 
 class gatDev(GatDev):
@@ -19,6 +19,11 @@ class gatDev(GatDev):
         appApkPath="app/build/app/outputs/flutter-apk/app-release.apk",
         appApkRelPath="release/android",
         apkPrefix="easycoll",
+    )
+    coverageCfg = CoverageCfg(
+        minLines=90.0,
+        appIncludePrefix="lib/core/",
+        appExcludePrefixes=("lib/core/frb/",),
     )
 
     def getToolCmd(self, cmd):
@@ -90,6 +95,7 @@ Prefer grouped config objects for settings shared by multiple tasks:
 - `AndroidCfg`: Android defaults that are intentionally shared by multiple project tasks
 - `DesktopCfg`: desktop defaults that are intentionally shared by multiple project tasks
 - `SshCfg`: deploy host/user connection settings
+- `CoverageCfg`: coverage threshold plus app/server coverage filters
 
 `PathCfg.root` is inferred from the project `gat_dev.py` file by default. Set it
 only when a build file intentionally uses a different project root.
@@ -108,8 +114,11 @@ Task-only settings should stay in the project `cmdXxx()` method and be passed to
 package paths, and upload command should be passed from `cmdMacDeploy()` instead
 of being stored in `DesktopCfg`.
 Google Play package, track, OAuth redirect, credential file, and client secrets
-file values should likewise be passed from the deploy task into
-`googlePlayPublish(...)` instead of being stored on the build class.
+package name is read from `AndroidCfg.googlePlayPackageName` by the default
+`cmdAndDeploy()` implementation. Track, OAuth redirect, credential file, and
+client secrets file values use the default deploy task values with environment
+overrides. Custom deploy flows can still call `doAndDeploy(...)` directly from a
+project-owned `cmdXxx()` method.
 
 ## Launcher
 
@@ -139,7 +148,7 @@ The values are shell-split, so wrappers such as `uv run flutter` are supported.
 Projects that still have legacy `build.py` behavior can declare matching
 `cmdXxx()` methods and map them to `GatDev` helpers such as `doAndBundleBuild()`,
 `updateBuildInfo()`, `sqfliteFfiCommentOut()`, `doWinBuild()`, `doMacBuild()`,
-`doIosBuild()`, and `googlePlayPublish()` from project-owned `cmdXxx()` methods.
+`doIosBuild()`, and `doAndDeploy()` from project-owned `cmdXxx()` methods.
 
 ## Version Rule
 
