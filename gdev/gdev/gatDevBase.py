@@ -146,6 +146,7 @@ class GatDevBase:
             auth_port=int(os.environ.get("GOOGLE_PLAY_AUTH_PORT", "8080")),
             credential_file=os.environ.get("GOOGLE_PLAY_CREDENTIAL_FILE", "app/androidpublisher.dat"),
             client_secrets_file=os.environ.get("GOOGLE_PLAY_CLIENT_SECRETS_FILE", "app/client_secrets.json"),
+            service_account_file=os.environ.get("GOOGLE_PLAY_SERVICE_ACCOUNT_FILE") or None,
             aab_path=self.pathCfg.appBundlePath,
         )
         # self.doCommandSequence(commands=("andTest", "serTest", "webTest", "verUp", "andBuild"))

@@ -1148,6 +1148,12 @@ class GatDev(GatDevBase):
     def googlePlayClientSecretsPath(self, *, client_secrets_file: str | Path) -> Path:
         return self.resolveProjectPath(client_secrets_file)
 
+    def googlePlayDefaultServiceAccountPath(self) -> Path:
+        return self.pathCfg.appDir / "play-store-credentials.json"
+
+    def googlePlayServiceAccountPath(self, *, service_account_file: str | Path) -> Path:
+        return self.resolveProjectPath(service_account_file)
+
     def googlePlayService(
         self,
         *,
@@ -1156,9 +1162,26 @@ class GatDev(GatDevBase):
         scope: str,
         auth_host: str,
         auth_port: int,
+        service_account_file: str | Path | None = None,
     ) -> Any:
         from . import google_play
         try:
+            if service_account_file:
+                service_account_path = self.googlePlayServiceAccountPath(
+                    service_account_file=service_account_file,
+                )
+                if not service_account_path.exists():
+                    raise BuildError(f"google play service account file was not found: {service_account_path}")
+                return google_play.buildServiceFromServiceAccount(
+                    service_account_path=service_account_path,
+                    scope=scope,
+                )
+            default_service_account_path = self.googlePlayDefaultServiceAccountPath()
+            if default_service_account_path.exists():
+                return google_play.buildServiceFromServiceAccount(
+                    service_account_path=default_service_account_path,
+                    scope=scope,
+                )
             return google_play.buildService(
                 client_secrets_path=self.googlePlayClientSecretsPath(client_secrets_file=client_secrets_file),
                 credential_path=self.googlePlayCredentialPath(credential_file=credential_file),
@@ -1180,6 +1203,7 @@ class GatDev(GatDevBase):
         credential_file: str | Path,
         client_secrets_file: str | Path,
         aab_path: str | Path,
+        service_account_file: str | Path | None = None,
     ) -> None:
         if not package_name:
             raise BuildError("google play package name is not configured")
@@ -1188,6 +1212,7 @@ class GatDev(GatDevBase):
             service=self.googlePlayService(
                 credential_file=credential_file,
                 client_secrets_file=client_secrets_file,
+                service_account_file=service_account_file,
                 scope=scope,
                 auth_host=auth_host,
                 auth_port=auth_port,

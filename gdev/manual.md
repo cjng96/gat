@@ -120,12 +120,12 @@ Task-only settings should stay in the project `cmdXxx()` method and be passed to
 `doXxx(...)` as named parameters. For example, `macDeploy` signing identities,
 package paths, and upload command should be passed from `cmdMacDeploy()` instead
 of being stored in `DesktopCfg`.
-Google Play package, track, OAuth redirect, credential file, and client secrets
-package name is read from `AndroidCfg.googlePlayPackageName` by the default
-`cmdAndDeploy()` implementation. Track, OAuth redirect, credential file, and
-client secrets file values use the default deploy task values with environment
-overrides. Custom deploy flows can still call `doAndDeploy(...)` directly from a
-project-owned `cmdXxx()` method.
+Google Play package name is read from `AndroidCfg.googlePlayPackageName` by the
+default `cmdAndDeploy()` implementation. Track and auth paths use default values
+with environment overrides. If `GOOGLE_PLAY_SERVICE_ACCOUNT_FILE` is set, or if
+`app/play-store-credentials.json` exists, deployment uses a service account.
+Otherwise it falls back to the OAuth client secret flow. Custom deploy flows can
+still call `doAndDeploy(...)` directly from a project-owned `cmdXxx()` method.
 
 ## Launcher
 

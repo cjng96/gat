@@ -573,6 +573,7 @@ class GatDevTest(unittest.TestCase):
                     "GOOGLE_PLAY_TRACK": "production",
                     "GOOGLE_PLAY_CREDENTIAL_FILE": "/tmp/demo/androidpublisher.dat",
                     "GOOGLE_PLAY_CLIENT_SECRETS_FILE": "/tmp/demo/client_secrets.json",
+                    "GOOGLE_PLAY_SERVICE_ACCOUNT_FILE": "/tmp/demo/play-store-credentials.json",
                 },
                 clear=False,
             ),
@@ -599,6 +600,7 @@ class GatDevTest(unittest.TestCase):
             auth_port=8080,
             credential_file="/tmp/demo/androidpublisher.dat",
             client_secrets_file="/tmp/demo/client_secrets.json",
+            service_account_file="/tmp/demo/play-store-credentials.json",
             aab_path=build.pathCfg.appBundlePath,
         )
 
@@ -642,6 +644,7 @@ class GatDevTest(unittest.TestCase):
             scope="https://scope.example",
             auth_host="localhost",
             auth_port=8080,
+            service_account_file=None,
         )
         publish_mock.assert_called_once_with(
             service=service,
@@ -661,6 +664,105 @@ class GatDevTest(unittest.TestCase):
                 credential_file="client/androidpublisher.dat",
                 client_secrets_file="client/client_secrets.json",
                 aab_path="client/build/app.aab",
+            )
+
+    def test_google_play_service_uses_explicit_service_account_file(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            service_account_path = root / "service-account.json"
+            service_account_path.write_text("{}", encoding="utf-8")
+
+            class TmpBuild(DemoBuild):
+                pathCfg = GatDev.PathCfg(root=root, appDir="client")
+
+            service = object()
+            build = TmpBuild()
+            with (
+                patch("gdev.google_play.buildServiceFromServiceAccount", return_value=service) as service_account_mock,
+                patch("gdev.google_play.buildService") as oauth_mock,
+            ):
+                result = build.googlePlayService(
+                    credential_file="client/androidpublisher.dat",
+                    client_secrets_file="client/client_secrets.json",
+                    service_account_file="service-account.json",
+                    scope="https://scope.example",
+                    auth_host="localhost",
+                    auth_port=8080,
+                )
+
+        self.assertIs(result, service)
+        service_account_mock.assert_called_once_with(
+            service_account_path=service_account_path,
+            scope="https://scope.example",
+        )
+        oauth_mock.assert_not_called()
+
+    def test_google_play_service_uses_default_service_account_file_when_present(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            default_path = root / "client/play-store-credentials.json"
+            default_path.parent.mkdir(parents=True)
+            default_path.write_text("{}", encoding="utf-8")
+
+            class TmpBuild(DemoBuild):
+                pathCfg = GatDev.PathCfg(root=root, appDir="client")
+
+            service = object()
+            build = TmpBuild()
+            with (
+                patch("gdev.google_play.buildServiceFromServiceAccount", return_value=service) as service_account_mock,
+                patch("gdev.google_play.buildService") as oauth_mock,
+            ):
+                result = build.googlePlayService(
+                    credential_file="client/androidpublisher.dat",
+                    client_secrets_file="client/client_secrets.json",
+                    scope="https://scope.example",
+                    auth_host="localhost",
+                    auth_port=8080,
+                )
+
+        self.assertIs(result, service)
+        service_account_mock.assert_called_once_with(
+            service_account_path=default_path,
+            scope="https://scope.example",
+        )
+        oauth_mock.assert_not_called()
+
+    def test_google_play_service_falls_back_to_oauth_when_service_account_is_absent(self):
+        build = DemoBuild()
+        service = object()
+
+        with (
+            patch("gdev.google_play.buildServiceFromServiceAccount") as service_account_mock,
+            patch("gdev.google_play.buildService", return_value=service) as oauth_mock,
+        ):
+            result = build.googlePlayService(
+                credential_file="client/androidpublisher.dat",
+                client_secrets_file="client/client_secrets.json",
+                scope="https://scope.example",
+                auth_host="localhost",
+                auth_port=8080,
+            )
+
+        self.assertIs(result, service)
+        service_account_mock.assert_not_called()
+        oauth_mock.assert_called_once_with(
+            client_secrets_path=Path("/tmp/demo/client/client_secrets.json"),
+            credential_path=Path("/tmp/demo/client/androidpublisher.dat"),
+            scope="https://scope.example",
+            host="localhost",
+            port=8080,
+        )
+
+    def test_google_play_service_rejects_missing_explicit_service_account_file(self):
+        with self.assertRaisesRegex(BuildError, "service account file"):
+            DemoBuild().googlePlayService(
+                credential_file="client/androidpublisher.dat",
+                client_secrets_file="client/client_secrets.json",
+                service_account_file="missing-service-account.json",
+                scope="https://scope.example",
+                auth_host="localhost",
+                auth_port=8080,
             )
 
     def test_ser_cov_passes_ignore_regex_to_cargo_llvm_cov(self):

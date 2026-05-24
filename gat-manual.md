@@ -100,7 +100,7 @@ PYTHONPATH=~/.gat/repo uv run --project ~/.gat/repo -m gat.gat ...
 |---|---|
 | Python | `>=3.12` |
 | 실행기 | `uv` |
-| 주요 의존성 | `paramiko`, `pyyaml`, `requests`, `termcolor`, `watchdog` |
+| 주요 의존성 | `google-api-python-client`, `google-auth`, `oauth2client`, `paramiko`, `pyyaml`, `requests`, `termcolor`, `watchdog` |
 
 ---
 

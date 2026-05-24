@@ -106,6 +106,29 @@ def buildService(
     return discovery.build("androidpublisher", "v3", http=http)
 
 
+def buildServiceFromServiceAccount(
+    *,
+    service_account_path: Path,
+    scope: str,
+) -> Any:
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient import discovery
+    except ImportError as exc:
+        raise GooglePlayError("google play service account dependencies are not installed") from exc
+
+    if not service_account_path.exists():
+        raise GooglePlayError(f"google play service account file was not found: {service_account_path}")
+    try:
+        credentials = service_account.Credentials.from_service_account_file(
+            str(service_account_path),
+            scopes=[scope],
+        )
+    except Exception as exc:
+        raise GooglePlayError(f"failed to load google play service account file: {service_account_path}") from exc
+    return discovery.build("androidpublisher", "v3", credentials=credentials)
+
+
 def publishBundle(*, service: Any, package_name: str, aab_path: Path, track: str) -> None:
     mimetypes.add_type("application/octet-stream", ".aab")
     edit_result = service.edits().insert(body={}, packageName=package_name).execute()
