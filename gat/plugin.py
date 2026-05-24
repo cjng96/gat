@@ -3658,6 +3658,33 @@ def _zreplFilesystemBlock(filesystems: Any) -> str:
     )
 
 
+# zrepl helper caveats:
+#
+# - send.encrypted is a job-level option, not a per-filesystem option.
+#   If sendEncrypted=True, every filesystem in the job must be encrypted.
+#   Do not use a recursive selector such as "pool<" when the parent is plain
+#   but children are encrypted. List encrypted children explicitly, or split the
+#   plain parent and encrypted children into separate jobs.
+#
+# - Raw encrypted sends must be raw from the first receive. A dataset initially
+#   received as non-raw/plain cannot later accept raw encrypted incrementals.
+#   Destroy and reseed that receiver dataset if switching it to raw encrypted.
+#
+# - With sendEncrypted=False, encrypted source datasets require their keys to
+#   be loaded. If the key is unavailable, the sender can fail while the receiver
+#   reports a generic "cannot receive: failed to read from stream".
+#
+# - Interrupted receives can leave receive_resume_token on the receiver. Keep
+#   the receiver dataset if you want zrepl to resume; destroy it only when you
+#   intentionally want to discard the partial receive and start over.
+#
+# - zrepl creates holds such as zrepl_last_received_* on snapshots. Stop zrepl
+#   before manual cleanup, release the hold explicitly if a destroy fails with
+#   "dataset is busy", and only then destroy the dataset or snapshot.
+#
+# - "replication cursor bookmark does not exist" is expected until a filesystem
+#   has completed its first successful replication; it is a symptom, not usually
+#   the primary failure.
 def zreplConfig(jobs: Any, logLevel: str = "warn") -> str:
     if isinstance(jobs, str):
         jobs = [jobs]
@@ -3810,6 +3837,8 @@ def zreplApplyConfig(
     content: str,
     path: str = "/etc/zrepl/zrepl.yml",
 ) -> None:
+    # This restarts zrepl. During large initial replications it will interrupt
+    # active sends; zrepl can usually resume if the receiver token is kept.
     env.makeFile(path=path, content=content, sudo=True, mode=644)
     env.run("sudo zrepl configcheck")
     env.run("sudo systemctl enable --now zrepl")
