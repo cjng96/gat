@@ -604,6 +604,42 @@ class GatDevTest(unittest.TestCase):
             aab_path=build.pathCfg.appBundlePath,
         )
 
+    def test_android_appbundle_build_clears_local_application_id_suffix(self):
+        build = DemoBuild()
+
+        with patch.object(build, "run") as run_mock:
+            build.buildAndroidAppBundle(
+                app_dir=build.pathCfg.appDir,
+                target_platforms=("android-arm64", "android-x64"),
+            )
+
+        run_mock.assert_called_once_with(
+            ToolCmd.flutter(
+                "build",
+                "appbundle",
+                "--target-platform",
+                "android-arm64,android-x64",
+                "--android-project-arg",
+                "gdevApplicationIdSuffix=",
+            ),
+            cwd=build.pathCfg.appDir,
+        )
+
+    def test_android_appbundle_universal_apk_uses_prod_release_names(self):
+        build = DemoBuild()
+        version = AppVersion(1, 2, 3, 10203)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            src = Path(tmp_dir) / "universal.apk"
+            src.write_text("apk", encoding="utf-8")
+            build.pathCfg.appApkRelPath.mkdir(parents=True, exist_ok=True)
+
+            copied = build.copyAndroidUniversalApk(version, src)
+
+        self.assertEqual(copied, build.pathCfg.appApkRelPath / "demo-prod-1.2.3+10203.apk")
+        self.assertEqual((build.pathCfg.appApkRelPath / "demo-prod-1.2.3+10203.apk").read_text(), "apk")
+        self.assertEqual((build.pathCfg.appApkRelPath / "latest-prod.apk").read_text(), "apk")
+
     def test_mac_deploy_wrapper_passes_task_only_named_args_to_do_method(self):
         build = MacDeployBuild()
 

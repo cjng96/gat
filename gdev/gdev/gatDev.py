@@ -527,6 +527,9 @@ class GatDev(GatDevBase):
     def apkFileName(self, version: AppVersion) -> str:
         return f"{self.pathCfg.apkPrefix}-{version.full}.apk"
 
+    def prodApkFileName(self, version: AppVersion) -> str:
+        return f"{self.pathCfg.apkPrefix}-prod-{version.full}.apk"
+
     def updateBuildInfo(self) -> None:
         if self.pathCfg.appBuildInfo is None:
             raise BuildError("appBuildInfo path is not configured")
@@ -584,7 +587,14 @@ class GatDev(GatDevBase):
     def buildAndroidAppBundle(self, *, app_dir: Path, target_platforms: Sequence[str]) -> None:
         platforms = ",".join(target_platforms)
         self.run(
-            self.flutterCmd("build", "appbundle", "--target-platform", platforms),
+            self.flutterCmd(
+                "build",
+                "appbundle",
+                "--target-platform",
+                platforms,
+                "--android-project-arg",
+                "gdevApplicationIdSuffix=",
+            ),
             cwd=app_dir,
         )
 
@@ -604,8 +614,8 @@ class GatDev(GatDevBase):
         if not apk_path.exists():
             raise BuildError(f"universal APK was not found: {apk_path}")
         self.pathCfg.appApkRelPath.mkdir(parents=True, exist_ok=True)
-        versioned = self.pathCfg.appApkRelPath / self.apkFileName(version)
-        latest = self.pathCfg.appApkRelPath / "latest.apk"
+        versioned = self.pathCfg.appApkRelPath / self.prodApkFileName(version)
+        latest = self.pathCfg.appApkRelPath / "latest-prod.apk"
         shutil.copy2(apk_path, versioned)
         shutil.copy2(apk_path, latest)
         print(f"\nAPK: {versioned}")
