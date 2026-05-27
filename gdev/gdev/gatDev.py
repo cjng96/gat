@@ -545,6 +545,41 @@ class GatDev(GatDevBase):
         if self.writeBuildInfoBeforeBuild and self.pathCfg.appBuildInfo is not None:
             self.updateBuildInfo()
 
+    def frbApiPath(self) -> Path:
+        return self.pathCfg.appDir / "native/src/api.rs"
+
+    def hasFrbBridge(self) -> bool:
+        return self.frbApiPath().is_file()
+
+    def frbGenerateCommand(self) -> list[str]:
+        app_dir = self.pathCfg.appDir
+        cmd = self.toolCmd(
+            "flutter_rust_bridge_codegen",
+            "generate",
+            "--rust-root",
+            str(app_dir / "native"),
+            "--rust-input",
+            "crate::api",
+            "--dart-output",
+            str(app_dir / "lib/core/frb"),
+            "--rust-output",
+            str(app_dir / "native/src/frb_generated.rs"),
+            "--dart-root",
+            str(app_dir),
+        )
+        c_output = app_dir / "ios/Runner/frb_generated.h"
+        if c_output.parent.is_dir():
+            cmd.extend(["--c-output", str(c_output)])
+        return cmd
+
+    def doFrbGen(self) -> None:
+        if getattr(self, "_frbGenDone", False):
+            return
+        self._frbGenDone = True
+        if not self.hasFrbBridge():
+            return
+        self.run(self.frbGenerateCommand(), cwd=self.pathCfg.root)
+
     def readAndroidSigningProperties(self, *, signing_properties: str | Path | None) -> dict[str, str]:
         if signing_properties is None:
             raise BuildError("androidSigningProperties path is not configured")

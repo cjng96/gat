@@ -115,6 +115,7 @@ class GatDevBase:
         self.doUnitTest(unit_test_commands=getattr(self, "unitTestCommands", ()))
 
     def cmdAndBuild(self) -> None:
+        self.doFrbGen()
         self.doAndBuild(app_dir=self.pathCfg.appDir)
 
     def cmdVerUp(self) -> None:
@@ -127,6 +128,7 @@ class GatDevBase:
         self.doAndInstall()
 
     def cmdAndDeploy(self) -> None:
+        self.doFrbGen()
         self.cmdAndTest()
         self.cmdSerTest()
         self.cmdWebTest()
@@ -152,6 +154,7 @@ class GatDevBase:
         # self.doCommandSequence(commands=("andTest", "serTest", "webTest", "verUp", "andBuild"))
 
     def cmdAndTest(self) -> None:
+        self.doFrbGen()
         self.doAndTest(app_dir=self.pathCfg.appDir)
         if self.hasAndroidIntegrationTest():
             self.doAndIntegrationTest(

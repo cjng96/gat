@@ -77,6 +77,13 @@ The default `cmdAndTest()` runs unit/widget tests first. It only runs the Androi
 integration-test step when the app has a `test_driver/` or `integration_test/`
 directory.
 
+For Flutter Rust Bridge projects, the default Android commands run codegen
+before build/test/deploy. If `app/native/src/api.rs` exists, `doFrbGen()` runs
+`flutter_rust_bridge_codegen generate` with the standard `app/native` and
+`app/lib/core/frb` paths. The command is idempotent inside one `gdev` process, so
+`andDeploy` can call `andTest` without generating twice. Projects without that
+bridge file skip this step.
+
 ## Interactive Command Selection
 
 When `gdev` runs in a TTY without a command argument, it opens a numbered command

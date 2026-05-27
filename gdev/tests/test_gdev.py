@@ -528,6 +528,101 @@ class GatDevTest(unittest.TestCase):
             drive_target=build.androidCfg.driveTarget,
         )
 
+    def test_frb_generate_skips_when_bridge_api_is_absent(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+
+            class TmpBuild(DemoBuild):
+                pathCfg = GatDev.PathCfg(root=root, appDir="client")
+
+            build = TmpBuild()
+            with patch.object(build, "run") as run_mock:
+                build.doFrbGen()
+
+        run_mock.assert_not_called()
+
+    def test_frb_generate_uses_standard_project_paths_once(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+
+            class TmpBuild(DemoBuild):
+                pathCfg = GatDev.PathCfg(root=root, appDir="client")
+
+            (root / "client/native/src").mkdir(parents=True)
+            (root / "client/native/src/api.rs").write_text("pub fn api() {}\n", encoding="utf-8")
+            (root / "client/ios/Runner").mkdir(parents=True)
+            build = TmpBuild()
+            with (
+                patch.dict("gdev.gatDev.os.environ", {}, clear=True),
+                patch.object(build, "run") as run_mock,
+            ):
+                build.doFrbGen()
+                build.doFrbGen()
+
+        run_mock.assert_called_once_with(
+            [
+                "flutter_rust_bridge_codegen",
+                "generate",
+                "--rust-root",
+                str(root / "client/native"),
+                "--rust-input",
+                "crate::api",
+                "--dart-output",
+                str(root / "client/lib/core/frb"),
+                "--rust-output",
+                str(root / "client/native/src/frb_generated.rs"),
+                "--dart-root",
+                str(root / "client"),
+                "--c-output",
+                str(root / "client/ios/Runner/frb_generated.h"),
+            ],
+            cwd=root,
+        )
+
+    def test_default_android_commands_run_frb_generate(self):
+        build = DemoBuild()
+
+        with (
+            patch.object(build, "doFrbGen") as frb_mock,
+            patch.object(build, "doAndBuild") as build_mock,
+        ):
+            build.cmdAndBuild()
+
+        frb_mock.assert_called_once_with()
+        build_mock.assert_called_once_with(app_dir=build.pathCfg.appDir)
+
+        build = DemoBuild()
+        with (
+            patch.object(build, "doFrbGen") as frb_mock,
+            patch.object(build, "doAndTest") as test_mock,
+            patch.object(build, "doAndIntegrationTest") as integration_mock,
+        ):
+            build.cmdAndTest()
+
+        frb_mock.assert_called_once_with()
+        test_mock.assert_called_once_with(app_dir=build.pathCfg.appDir)
+        integration_mock.assert_not_called()
+
+        build = DemoBuild()
+        with (
+            patch.object(build, "doFrbGen") as frb_mock,
+            patch.object(build, "cmdAndTest") as and_test_mock,
+            patch.object(build, "cmdSerTest") as ser_test_mock,
+            patch.object(build, "cmdWebTest") as web_test_mock,
+            patch.object(build, "cmdVerUp") as ver_up_mock,
+            patch.object(build, "doAndBundleBuild") as bundle_mock,
+            patch.object(build, "doAndDeploy") as deploy_mock,
+        ):
+            build.cmdAndDeploy()
+
+        frb_mock.assert_called_once_with()
+        and_test_mock.assert_called_once_with()
+        ser_test_mock.assert_called_once_with()
+        web_test_mock.assert_called_once_with()
+        ver_up_mock.assert_called_once_with()
+        bundle_mock.assert_called_once()
+        deploy_mock.assert_called_once()
+
     def test_all_builtin_commands_have_cmd_placeholders(self):
         build = DemoBuild()
 
