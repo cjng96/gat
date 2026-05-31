@@ -36,7 +36,14 @@
   - 예: `3` 입력 후 첫 번째 명령으로 이동하고 `Space` -> `3 1 `
 - [x] `Enter`는 입력된 명령 번호를 입력 순서대로 해석해 실행한다.
 
-## 4. 테스트
+## 4. Android 설치
+
+- [x] `andInstall`은 ADB serial이 `adb-*._tcp` 형식인 장비에 APK를 먼저 자동 설치한다.
+- [x] 자동 설치 후에도 기존 장비 선택 UI를 띄워 추가 설치 또는 현재 연결 장비 확인을 지원한다.
+- [x] 자동 설치된 장비를 수동 선택하면 같은 APK를 중복 설치하지 않는다.
+- [x] `andBuild`는 빌드 산출 APK로 `andInstall`을 호출하므로 같은 자동 설치 규칙을 따른다.
+
+## 5. 테스트
 
 - [x] 명령 번호 파싱 순서 검증 (`gdev/tests/test_gdev.py` - `test_command_sequence_parser_maps_numbered_input_in_order`)
 - [x] 빈 입력에서 `Space`가 현재 선택 명령 번호와 공백을 추가하는지 검증 (`gdev/tests/test_gdev.py` - `test_commandInputAfterSpace_only_adds_selected_command_when_input_is_empty`)
@@ -44,3 +51,4 @@
 - [x] 숫자 입력 후 선택 이동 뒤 `Space`가 현재 선택 명령 번호와 공백을 추가하는지 검증 (`gdev/tests/test_gdev.py` - `test_commandInputAfterSpace_adds_selected_command_after_selection_move`)
 - [x] 선택 명령 번호 입력 후 수동 숫자 입력이 같은 시퀀스로 파싱되는지 검증 (`gdev/tests/test_gdev.py` - `test_space_selected_command_then_manual_number_parses_in_entered_order`)
 - [x] 수동 숫자 입력 후 선택 이동/Space/수동 숫자 입력이 같은 시퀀스로 파싱되는지 검증 (`gdev/tests/test_gdev.py` - `test_manual_number_then_selection_move_space_parses_in_entered_order`)
+- [x] `adb-*._tcp` 장비 자동 설치와 수동 UI 유지 검증 (`gdev/tests/test_gdev.py` - `test_andInstall_auto_installs_adb_tcp_devices_before_selection`)

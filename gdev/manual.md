@@ -77,6 +77,11 @@ The default `cmdAndTest()` runs unit/widget tests first. It only runs the Androi
 integration-test step when the app has a `test_driver/` or `integration_test/`
 directory.
 
+The default `cmdAndInstall()` installs the APK to every ADB device whose serial
+matches `adb-*._tcp` before showing the normal device selection UI. This covers
+wireless ADB devices that should always receive the latest build while still
+allowing an extra manual install or device-list check.
+
 For Flutter Rust Bridge projects, the default Android commands run codegen
 before build/test/deploy. If `app/native/src/api.rs` exists, `doFrbGen()` runs
 `flutter_rust_bridge_codegen generate` with the standard `app/native` and

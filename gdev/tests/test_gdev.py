@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import gdev
 import gdev.__main__ as gdev_main
@@ -178,12 +178,16 @@ class GatDevTest(unittest.TestCase):
                 [
                     "List of devices attached",
                     "emulator-5554 device product:sdk model:Pixel transport_id:1",
+                    "adb-R5CN123._adb-tls-connect._tcp device product:phone model:Galaxy transport_id:2",
                     "10.0.0.2:5555 offline product:phone model:X transport_id:2",
                     "R3CN123 unauthorized usb:337641472X",
                 ]
             )
         )
-        self.assertEqual([device.serial for device in devices], ["emulator-5554"])
+        self.assertEqual(
+            [device.serial for device in devices],
+            ["emulator-5554", "adb-R5CN123._adb-tls-connect._tcp"],
+        )
 
     def test_command_sequence_parser_maps_numbered_input_in_order(self):
         build = DispatchBuild()
@@ -1064,6 +1068,67 @@ class GatDevTest(unittest.TestCase):
             ):
                 self.assertEqual(build.doAndInstall(apk_path=apk), device)
         run_mock.assert_called_once()
+
+    def test_andInstall_auto_installs_adb_tcp_devices_before_selection(self):
+        build = DemoBuild()
+        auto_device = AndroidDevice(
+            "adb-R5CN123._adb-tls-connect._tcp",
+            "device",
+            "model:Galaxy",
+        )
+        selected_device = AndroidDevice("emulator-5554", "device", "model:Pixel")
+        devices = [auto_device, selected_device]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            apk = Path(tmp_dir) / "app.apk"
+            apk.write_text("apk", encoding="utf-8")
+
+            with (
+                patch.object(build, "listAndroidDevices", return_value=devices),
+                patch.object(build, "run") as run_mock,
+            ):
+                def select_device(input_devices):
+                    self.assertEqual(input_devices, devices)
+                    self.assertEqual(run_mock.call_count, 1)
+                    return selected_device
+
+                with patch.object(build, "selectAndroidDevice", side_effect=select_device):
+                    self.assertEqual(build.doAndInstall(apk_path=apk), selected_device)
+
+        self.assertEqual(
+            run_mock.call_args_list,
+            [
+                call(
+                    ToolCmd.adb("-s", auto_device.serial, "install", "-r", "-d", str(apk)),
+                    cwd=build.pathCfg.root,
+                ),
+                call(
+                    ToolCmd.adb("-s", selected_device.serial, "install", "-r", "-d", str(apk)),
+                    cwd=build.pathCfg.root,
+                ),
+            ],
+        )
+
+    def test_andInstall_does_not_reinstall_auto_device_when_selected(self):
+        build = DemoBuild()
+        auto_device = AndroidDevice(
+            "adb-R5CN123._adb-tls-connect._tcp",
+            "device",
+            "model:Galaxy",
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            apk = Path(tmp_dir) / "app.apk"
+            apk.write_text("apk", encoding="utf-8")
+            with (
+                patch.object(build, "listAndroidDevices", return_value=[auto_device]),
+                patch.object(build, "selectAndroidDevice", return_value=auto_device),
+                patch.object(build, "run") as run_mock,
+            ):
+                self.assertEqual(build.doAndInstall(apk_path=apk), auto_device)
+
+        run_mock.assert_called_once_with(
+            ToolCmd.adb("-s", auto_device.serial, "install", "-r", "-d", str(apk)),
+            cwd=build.pathCfg.root,
+        )
 
     def test_main_without_command_requires_tty(self):
         build = DemoBuild()

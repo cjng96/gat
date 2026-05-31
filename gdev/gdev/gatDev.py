@@ -148,6 +148,10 @@ def parseAdbDevices(adb_devices_output: str) -> list[AndroidDevice]:
     return devices
 
 
+def isAdbTcpAutoInstallDevice(device: AndroidDevice) -> bool:
+    return re.fullmatch(r"adb-.*\._tcp\.?", device.serial) is not None
+
+
 def selectTui(title: str, help_text: str, labels: Sequence[str]) -> int | None:
     if not labels:
         raise BuildError("no selectable items were provided")
@@ -913,15 +917,41 @@ class GatDev(GatDevBase):
         )
         return None if selected is None else devices[selected]
 
+    def installAndroidApk(self, *, apk: Path, device: AndroidDevice) -> None:
+        self.run(
+            self.adbCmd("-s", device.serial, "install", "-r", "-d", str(apk)),
+            cwd=self.pathCfg.root,
+        )
+
+    def autoInstallAndroidTcpDevices(
+        self,
+        *,
+        apk: Path,
+        devices: Sequence[AndroidDevice],
+    ) -> set[str]:
+        installed_serials: set[str] = set()
+        for device in devices:
+            if not isAdbTcpAutoInstallDevice(device):
+                continue
+            print(f"\nAndroid auto install device: {device.label}")
+            self.installAndroidApk(apk=apk, device=device)
+            installed_serials.add(device.serial)
+        return installed_serials
+
     def doAndInstall(self, *, apk_path: Path | None = None) -> AndroidDevice | None:
         apk = apk_path or self.defaultInstallApk()
         if not apk.exists():
             raise BuildError(f"release APK was not found: {apk}")
-        device = self.selectAndroidDevice(self.listAndroidDevices())
+        devices = self.listAndroidDevices()
+        auto_installed_serials = self.autoInstallAndroidTcpDevices(apk=apk, devices=devices)
+        device = self.selectAndroidDevice(devices)
         if device is None:
             print("\nInstall cancelled.")
             return None
-        self.run(self.adbCmd("-s", device.serial, "install", "-r", "-d", str(apk)), cwd=self.pathCfg.root)
+        if device.serial in auto_installed_serials:
+            print(f"\nAndroid device already installed automatically: {device.label}")
+            return device
+        self.installAndroidApk(apk=apk, device=device)
         return device
 
     def doAndBuild(self, *, app_dir: Path) -> Path:
