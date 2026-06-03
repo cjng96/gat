@@ -938,21 +938,15 @@ class GatDev(GatDevBase):
             installed_serials.add(device.serial)
         return installed_serials
 
-    def doAndInstall(self, *, apk_path: Path | None = None) -> AndroidDevice | None:
+    def doAndInstall(self, *, apk_path: Path | None = None) -> list[AndroidDevice]:
         apk = apk_path or self.defaultInstallApk()
         if not apk.exists():
             raise BuildError(f"release APK was not found: {apk}")
         devices = self.listAndroidDevices()
-        auto_installed_serials = self.autoInstallAndroidTcpDevices(apk=apk, devices=devices)
-        device = self.selectAndroidDevice(devices)
-        if device is None:
-            print("\nInstall cancelled.")
-            return None
-        if device.serial in auto_installed_serials:
-            print(f"\nAndroid device already installed automatically: {device.label}")
-            return device
-        self.installAndroidApk(apk=apk, device=device)
-        return device
+        for device in devices:
+            print(f"\nAndroid install device: {device.label}")
+            self.installAndroidApk(apk=apk, device=device)
+        return list(devices)
 
     def doAndBuild(self, *, app_dir: Path) -> Path:
         self.maybeUpdateBuildInfo()
@@ -1318,31 +1312,47 @@ class GatDev(GatDevBase):
         commands_by_name = self.commandMap()
         return commands_by_name
 
-    def resolveCommands(self, command: str | None) -> list[str] | None:
-        if command is not None:
-            return [command]
+    def resolveCommands(self, commands: Sequence[str]) -> list[str] | None:
+        if commands:
+            return list(commands)
         if not sys.stdin.isatty() or not sys.stdout.isatty():
             raise BuildError("command argument is required when no TTY is available")
-        commands = self.selectCommandSequenceTui()
-        if commands is None:
+        selected_commands = self.selectCommandSequenceTui()
+        if selected_commands is None:
             print("\nCommand cancelled.")
-        return commands
+        return selected_commands
+
+    def commandReplayText(self, commands: Sequence[str]) -> str:
+        return "gdev " + " ".join(commands)
+
+    def commandListText(self) -> str:
+        return " ".join(self.requireSupportedCommands())
 
     def parseArgs(self, argv: Sequence[str]) -> argparse.Namespace:
         parser = argparse.ArgumentParser(description="gdev project build helper")
-        parser.add_argument("command", choices=self.requireSupportedCommands(), nargs="?")
+        parser.add_argument(
+            "commands",
+            choices=[*self.requireSupportedCommands(), "ls"],
+            nargs="*",
+        )
         return parser.parse_args(argv)
 
     def main(self, argv: Sequence[str] | None = None) -> int:
         try:
             args = self.parseArgs(sys.argv[1:] if argv is None else argv)
-            commands = self.resolveCommands(args.command)
+            if "ls" in args.commands:
+                if args.commands != ["ls"]:
+                    raise BuildError("ls cannot be combined with build commands")
+                print(self.commandListText())
+                return 0
+            commands = self.resolveCommands(args.commands)
             if commands is None:
                 return 0
             commands_by_name = self.checkedCommandMap()
             for command in commands:
                 print(f"\n==> {command}")
                 commands_by_name[command]()
+            print(f"\n{self.commandReplayText(commands)}")
         except BuildError as exc:
             print(f"\nERROR: {exc}", file=sys.stderr)
             return 1

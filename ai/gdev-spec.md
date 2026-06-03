@@ -13,6 +13,9 @@
 - [x] 명령 표시 순서는 최종 프로젝트 클래스에 정의된 `cmdXxx()` 메서드 순서를 따른다.
 - [x] `GatDevBase`의 기본 `cmdXxx()` 메서드는 재사용 가능한 기본 구현만 제공하며, 프로젝트 클래스가 직접 오버라이드하지 않으면 명령으로 노출하지 않는다.
 - [x] 프로젝트 클래스는 커스터마이징이 필요 없는 명령도 `cmdXxx()`에서 `super().cmdXxx()`를 호출해 명시적으로 노출할 수 있다.
+- [x] `gdev ls`는 실행 가능한 명령 목록을 `andBuild serUp ...` 형식의 한 줄로 표시하고 명령은 실행하지 않는다.
+- [x] `gdev andBuild serUp`처럼 명령 인자를 여러 개 주면 입력한 순서대로 모두 실행한다.
+- [x] 명령 실행이 완료되면 같은 순서로 다시 실행할 수 있는 `gdev ...` 명령줄을 마지막에 표시한다.
 
 ## 2. 설정 구조
 
@@ -38,10 +41,10 @@
 
 ## 4. Android 설치
 
-- [x] `andInstall`은 ADB serial이 `adb-*._tcp` 형식인 장비에 APK를 먼저 자동 설치한다.
-- [x] 자동 설치 후에도 기존 장비 선택 UI를 띄워 추가 설치 또는 현재 연결 장비 확인을 지원한다.
-- [x] 자동 설치된 장비를 수동 선택하면 같은 APK를 중복 설치하지 않는다.
-- [x] `andBuild`는 빌드 산출 APK로 `andInstall`을 호출하므로 같은 자동 설치 규칙을 따른다.
+- [x] `andInstall`은 ADB에 연결된 모든 설치 가능 장비에 APK를 설치한다.
+- [x] `andInstall`은 전체 장비 설치 후 장비 선택 UI를 호출하지 않는다.
+- [x] 기존 장비 선택 UI 구현은 유지하되 기본 `andInstall` 경로에서는 사용하지 않는다.
+- [x] `andBuild`는 빌드 산출 APK로 `andInstall`을 호출하므로 같은 전체 장비 설치 규칙을 따른다.
 
 ## 5. 테스트
 
@@ -51,4 +54,6 @@
 - [x] 숫자 입력 후 선택 이동 뒤 `Space`가 현재 선택 명령 번호와 공백을 추가하는지 검증 (`gdev/tests/test_gdev.py` - `test_commandInputAfterSpace_adds_selected_command_after_selection_move`)
 - [x] 선택 명령 번호 입력 후 수동 숫자 입력이 같은 시퀀스로 파싱되는지 검증 (`gdev/tests/test_gdev.py` - `test_space_selected_command_then_manual_number_parses_in_entered_order`)
 - [x] 수동 숫자 입력 후 선택 이동/Space/수동 숫자 입력이 같은 시퀀스로 파싱되는지 검증 (`gdev/tests/test_gdev.py` - `test_manual_number_then_selection_move_space_parses_in_entered_order`)
-- [x] `adb-*._tcp` 장비 자동 설치와 수동 UI 유지 검증 (`gdev/tests/test_gdev.py` - `test_andInstall_auto_installs_adb_tcp_devices_before_selection`)
+- [x] 연결된 모든 장비 설치와 선택 UI 미호출 검증 (`gdev/tests/test_gdev.py` - `test_andInstall_installs_all_connected_devices_without_selection`, `test_andInstall_does_not_call_device_selection_ui`)
+- [x] 다중 명령 인자 순차 실행과 복붙용 완료 명령 표시 검증 (`gdev/tests/test_gdev.py` - `test_main_runs_multiple_command_arguments_in_order_and_prints_replay`)
+- [x] `gdev ls` 명령 목록 한 줄 출력 검증 (`gdev/tests/test_gdev.py` - `test_main_ls_prints_supported_commands_without_running_tasks`)

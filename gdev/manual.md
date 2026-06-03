@@ -77,10 +77,10 @@ The default `cmdAndTest()` runs unit/widget tests first. It only runs the Androi
 integration-test step when the app has a `test_driver/` or `integration_test/`
 directory.
 
-The default `cmdAndInstall()` installs the APK to every ADB device whose serial
-matches `adb-*._tcp` before showing the normal device selection UI. This covers
-wireless ADB devices that should always receive the latest build while still
-allowing an extra manual install or device-list check.
+The default `cmdAndInstall()` installs the APK to every installable Android
+device returned by `adb devices -l`. The existing device selection UI remains in
+the library for custom flows, but the default install task does not show it
+after the all-device install has completed.
 
 For Flutter Rust Bridge projects, the default Android commands run codegen
 before build/test/deploy. If `app/native/src/api.rs` exists, `doFrbGen()` runs
@@ -89,7 +89,14 @@ before build/test/deploy. If `app/native/src/api.rs` exists, `doFrbGen()` runs
 `andDeploy` can call `andTest` without generating twice. Projects without that
 bridge file skip this step.
 
-## Interactive Command Selection
+## Command Execution
+
+`gdev ls` prints the available project commands on one line, for example
+`andBuild serUp webTest`, without running any task.
+
+`gdev andBuild serUp` runs the named commands in the order provided. After a
+successful run, `gdev` prints the same copy-pasteable command line as the last
+line.
 
 When `gdev` runs in a TTY without a command argument, it opens a numbered command
 selector.
@@ -103,6 +110,8 @@ selector.
   `Up`/`Down` or `k`/`j`, `Space` adds the newly selected command number followed
   by a space.
 - `Enter` runs the entered command sequence, preserving the entered order.
+- After the selected command sequence finishes, `gdev` prints the equivalent
+  `gdev ...` command line so it can be copied and rerun directly.
 
 ## Project Configuration
 

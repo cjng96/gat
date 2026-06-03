@@ -1,3 +1,4 @@
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -40,6 +41,11 @@ class FakeTty:
 
     def flush(self):
         pass
+
+
+class CaptureTty(io.StringIO):
+    def isatty(self):
+        return True
 
 
 class DemoBuild(GatDev):
@@ -194,6 +200,85 @@ class GatDevTest(unittest.TestCase):
         self.assertEqual(
             build.parseCommandSequence("3 1 2,4"),
             ["serUp", "andBuild", "verUp", "webCov"],
+        )
+
+    def test_main_runs_multiple_command_arguments_in_order_and_prints_replay(self):
+        build = DispatchBuild()
+        calls: list[str] = []
+
+        def mark(name: str):
+            def run_command(*_args, **_kwargs):
+                calls.append(name)
+
+            return run_command
+
+        out = io.StringIO()
+        with (
+            patch.object(build, "cmdAndBuild", side_effect=mark("andBuild")),
+            patch.object(build, "cmdSerUp", side_effect=mark("serUp")),
+            patch("gdev.gatDev.sys.stdout", out),
+        ):
+            self.assertEqual(build.main(["andBuild", "serUp"]), 0)
+
+        self.assertEqual(calls, ["andBuild", "serUp"])
+        self.assertEqual(
+            out.getvalue().strip().splitlines()[-1],
+            "gdev andBuild serUp",
+        )
+
+    def test_main_ls_prints_supported_commands_without_running_tasks(self):
+        build = DispatchBuild()
+        out = io.StringIO()
+        with (
+            patch.object(build, "cmdAndBuild") as and_build_mock,
+            patch.object(build, "cmdSerUp") as ser_up_mock,
+            patch("gdev.gatDev.sys.stdout", out),
+        ):
+            self.assertEqual(build.main(["ls"]), 0)
+
+        self.assertEqual(out.getvalue(), "andBuild verUp serUp webCov\n")
+        and_build_mock.assert_not_called()
+        ser_up_mock.assert_not_called()
+
+    def test_main_rejects_ls_combined_with_build_commands(self):
+        build = DispatchBuild()
+        err = io.StringIO()
+        with patch("gdev.gatDev.sys.stderr", err):
+            self.assertEqual(build.main(["ls", "andBuild"]), 1)
+
+        self.assertIn(
+            "ls cannot be combined with build commands",
+            err.getvalue(),
+        )
+
+    def test_main_prints_replay_for_interactive_command_sequence(self):
+        build = DispatchBuild()
+        calls: list[str] = []
+
+        def mark(name: str):
+            def run_command(*_args, **_kwargs):
+                calls.append(name)
+
+            return run_command
+
+        out = CaptureTty()
+        with (
+            patch("gdev.gatDev.sys.stdin", FakeTty(True)),
+            patch("gdev.gatDev.sys.stdout", out),
+            patch.object(
+                build,
+                "selectCommandSequenceTui",
+                return_value=["andBuild", "serUp"],
+            ),
+            patch.object(build, "cmdAndBuild", side_effect=mark("andBuild")),
+            patch.object(build, "cmdSerUp", side_effect=mark("serUp")),
+        ):
+            self.assertEqual(build.main([]), 0)
+
+        self.assertEqual(calls, ["andBuild", "serUp"])
+        self.assertEqual(
+            out.getvalue().strip().splitlines()[-1],
+            "gdev andBuild serUp",
         )
 
     def test_command_sequence_parser_rejects_invalid_numbers(self):
@@ -1055,7 +1140,7 @@ class GatDevTest(unittest.TestCase):
             self.assertEqual((root / "pubspec.yaml").read_text(encoding="utf-8"), "  sqflite: any ##ffiCmt")
             self.assertTrue((root / "pubspec.lock").exists())
 
-    def test_andInstall_runs_adb_install_for_selected_device(self):
+    def test_andInstall_runs_adb_install_for_single_device(self):
         build = DemoBuild()
         device = AndroidDevice("emulator-5554", "device", "model:Pixel")
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1063,72 +1148,73 @@ class GatDevTest(unittest.TestCase):
             apk.write_text("apk", encoding="utf-8")
             with (
                 patch.object(build, "listAndroidDevices", return_value=[device]),
-                patch.object(build, "selectAndroidDevice", return_value=device),
+                patch.object(build, "selectAndroidDevice") as select_mock,
                 patch.object(build, "run") as run_mock,
             ):
-                self.assertEqual(build.doAndInstall(apk_path=apk), device)
-        run_mock.assert_called_once()
+                self.assertEqual(build.doAndInstall(apk_path=apk), [device])
+        select_mock.assert_not_called()
+        run_mock.assert_called_once_with(
+            ToolCmd.adb("-s", device.serial, "install", "-r", "-d", str(apk)),
+            cwd=build.pathCfg.root,
+        )
 
-    def test_andInstall_auto_installs_adb_tcp_devices_before_selection(self):
+    def test_andInstall_installs_all_connected_devices_without_selection(self):
         build = DemoBuild()
-        auto_device = AndroidDevice(
+        tcp_device = AndroidDevice(
             "adb-R5CN123._adb-tls-connect._tcp",
             "device",
             "model:Galaxy",
         )
-        selected_device = AndroidDevice("emulator-5554", "device", "model:Pixel")
-        devices = [auto_device, selected_device]
+        emulator_device = AndroidDevice("emulator-5554", "device", "model:Pixel")
+        usb_device = AndroidDevice("R58N123ABC", "device", "model:USB")
+        devices = [tcp_device, emulator_device, usb_device]
         with tempfile.TemporaryDirectory() as tmp_dir:
             apk = Path(tmp_dir) / "app.apk"
             apk.write_text("apk", encoding="utf-8")
 
             with (
                 patch.object(build, "listAndroidDevices", return_value=devices),
+                patch.object(build, "selectAndroidDevice") as select_mock,
                 patch.object(build, "run") as run_mock,
             ):
-                def select_device(input_devices):
-                    self.assertEqual(input_devices, devices)
-                    self.assertEqual(run_mock.call_count, 1)
-                    return selected_device
+                self.assertEqual(build.doAndInstall(apk_path=apk), devices)
 
-                with patch.object(build, "selectAndroidDevice", side_effect=select_device):
-                    self.assertEqual(build.doAndInstall(apk_path=apk), selected_device)
-
+        select_mock.assert_not_called()
         self.assertEqual(
             run_mock.call_args_list,
             [
                 call(
-                    ToolCmd.adb("-s", auto_device.serial, "install", "-r", "-d", str(apk)),
+                    ToolCmd.adb("-s", tcp_device.serial, "install", "-r", "-d", str(apk)),
                     cwd=build.pathCfg.root,
                 ),
                 call(
-                    ToolCmd.adb("-s", selected_device.serial, "install", "-r", "-d", str(apk)),
+                    ToolCmd.adb("-s", emulator_device.serial, "install", "-r", "-d", str(apk)),
+                    cwd=build.pathCfg.root,
+                ),
+                call(
+                    ToolCmd.adb("-s", usb_device.serial, "install", "-r", "-d", str(apk)),
                     cwd=build.pathCfg.root,
                 ),
             ],
         )
 
-    def test_andInstall_does_not_reinstall_auto_device_when_selected(self):
+    def test_andInstall_does_not_call_device_selection_ui(self):
         build = DemoBuild()
-        auto_device = AndroidDevice(
-            "adb-R5CN123._adb-tls-connect._tcp",
-            "device",
-            "model:Galaxy",
-        )
+        device = AndroidDevice("emulator-5554", "device", "model:Pixel")
         with tempfile.TemporaryDirectory() as tmp_dir:
             apk = Path(tmp_dir) / "app.apk"
             apk.write_text("apk", encoding="utf-8")
             with (
-                patch.object(build, "listAndroidDevices", return_value=[auto_device]),
-                patch.object(build, "selectAndroidDevice", return_value=auto_device),
+                patch.object(build, "listAndroidDevices", return_value=[device]),
+                patch.object(build, "selectAndroidDevice") as select_mock,
+                patch.object(build, "selectAndroidDeviceTui") as tui_mock,
                 patch.object(build, "run") as run_mock,
             ):
-                self.assertEqual(build.doAndInstall(apk_path=apk), auto_device)
+                self.assertEqual(build.doAndInstall(apk_path=apk), [device])
 
-        run_mock.assert_called_once_with(
-            ToolCmd.adb("-s", auto_device.serial, "install", "-r", "-d", str(apk)),
-            cwd=build.pathCfg.root,
-        )
+        select_mock.assert_not_called()
+        tui_mock.assert_not_called()
+        run_mock.assert_called_once()
 
     def test_main_without_command_requires_tty(self):
         build = DemoBuild()
