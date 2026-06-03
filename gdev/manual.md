@@ -86,7 +86,10 @@ For Flutter Rust Bridge projects, the default Android commands run codegen
 before build/test/deploy. If `app/native/src/api.rs` exists, `doFrbGen()` runs
 `flutter_rust_bridge_codegen generate` with the standard `app/native` and
 `app/lib/core/frb` paths. The command is idempotent inside one `gdev` process, so
-`andDeploy` can call `andTest` without generating twice. Projects without that
+`andDeploy` can call `andTest` without generating twice. The default `andDeploy`
+runs Android tests, version bump, Android App Bundle build, and Google Play
+publish. Server and web tests are not part of `andDeploy`; the default `serUp`
+runs `serTest` and `webTest` before deploying the server. Projects without that
 bridge file skip this step.
 
 ## Command Execution

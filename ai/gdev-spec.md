@@ -16,6 +16,8 @@
 - [x] `gdev ls`는 실행 가능한 명령 목록을 `andBuild serUp ...` 형식의 한 줄로 표시하고 명령은 실행하지 않는다.
 - [x] `gdev andBuild serUp`처럼 명령 인자를 여러 개 주면 입력한 순서대로 모두 실행한다.
 - [x] 명령 실행이 완료되면 같은 순서로 다시 실행할 수 있는 `gdev ...` 명령줄을 마지막에 표시한다.
+- [x] 기본 `andDeploy`는 Android 앱 테스트, 버전 증가, Android App Bundle 빌드, Google Play 배포만 수행한다.
+- [x] 기본 `serUp`은 서버 반영 전에 `serTest`, `webTest`를 순서대로 수행한다.
 
 ## 2. 설정 구조
 

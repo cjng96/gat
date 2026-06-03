@@ -696,8 +696,6 @@ class GatDevTest(unittest.TestCase):
         with (
             patch.object(build, "doFrbGen") as frb_mock,
             patch.object(build, "cmdAndTest") as and_test_mock,
-            patch.object(build, "cmdSerTest") as ser_test_mock,
-            patch.object(build, "cmdWebTest") as web_test_mock,
             patch.object(build, "cmdVerUp") as ver_up_mock,
             patch.object(build, "doAndBundleBuild") as bundle_mock,
             patch.object(build, "doAndDeploy") as deploy_mock,
@@ -706,11 +704,31 @@ class GatDevTest(unittest.TestCase):
 
         frb_mock.assert_called_once_with()
         and_test_mock.assert_called_once_with()
-        ser_test_mock.assert_called_once_with()
-        web_test_mock.assert_called_once_with()
         ver_up_mock.assert_called_once_with()
         bundle_mock.assert_called_once()
         deploy_mock.assert_called_once()
+
+    def test_default_ser_up_runs_server_and_web_tests_first(self):
+        build = DemoBuild()
+        calls: list[str] = []
+
+        def mark(name: str):
+            def run_command(*_args, **_kwargs):
+                calls.append(name)
+
+            return run_command
+
+        with (
+            patch.object(build, "cmdSerTest", side_effect=mark("serTest")) as ser_test_mock,
+            patch.object(build, "cmdWebTest", side_effect=mark("webTest")) as web_test_mock,
+            patch.object(build, "doSerUp", side_effect=mark("serUp")) as ser_up_mock,
+        ):
+            build.cmdSerUp()
+
+        self.assertEqual(calls, ["serTest", "webTest", "serUp"])
+        ser_test_mock.assert_called_once_with()
+        web_test_mock.assert_called_once_with()
+        ser_up_mock.assert_called_once_with(ser_dir=build.pathCfg.serDir, ser_up_args=("prod", "run"))
 
     def test_all_builtin_commands_have_cmd_placeholders(self):
         build = DemoBuild()
@@ -746,8 +764,6 @@ class GatDevTest(unittest.TestCase):
 
         with (
             patch.object(build, "cmdAndTest", side_effect=mark("andTest")) as and_test_mock,
-            patch.object(build, "cmdSerTest", side_effect=mark("serTest")) as ser_test_mock,
-            patch.object(build, "cmdWebTest", side_effect=mark("webTest")) as web_test_mock,
             patch.object(build, "cmdVerUp", side_effect=mark("verUp")) as ver_up_mock,
             patch.object(build, "doAndBundleBuild", side_effect=mark("bundle")) as bundle_mock,
             patch.object(build, "doAndDeploy", side_effect=mark("publish")) as deploy_mock,
@@ -764,10 +780,8 @@ class GatDevTest(unittest.TestCase):
         ):
             build.cmdAndDeploy()
 
-        self.assertEqual(calls, ["andTest", "serTest", "webTest", "verUp", "bundle", "publish"])
+        self.assertEqual(calls, ["andTest", "verUp", "bundle", "publish"])
         and_test_mock.assert_called_once_with()
-        ser_test_mock.assert_called_once_with()
-        web_test_mock.assert_called_once_with()
         ver_up_mock.assert_called_once_with()
         bundle_mock.assert_called_once_with(
             app_dir=build.pathCfg.appDir,

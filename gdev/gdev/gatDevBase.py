@@ -122,6 +122,8 @@ class GatDevBase:
         self.doVerUp(root_dir=self.pathCfg.root, app_pubspec=self.pathCfg.appPubspec)
 
     def cmdSerUp(self) -> None:
+        self.cmdSerTest()
+        self.cmdWebTest()
         self.doSerUp(ser_dir=self.pathCfg.serDir, ser_up_args=getattr(self, "serUpArgs", ("prod", "run")))
 
     def cmdAndInstall(self) -> None:
@@ -130,8 +132,6 @@ class GatDevBase:
     def cmdAndDeploy(self) -> None:
         self.doFrbGen()
         self.cmdAndTest()
-        self.cmdSerTest()
-        self.cmdWebTest()
         self.cmdVerUp()
         self.doAndBundleBuild(
             app_dir=self.pathCfg.appDir,
@@ -151,7 +151,7 @@ class GatDevBase:
             service_account_file=os.environ.get("GOOGLE_PLAY_SERVICE_ACCOUNT_FILE") or None,
             aab_path=self.pathCfg.appBundlePath,
         )
-        # self.doCommandSequence(commands=("andTest", "serTest", "webTest", "verUp", "andBuild"))
+        # self.doCommandSequence(commands=("andTest", "verUp", "andBuild"))
 
     def cmdAndTest(self) -> None:
         self.doFrbGen()
